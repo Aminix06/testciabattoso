@@ -1337,21 +1337,27 @@ local function TeleportAndFight(bossData)
 		-- Esegui gli attacchi
 		pcall(function()
 			if game.PlaceId == 3311165597 then
-				local letsplayagame = Events:WaitForChild("letsplayagame")
-				Events.p:FireServer("Blacknwhite27", 1)
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
 				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
 			elseif game.PlaceId == 5151400895 then
-				local Higoober = Events:WaitForChild("b"):WaitForChild("Dece")
-				Events.p:FireServer("Blacknwhite27", 1)
-				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("b"):WaitForChild("Dece")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
+				coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
 			end
 		end)
 
