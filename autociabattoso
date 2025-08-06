@@ -1375,9 +1375,7 @@ local function WaitForBossToSpawn(bossData, timeLimit)
 	if bossReady then
 		print("Boss " .. bossData.Name .. " è apparso!")
         
-        -- NUOVA CORREZIONE: Aggiunto un ritardo di 2 secondi per la stabilizzazione del boss
-        print("Attendo 2 secondi per permettere al boss di caricarsi completamente...")
-        task.wait(2)
+        task.wait()
         
 		TeleportAndFight(bossData)
 	else
