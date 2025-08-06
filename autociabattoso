@@ -1066,7 +1066,7 @@ task.spawn(function()
 	-- Continuously check stats and apply transformation (Faster checks)
 	while true do
 		transformarse("fases")
-		task.wait(1) -- Check every 1 second
+		task.wait(1.5) -- Check every 1 second
 	end
 end)
  
