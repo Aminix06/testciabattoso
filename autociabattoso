@@ -1374,6 +1374,11 @@ local function WaitForBossToSpawn(bossData, timeLimit)
  
 	if bossReady then
 		print("Boss " .. bossData.Name .. " è apparso!")
+        
+        -- NUOVA CORREZIONE: Aggiunto un ritardo di 2 secondi per la stabilizzazione del boss
+        print("Attendo 2 secondi per permettere al boss di caricarsi completamente...")
+        task.wait(2)
+        
 		TeleportAndFight(bossData)
 	else
 		print("Impossibile trovare " .. bossData.Name .. " entro il tempo limite. Passo al boss successivo.")
@@ -1464,36 +1469,73 @@ local function findBossData(bossName)
     return nil -- Ritorna nil se non trovato
 end
 
+-- ==============================================================================
+-- FUNZIONE PRINCIPALE DI CONTROLLO (Main) CON LOGICA DI RITARDO
+-- ==============================================================================
+
+local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul pianeta di Vills
+
 local function Main()
     -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
-        task.wait(1) -- Aggiunge una piccola attesa all'inizio di ogni ciclo per evitare di sovraccaricare
-        -- =======================================================================
-        -- NUOVA GESTIONE DELLA MORTE (NON BLOCCANTE)
-        -- =======================================================================
+        task.wait(1) -- Attesa di base per ogni ciclo
+        
         if not (humanoid and humanoid.Health > 0) then
             print("Il giocatore è morto o non valido. In attesa del respawn...")
-            task.wait(1) -- Attende un secondo e poi riprova il ciclo
-            continue -- Riavvia il loop per ricontrollare lo stato
+            task.wait(1) 
+            continue 
         end
 
         local currentStats = statsz.Value
         local currentPlaceId = game.PlaceId
 
         --======================================================================
-        -- LOGICA PER IL PIANETA TERRA (PlaceId 3311165597)
+        -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
         --======================================================================
-        if currentPlaceId == 3311165597 then
+        if currentPlaceId == 5151400895 then
+            -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
+            if not villsPlanetReady then
+                print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
+                task.wait(7)
+                villsPlanetReady = true
+                print("Stabilizzazione completata. Avvio del farm.")
+                continue -- Riavvia il ciclo per iniziare subito a farmare
+            end
+
+            -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
+            if currentStats >= nohagThreshold then
+                print("STATO FARMING [PIANETA DI VILLS]: Nohag")
+                local nohagData = findBossData("Nohag (Beast)")
+                if nohagData then CheckAndFightBoss(nohagData) end
+            else
+                print("STATO PROGRESSIONE [PIANETA DI VILLS]")
+                local foughtBoss = false
+                for _, bossData in ipairs(AllBosses) do
+                    if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
+                        CheckAndFightBoss(bossData)
+                        foughtBoss = true
+                        break
+                    end
+                end
+                if not foughtBoss then
+                    print("Nessun boss adatto trovato sul pianeta di Vills per le statistiche attuali. Attendo...")
+                    task.wait(5)
+                end
+            end
+
+        --======================================================================
+        -- LOGICA PER IL PIANETA TERRA (E RESET DEL FLAG)
+        --======================================================================
+        elseif currentPlaceId == 3311165597 then
+            villsPlanetReady = false -- Resetta il flag quando siamo sulla Terra
+
             if currentStats >= kakataThreshold then
                 print("STATO FARMING [TERRA]: Kakata")
                 local kakataData = findBossData("SSJG Kakata")
-
                 if kakataData then CheckAndFightBoss(kakataData) end
-                if not (humanoid and humanoid.Health > 0) then continue end -- Controllo post-combattimento
-                
             else
                 print("STATO PROGRESSIONE [TERRA]")
                 local foughtBoss = false
@@ -1511,36 +1553,15 @@ local function Main()
             end
         
         --======================================================================
-        -- LOGICA PER IL PIANETA DI VILLS (PlaceId 5151400895)
+        -- LOGICA PER ALTRI LUOGHI (E RESET DEL FLAG)
         --======================================================================
-        elseif currentPlaceId == 5151400895 then
-            if currentStats >= nohagThreshold then
-                print("STATO FARMING [PIANETA DI VILLS]: Nohag")
-                local nohagData = findBossData("Nohag (Beast)")
-
-                if nohagData then CheckAndFightBoss(nohagData) end
-                if not (humanoid and humanoid.Health > 0) then continue end -- Controllo post-combattimento
-
-            else
-                print("STATO PROGRESSIONE [PIANETA DI VILLS]")
-                local foughtBoss = false
-                for _, bossData in ipairs(AllBosses) do
-                    if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                        CheckAndFightBoss(bossData)
-                        foughtBoss = true
-                        break
-                    end
-                end
-                if not foughtBoss then
-                    print("Nessun boss adatto trovato sul pianeta di Vills per le statistiche attuali. Attendo...")
-                    task.wait(5)
-                end
-            end
-		else
-			task.wait(1) -- Se per qualche motivo si trova in un PlaceId non gestito, attende.
+        else
+			villsPlanetReady = false -- Resetta il flag anche se siamo in un luogo sconosciuto
+			task.wait(1) 
         end
     end
 end
+
 
 task.spawn(Main)
  
