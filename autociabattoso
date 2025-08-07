@@ -1509,7 +1509,7 @@ local function Main()
             -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
                 print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
-                task.wait(5)
+                task.wait(7)
                 villsPlanetReady = true
                 print("Stabilizzazione completata. Avvio del farm.")
                 continue -- Riavvia il ciclo per iniziare subito a farmare
