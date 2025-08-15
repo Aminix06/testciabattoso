@@ -1349,7 +1349,7 @@ local function TeleportAndFight(bossData)
 				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
 			elseif game.PlaceId == 5151400895 then
 				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("b"):WaitForChild("Dece")
+				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
 						
 				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
 
