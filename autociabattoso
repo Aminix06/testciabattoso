@@ -926,7 +926,7 @@ local function TeleportToWhis()
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 123000000 and zeni.Value > 15000 then
+	if statsz.Value > 200000000 and zeni.Value > 15000 then
 		TeleportToWhis()
 	end
 end
@@ -1180,8 +1180,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vegetable (GoD in-training)",
-		MinStats = 121000000,
-		MaxStats = 250000000,
+		MinStats = 200000000,
+		MaxStats = 350000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1189,8 +1189,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Wukong (Omen)",
-		MinStats = 250000001,
-		MaxStats = 400000000,
+		MinStats = 350000001,
+		MaxStats = 500000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1198,8 +1198,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vills (50%)",
-		MinStats = 400000001,
-		MaxStats = 800000000,
+		MinStats = 500000001,
+		MaxStats = 1000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1207,8 +1207,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vis (20%)",
-		MinStats = 800000001,
-		MaxStats = 2000000000,
+		MinStats = 1000000001,
+		MaxStats = 3000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1216,8 +1216,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vegetable (LBSSJ4)",
-		MinStats = 2000000001,
-		MaxStats = 3100000000,
+		MinStats = 3000000001,
+		MaxStats = 4100000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1225,8 +1225,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Wukong (LBSSJ4)",
-		MinStats = 3100000001,
-		MaxStats = 4300000000,
+		MinStats = 4100000001,
+		MaxStats = 5300000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1234,7 +1234,7 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vekuta (LBSSJ4)",
-		MinStats = 4300000001,
+		MinStats = 5300000001,
 		MaxStats = 15000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
