@@ -967,6 +967,8 @@ task.spawn(function()
 	local millon = 1000000
 	local transformaciones = {
 		fases = {
+			{name = "Time Breaker", fuerza = 630000000},
+			{name = "True Jui", fuerza = 750000000},
 			{name = "Corrupt Astral", fuerza = 250000000},
 			{name = "Beast", fuerza = 120000000},
 			{name = "SSJB4", fuerza = 50000000},
