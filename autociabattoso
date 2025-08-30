@@ -1035,7 +1035,7 @@ task.spawn(function()
 			pcall(function()
 				if ki() > (kiRequerido() + 10) then
 					if game.PlaceId == 3311165597 then
-					game:GetService("ReplicatedStorage").Package.Events.Higoober:InvokeServer()
+					game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
 					elseif game.PlaceId == 5151400895 then
 						game:GetService("ReplicatedStorage").Package.Events.a.Cece:InvokeServer()
 
