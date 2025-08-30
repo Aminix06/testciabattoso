@@ -1199,7 +1199,7 @@ local AllBosses = {
 		PlaceId = 5151400895,
 		Name = "Vills (50%)",
 		MinStats = 500000001,
-		MaxStats = 1000000000,
+		MaxStats = 1500000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1207,7 +1207,7 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vis (20%)",
-		MinStats = 1000000001,
+		MinStats = 1500000001,
 		MaxStats = 3000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
