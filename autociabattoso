@@ -1612,7 +1612,7 @@ local function CheckAndPerformRebirth()
                     
                     -- Esegui l'evento di rebirth specificato dall'utente
                     local success, err = pcall(function()
-                        game:GetService("ReplicatedStorage").Package.Events.Multireb:InvokeServer()
+                        game:GetService("ReplicatedStorage").Package.Events.reb:InvokeServer()
                     end)
 
                     if success then
