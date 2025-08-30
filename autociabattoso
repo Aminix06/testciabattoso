@@ -33,7 +33,7 @@ local function CheckToGo()
 	local statsz = playerData:WaitForChild("Strength")
 	local zeni = playerData:WaitForChild("Zeni")
 	while true do
-		if statsz.Value < 121000000 and game.PlaceId == 5151400895 then
+		if statsz.Value < 400000000 and game.PlaceId == 5151400895 then
 			local args = {
 				[1] = "Earth"
 			}
