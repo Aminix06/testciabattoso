@@ -1217,7 +1217,7 @@ local AllBosses = {
 		PlaceId = 5151400895,
 		Name = "Vegetable (LBSSJ4)",
 		MinStats = 6000000001,
-		MaxStats = 8100000000,
+		MaxStats = 10100000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1225,8 +1225,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Wukong (LBSSJ4)",
-		MinStats = 8100000001,
-		MaxStats = 10300000000,
+		MinStats = 10100000001,
+		MaxStats = 15300000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1234,7 +1234,7 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vekuta (LBSSJ4)",
-		MinStats = 10300000001,
+		MinStats = 15300000001,
 		MaxStats = 30000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
@@ -1244,7 +1244,7 @@ local AllBosses = {
 		PlaceId = 5151400895,
 		Name = "Wukong Rose",
 		MinStats = 30000000001,
-		MaxStats = 50000000000,
+		MaxStats = 40000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1252,8 +1252,8 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Vekuta (SSJBUI)",
-		MinStats = 50000000001, 
-		MaxStats = 100000000000,
+		MinStats = 40000000001, 
+		MaxStats = 55000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1261,6 +1261,15 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Wukong (MUI)",
+		MinStats = 55000000001,
+		MaxStats = 100000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Vegetable (Ultra Ego)",
 		MinStats = 100000000001,
 		MaxStats = 150000000000,
 		QuestLocation = workspace.Others.NPCs,
@@ -1269,17 +1278,8 @@ local AllBosses = {
 	},
 	{
 		PlaceId = 5151400895,
-		Name = "Vegetable (Ultra Ego)",
-		MinStats = 150000000001,
-		MaxStats = 200000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
 		Name = "Nohag (Beast)",
-		MinStats = 200000000001,
+		MinStats = 150000000001,
 		MaxStats = 100000000000000000000000000000000000000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
