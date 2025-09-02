@@ -1253,7 +1253,7 @@ local AllBosses = {
 		PlaceId = 5151400895,
 		Name = "Vekuta (SSJBUI)",
 		MinStats = 40000000001, 
-		MaxStats = 55000000000,
+		MaxStats = 85000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1261,7 +1261,7 @@ local AllBosses = {
 	{
 		PlaceId = 5151400895,
 		Name = "Wukong (MUI)",
-		MinStats = 55000000001,
+		MinStats = 85000000001,
 		MaxStats = 100000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
