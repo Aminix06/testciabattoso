@@ -1280,6 +1280,15 @@ local AllBosses = {
 		PlaceId = 5151400895,
 		Name = "Nohag (Beast)",
 		MinStats = 150000000001,
+		MaxStats = 1500000000011,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2,
+	}
+	{
+		--PlaceId = 5151400895,
+		Name = "Z Broccoli,
+		MinStats = 1500000000010,
 		MaxStats = 100000000000000000000000000000000000000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
