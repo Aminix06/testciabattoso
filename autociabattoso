@@ -1285,15 +1285,6 @@ local AllBosses = {
 		FightLocation = workspace.Living,
 		Distance = -2,
 	}
-	{
-		--PlaceId = 5151400895,
-		Name = "Z Broccoli,
-		MinStats = 1500000000010,
-		MaxStats = 100000000000000000000000000000000000000000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2,
-	}
 }
 
 
