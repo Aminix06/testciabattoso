@@ -1,4 +1,3 @@
-
 --==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
@@ -920,9 +919,9 @@ task.spawn(Charge)
  
 local function TeleportToWhis()
 	local args = {
-		[1] = "Vills Planet"
+  	  [1] = "T.O.P"
 	}
- 
+
 	game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
 end
  
