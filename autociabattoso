@@ -1,3 +1,22 @@
+-- ==============================================================================
+-- CONTROLLO DI ESECUZIONE UNICA (SINGLETON PATTERN)
+-- ==============================================================================
+-- Controlla se lo script è già in esecuzione per evitare duplicati.
+if game:GetService("CoreGui"):FindFirstChild("__MAIN_SCRIPT_RUNNING__") then
+    print("Avviso: Un'istanza dello script principale è già in esecuzione. La nuova esecuzione è stata bloccata.")
+    return -- Interrompe l'esecuzione di questo script.
+end
+
+-- Se non è in esecuzione, crea un "flag" per segnalare che ora lo è.
+local executionFlag = Instance.new("ScreenGui")
+executionFlag.Name = "__MAIN_SCRIPT_RUNNING__"
+executionFlag.Parent = game:GetService("CoreGui")
+
+-- ==============================================================================
+-- INIZIO DEL TUO SCRIPT ORIGINALE
+-- ==============================================================================
+
+
 --==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
@@ -336,7 +355,7 @@ Converted["_/1"].BackgroundTransparency = 1
 Converted["_/1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_/1"].BorderSizePixel = 0
 Converted["_/1"].Position = UDim2.new(0.481177628, 0, -1.10039345e-07, 0)
-Converted["_energy"].Size = UDim2.new(0.188958243, 0, 1.00000024, 0)
+Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1.00000024, 0)
 Converted["_/1"].Name = "/"
 Converted["_/1"].Parent = Converted["_freim"]
  
