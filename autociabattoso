@@ -33,7 +33,7 @@ local function CheckToGo()
 	local statsz = playerData:WaitForChild("Strength")
 	local zeni = playerData:WaitForChild("Zeni")
 	while true do
-		if statsz.Value < 100000000 and game.PlaceId == 114014249462644 then
+		if statsz.Value < 8000000000 and game.PlaceId == 114014249462644 then
 			local args = {
 				[1] = "Earth"
 			}
@@ -926,7 +926,7 @@ local function TeleportToWhis()
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 400000000 and zeni.Value > 15000 then
+	if statsz.Value > 8000000000 and zeni.Value > 15000 then
 		TeleportToWhis()
 	end
 end
@@ -1180,8 +1180,8 @@ local AllBosses = {
 	{
 		PlaceId = 114014249462644,
 		Name = "Piclow (Base)",
-		MinStats = 100000000,
-		MaxStats = 1500000000,
+		MinStats = 8000000000,
+		MaxStats = 9000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1189,8 +1189,8 @@ local AllBosses = {
 	{
 		PlaceId = 114014249462644,
 		Name = "Caulla (Base)",
-		MinStats = 1500000001,
-		MaxStats = 1510000000,
+		MinStats = 9000000001,
+		MaxStats = 10000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1198,7 +1198,7 @@ local AllBosses = {
 	{
 		PlaceId = 114014249462644,
 		Name = "Nohag (Potential Awoken)",
-		MinStats = 1510000001,
+		MinStats = 10000000001,
 		MaxStats = 1000000000000000000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
