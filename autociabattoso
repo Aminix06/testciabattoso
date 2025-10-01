@@ -1,4 +1,16 @@
 --==============================================================================
+-- WRAPPER DI SICUREZZA
+-- Questo blocco impedisce allo script di essere eseguito più volte per errore.
+--==============================================================================
+if getgenv().CiabattosoScriptLoaded then
+    print("Script già in esecuzione.")
+    return
+end
+getgenv().CiabattosoScriptLoaded = true
+--==============================================================================
+
+
+--==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
 local Players = game:GetService("Players")
