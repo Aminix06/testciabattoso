@@ -1197,7 +1197,7 @@ local AllBosses = {
 	},
 	{
 		PlaceId = 114014249462644,
-		Name = "Nogah (Awakened)",
+		Name = "Nohag (Potential Awoken)",
 		MinStats = 1510000001,
 		MaxStats = 1000000000000000000000000000,
 		QuestLocation = workspace.Others.NPCs,
@@ -1409,7 +1409,7 @@ local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul piane
 local function Main()
     -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
-    local nohagThreshold = findBossData("Nogah (Awakened)").MinStats
+    local nohagThreshold = findBossData("Nohag (Potential Awoken)").MinStats
 
     while true do
         task.wait(1) -- Attesa di base per ogni ciclo
@@ -1439,7 +1439,7 @@ local function Main()
             -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
             if currentStats >= nohagThreshold then
                 print("STATO FARMING [PIANETA DI VILLS]: Nohag")
-                local nohagData = findBossData("Nohag (Beast)")
+                local nohagData = findBossData("Nohag (Potential Awoken)")
                 if nohagData then CheckAndFightBoss(nohagData) end
             else
                 print("STATO PROGRESSIONE [PIANETA DI VILLS]")
