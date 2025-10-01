@@ -1459,7 +1459,7 @@ local function Main()
             -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
             if currentStats >= nohagThreshold then
                 print("STATO FARMING [PIANETA DI VILLS]: Nohag")
-                local nohagData = findBossData("Nohag (Potential Awoken)")
+                local nohagData = findBossData("SSJBK Wukong")
                 if nohagData then CheckAndFightBoss(nohagData) end
             else
                 print("STATO PROGRESSIONE [PIANETA DI VILLS]")
