@@ -1,3 +1,4 @@
+
 --==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
@@ -33,7 +34,7 @@ local function CheckToGo()
 	local statsz = playerData:WaitForChild("Strength")
 	local zeni = playerData:WaitForChild("Zeni")
 	while true do
-		if statsz.Value < 100000000 and game.PlaceId == 5151400895 then
+		if statsz.Value < 100000000 and game.PlaceId == 114014249462644 then
 			local args = {
 				[1] = "Earth"
 			}
@@ -49,7 +50,7 @@ task.spawn(CheckToGo)
 local firstspawn = true
  
 local function startonskibidi()
-	if firstspawn and game.PlaceId == 5151400895 then
+	if firstspawn and game.PlaceId == 114014249462644 then
 		print("Start")
 		firstspawn = false
 	else
@@ -1038,8 +1039,8 @@ task.spawn(function()
 				if ki() > (kiRequerido() + 10) then
 					if game.PlaceId == 3311165597 then
 					game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
-					elseif game.PlaceId == 5151400895 then
-						game:GetService("ReplicatedStorage").Package.Events.a.Cece:InvokeServer()
+					elseif game.PlaceId == 114014249462644 then
+						game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
 
 					end
 				end
@@ -1178,8 +1179,8 @@ local AllBosses = {
 		Distance = -2
 	},
 	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (GoD in-training)",
+		PlaceId = 114014249462644,
+		Name = "Piclow (Base)",
 		MinStats = 100000000,
 		MaxStats = 1500000000,
 		QuestLocation = workspace.Others.NPCs,
@@ -1187,8 +1188,8 @@ local AllBosses = {
 		Distance = -2
 	},
 	{
-		PlaceId = 5151400895,
-		Name = "Wukong (Omen)",
+		PlaceId = 114014249462644,
+		Name = "Caulla (Base)",
 		MinStats = 1500000001,
 		MaxStats = 1510000000,
 		QuestLocation = workspace.Others.NPCs,
@@ -1196,94 +1197,13 @@ local AllBosses = {
 		Distance = -2
 	},
 	{
-		PlaceId = 5151400895,
-		Name = "Vills (50%)",
+		PlaceId = 114014249462644,
+		Name = "Nogah (Awakened)",
 		MinStats = 1510000001,
-		MaxStats = 4000000000,
+		MaxStats = 1000000000000000000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vis (20%)",
-		MinStats = 4000000001,
-		MaxStats = 6000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (LBSSJ4)",
-		MinStats = 6000000001,
-		MaxStats = 10100000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong (LBSSJ4)",
-		MinStats = 10100000001,
-		MaxStats = 15300000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vekuta (LBSSJ4)",
-		MinStats = 15300000001,
-		MaxStats = 30000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong Rose",
-		MinStats = 30000000001,
-		MaxStats = 40000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vekuta (SSJBUI)",
-		MinStats = 40000000001, 
-		MaxStats = 85000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong (MUI)",
-		MinStats = 85000000001,
-		MaxStats = 100000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (Ultra Ego)",
-		MinStats = 100000000001,
-		MaxStats = 150000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Nohag (Beast)",
-		MinStats = 150000000001,
-		MaxStats = 150000000001100000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2,
 	}
 }
 
@@ -1349,9 +1269,9 @@ local function TeleportAndFight(bossData)
 				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-			elseif game.PlaceId == 5151400895 then
+			elseif game.PlaceId == 114014249462644 then
 				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
+				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
 						
 				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
 
@@ -1507,7 +1427,7 @@ local function Main()
         --======================================================================
         -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
         --======================================================================
-        if currentPlaceId == 5151400895 then
+        if currentPlaceId == 114014249462644 then
             -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
                 print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
@@ -1733,7 +1653,7 @@ local TimerScreenGui, TimerTextLabel = CreateTimerGUI()
 -- NUOVA FUNZIONE TIMER PER TELETRASPORTO (con controllo GUI)
 local function RebirthTimerAndTeleport()
     local timerEndTime = nil
-    local VILLS_PLANET_ID = 5151400895
+    local VILLS_PLANET_ID = 114014249462644
     local TIMER_DURATION = 6000 -- 6000 secondi
 
     while true do
