@@ -1,125 +1,73 @@
 --==============================================================================
 -- WRAPPER DI SICUREZZA E CREAZIONE DELLO "ZAINO MAGICO"
 --==============================================================================
-if getgenv().CiabattosoScriptLoaded then
-    print("Script di Ciabattoso già caricato e persistente.")
-    return
-end
+if getgenv().CiabattosoScriptLoaded then print("[Sistema] Script di Ciabattoso già caricato.") return end
 getgenv().CiabattosoScriptLoaded = true
 getgenv().CiabattosoFramework = {}
 local Framework = getgenv().CiabattosoFramework
-print("Framework persistente di Ciabattoso creato.")
+print("[Sistema] Framework persistente di Ciabattoso creato.")
 
 --==============================================================================
--- CONTROLLO SERVER VUOTO
+-- IMPOSTAZIONI E GESTIONE DELLO STATO
 --==============================================================================
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-if #Players:GetPlayers() > 1 then
-    localPlayer:Kick("Kick: Il server non è vuoto.")
-    return
-end
-task.spawn(function()
-    while task.wait() do
-        if #Players:GetPlayers() > 1 then localPlayer:Kick("Kick: Un altro giocatore è entrato.") break end
+Framework.SettingsFileName = "ciabattoso_settings.json"
+Framework.Settings = {
+    AutofarmEnabled = false
+}
+
+function Framework.SaveSettings()
+    local success, data = pcall(game:GetService("HttpService").JSONEncode, game:GetService("HttpService"), Framework.Settings)
+    if success then
+        writefile(Framework.SettingsFileName, data)
+        print("[Impostazioni] Salvate:", data)
     end
-end)
-
---==============================================================================
--- FUNZIONI INIZIALI
---==============================================================================
-local function StartTheGame()
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 10)
-    if not mainGui then warn("StartTheGame: GUI 'Main' non trovata.") return end
-    task.wait()
-    local Event = game:GetService("ReplicatedStorage").Package.Events.Start
-    Event:InvokeServer() task.wait() Event:InvokeServer() task.wait()
-    local bruhButton = mainGui:FindFirstChild("bruh")
-    if bruhButton then bruhButton.Disabled = true; bruhButton.Disabled = false end
-    task.wait() Event:InvokeServer()
 end
-StartTheGame()
-wait(0.5)
+
+function Framework.LoadSettings()
+    if isfile(Framework.SettingsFileName) then
+        local success, data = pcall(readfile, Framework.SettingsFileName)
+        if success then
+            local success2, decoded = pcall(game:GetService("HttpService").JSONDecode, game:GetService("HttpService"), data)
+            if success2 then Framework.Settings = decoded; print("[Impostazioni] Caricate:", data) end
+        end
+    end
+end
 
 --==============================================================================
--- DEFINIZIONE DELLO SCRIPT NEL FRAMEWORK
+-- CONTROLLO SERVER E FUNZIONI DI BASE
 --==============================================================================
+local Players, localPlayer = game:GetService("Players"), game:GetService("Players").LocalPlayer
+if #Players:GetPlayers() > 1 then localPlayer:Kick("Kick: Il server non è vuoto.") return end
+task.spawn(function() while task.wait() do if #Players:GetPlayers() > 1 then localPlayer:Kick("Kick: Un altro giocatore è entrato.") break end end end)
 
--- Variabili condivise e stato
-Framework.player = game.Players.LocalPlayer
-Framework.playerId = Framework.player.UserId
-Framework.playerData = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(Framework.playerId))
+local function StartTheGame()
+    local playerGui = localPlayer:WaitForChild("PlayerGui"); local mainGui = playerGui:WaitForChild("Main", 10)
+    if not mainGui then warn("StartTheGame: GUI 'Main' non trovata.") return end
+    task.wait(); local Event = game:GetService("ReplicatedStorage").Package.Events.Start
+    Event:InvokeServer(); task.wait(); Event:InvokeServer(); task.wait()
+    local bruhButton = mainGui:FindFirstChild("bruh"); if bruhButton then bruhButton.Disabled = true; bruhButton.Disabled = false end
+    task.wait(); Event:InvokeServer()
+end
+StartTheGame(); wait(0.5)
+
+-- Variabili del Framework
+Framework.player = localPlayer
+Framework.playerData = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(Framework.player.UserId))
 Framework.statsz = Framework.playerData:WaitForChild("Strength")
 Framework.defensestats = Framework.playerData:WaitForChild("Defense")
 Framework.zeni = Framework.playerData:WaitForChild("Zeni")
-Framework.camera = game.Workspace.CurrentCamera
-Framework.ReplicatedStorage = game:GetService("ReplicatedStorage")
-Framework.Events = Framework.ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+Framework.Events = game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events")
 Framework.ActiveThreads = {}
-Framework.State = { -- Tabella che conterrà lo stato da salvare/caricare
-    lastBossName = nil,
-    rebirthTimerEndsAt = nil
-}
-Framework.StateFileName = "ciabattoso_stato.txt"
-
---==============================================================================
--- NUOVA SEZIONE: GESTIONE DELLO STATO (SALVATAGGIO E CARICAMENTO)
---==============================================================================
-
--- Funzione per salvare lo stato attuale in un file
-function Framework.SaveState()
-    -- Convertiamo la tabella di stato in una stringa che Lua può eseguire
-    local stateString = "return {\n"
-    stateString = stateString .. "    lastBossName = " .. (Framework.State.lastBossName and "'" .. Framework.State.lastBossName .. "'" or "nil") .. ",\n"
-    stateString = stateString .. "    rebirthTimerEndsAt = " .. (Framework.State.rebirthTimerEndsAt or "nil") .. "\n"
-    stateString = stateString .. "}"
-
-    writefile(Framework.StateFileName, stateString)
-    print("Stato salvato! Boss attuale: " .. tostring(Framework.State.lastBossName))
-end
-
--- Funzione per caricare lo stato da un file
-function Framework.LoadState()
-    if not isfile(Framework.StateFileName) then
-        print("Nessun file di stato trovato. Inizio da zero.")
-        return
-    end
-
-    local fileContent = readfile(Framework.StateFileName)
-    local success, loadedFunction = pcall(loadstring(fileContent))
-    
-    if success and type(loadedFunction) == "function" then
-        local loadedState = loadedFunction()
-        Framework.State = loadedState
-        print("Stato caricato con successo! Riprendo dal boss: " .. tostring(Framework.State.lastBossName))
-    else
-        warn("Errore nel caricamento dello stato. Il file potrebbe essere corrotto. Inizio da zero.")
-    end
-end
 
 --==============================================================================
 -- FUNZIONI GUI E FORMATTAZIONE
 --==============================================================================
-function Framework.formatNumber(number)
-	if number >= 1e12 then return string.format("%.1fT", number / 1e12)
-	elseif number >= 1e9 then return string.format("%.1fB", number / 1e9)
-	elseif number >= 1e6 then return string.format("%.1fM", number / 1e6)
-	elseif number >= 1e3 then return string.format("%.1fK", number / 1e3)
-	else return tostring(math.floor(number)) end
-end
-
-function Framework.formatNumberForTheStats(number)
-    if number >= 1e12 then return string.format("%.2fT", number / 1e12) 
-    elseif number >= 1e9 then return string.format("%.2fB", number / 1e9)
-    elseif number >= 1e6 then return string.format("%.2fM", number / 1e6)
-    elseif number >= 1e3 then return string.format("%.2fK", number / 1e3)
-    else return tostring(number) end
-end
+function Framework.formatNumber(number) if number>=1e12 then return string.format("%.1fT",number/1e12)elseif number>=1e9 then return string.format("%.1fB",number/1e9)elseif number>=1e6 then return string.format("%.1fM",number/1e6)elseif number>=1e3 then return string.format("%.1fK",number/1e3)else return tostring(math.floor(number))end end
+function Framework.formatNumberForTheStats(number) if number>=1e12 then return string.format("%.2fT",number/1e12)elseif number>=1e9 then return string.format("%.2fB",number/1e9)elseif number>=1e6 then return string.format("%.2fM",number/1e6)elseif number>=1e3 then return string.format("%.2fK",number/1e3)else return tostring(number)end end
 
 function Framework.CreateHealthGUI()
     if getgenv().HealthAndEnergyGUI then getgenv().HealthAndEnergyGUI:Destroy() end
-	local Converted = {["_HealthAndEnergy"]=Instance.new("ScreenGui"),["_Frame"]=Instance.new("Frame"),["_UICorner"]=Instance.new("UICorner"),["_UIStroke"]=Instance.new("UIStroke"),["_UIGradient"]=Instance.new("UIGradient"),["_TextLabel"]=Instance.new("TextLabel"),["_UIStroke1"]=Instance.new("UIStroke"),["_UIGradient1"]=Instance.new("UIGradient"),["_health"]=Instance.new("TextLabel"),["_UIStroke2"]=Instance.new("UIStroke"),["_/"]=Instance.new("TextLabel"),["_UIStroke3"]=Instance.new("UIStroke"),["_maxhealth"]=Instance.new("TextLabel"),["_UIStroke4"]=Instance.new("UIStroke"),["_freim"]=Instance.new("Frame"),["_UICorner1"]=Instance.new("UICorner"),["_UIStroke5"]=Instance.new("UIStroke"),["_Uigraddd"]=Instance.new("UIGradient"),["_TextLabel1"]=Instance.new("TextLabel"),["_UIStroke6"]=Instance.new("UIStroke"),["_Uigrad"]=Instance.new("UIGradient"),["_energy"]=Instance.new("TextLabel"),["_UIStroke7"]=Instance.new("UIStroke"),["_/1"]=Instance.new("TextLabel"),["_UIStroke8"]=Instance.new("UIStroke"),["_maxenergy"]=Instance.new("TextLabel"),["_UIStroke9"]=Instance.new("UIStroke")}
+	local Converted={["_HealthAndEnergy"]=Instance.new("ScreenGui"),["_Frame"]=Instance.new("Frame"),["_UICorner"]=Instance.new("UICorner"),["_UIStroke"]=Instance.new("UIStroke"),["_UIGradient"]=Instance.new("UIGradient"),["_TextLabel"]=Instance.new("TextLabel"),["_UIStroke1"]=Instance.new("UIStroke"),["_UIGradient1"]=Instance.new("UIGradient"),["_health"]=Instance.new("TextLabel"),["_UIStroke2"]=Instance.new("UIStroke"),["_/"]=Instance.new("TextLabel"),["_UIStroke3"]=Instance.new("UIStroke"),["_maxhealth"]=Instance.new("TextLabel"),["_UIStroke4"]=Instance.new("UIStroke"),["_freim"]=Instance.new("Frame"),["_UICorner1"]=Instance.new("UICorner"),["_UIStroke5"]=Instance.new("UIStroke"),["_Uigraddd"]=Instance.new("UIGradient"),["_TextLabel1"]=Instance.new("TextLabel"),["_UIStroke6"]=Instance.new("UIStroke"),["_Uigrad"]=Instance.new("UIGradient"),["_energy"]=Instance.new("TextLabel"),["_UIStroke7"]=Instance.new("UIStroke"),["_/1"]=Instance.new("TextLabel"),["_UIStroke8"]=Instance.new("UIStroke"),["_maxenergy"]=Instance.new("TextLabel"),["_UIStroke9"]=Instance.new("UIStroke")}
 	Converted["_HealthAndEnergy"].ZIndexBehavior=Enum.ZIndexBehavior.Sibling;Converted["_HealthAndEnergy"].Name="HealthAndEnergy";getgenv().HealthAndEnergyGUI=Converted["_HealthAndEnergy"];Converted["_HealthAndEnergy"].Parent=game:GetService("CoreGui");Converted["_Frame"].BackgroundColor3=Color3.fromRGB(255,255,255);Converted["_Frame"].BorderColor3=Color3.fromRGB(0,0,0);Converted["_Frame"].BorderSizePixel=0;Converted["_Frame"].Position=UDim2.new(0.316506416,0,0.00999999978,0);Converted["_Frame"].Size=UDim2.new(0.35921225,0,0.0540200993,0);Converted["_Frame"].Parent=Converted["_HealthAndEnergy"];Converted["_UICorner"].CornerRadius=UDim.new(1,0);Converted["_UICorner"].Parent=Converted["_Frame"];Converted["_UIStroke"].Color=Color3.fromRGB(255,255,255);Converted["_UIStroke"].Thickness=4;Converted["_UIStroke"].Parent=Converted["_Frame"];Converted["_UIGradient"].Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),ColorSequenceKeypoint.new(0.0557,Color3.fromRGB(255,85,0)),ColorSequenceKeypoint.new(0.1114,Color3.fromRGB(255,170,0)),ColorSequenceKeypoint.new(0.1671,Color3.fromRGB(254,255,0)),ColorSequenceKeypoint.new(0.2228,Color3.fromRGB(169,255,0)),ColorSequenceKeypoint.new(0.2785,Color3.fromRGB(83,255,0)),ColorSequenceKeypoint.new(0.3342,Color3.fromRGB(0,255,1)),ColorSequenceKeypoint.new(0.3899,Color3.fromRGB(0,255,86)),ColorSequenceKeypoint.new(0.4456,Color3.fromRGB(0,255,171)),ColorSequenceKeypoint.new(0.5013,Color3.fromRGB(0,252,255)),ColorSequenceKeypoint.new(0.5571,Color3.fromRGB(0,167,255)),ColorSequenceKeypoint.new(0.6128,Color3.fromRGB(0,82,255)),ColorSequenceKeypoint.new(0.6685,Color3.fromRGB(2,0,255)),ColorSequenceKeypoint.new(0.7242,Color3.fromRGB(88,0,255)),ColorSequenceKeypoint.new(0.7799,Color3.fromRGB(173,0,255)),ColorSequenceKeypoint.new(0.8356,Color3.fromRGB(255,0,251)),ColorSequenceKeypoint.new(0.8913,Color3.fromRGB(255,0,166)),ColorSequenceKeypoint.new(0.947,Color3.fromRGB(255,0,80)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0))};Converted["_UIGradient"].Parent=Converted["_UIStroke"];Converted["_TextLabel"].Font=Enum.Font.FredokaOne;Converted["_TextLabel"].Text="HEALTH:";Converted["_TextLabel"].TextColor3=Color3.fromRGB(255,255,255);Converted["_TextLabel"].TextScaled=true;Converted["_TextLabel"].TextSize=14;Converted["_TextLabel"].TextWrapped=true;Converted["_TextLabel"].BackgroundColor3=Color3.fromRGB(255,255,255);Converted["_TextLabel"].BackgroundTransparency=1;Converted["_TextLabel"].Position=UDim2.new(0.0101,0,-0.0192,0);Converted["_TextLabel"].Size=UDim2.new(0.2026,0,1,0);Converted["_TextLabel"].Parent=Converted["_Frame"];Converted["_UIStroke1"].Parent=Converted["_TextLabel"];Converted["_UIGradient1"].Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.fromRGB(26,255,0)),ColorSequenceKeypoint.new(1,Color3.fromRGB(8,76,0))};Converted["_UIGradient1"].Offset=Vector2.new(0.1,0.1);Converted["_UIGradient1"].Rotation=90;Converted["_UIGradient1"].Parent=Converted["_Frame"];Converted["_health"].Font=Enum.Font.FredokaOne;Converted["_health"].Text="nil";Converted["_health"].TextColor3=Color3.fromRGB(255,255,255);Converted["_health"].TextScaled=true;Converted["_health"].TextSize=14;Converted["_health"].TextWrapped=true;Converted["_health"].BackgroundColor3=Color3.fromRGB(255,255,255);Converted["_health"].BackgroundTransparency=1;Converted["_health"].Position=UDim2.new(0.2346,0,-0.0192,0);Converted["_health"].Size=UDim2.new(0.3038,0,1,0);Converted["_health"].Name="health";Converted["_health"].Parent=Converted["_Frame"];Converted["_UIStroke2"].Parent=Converted["_health"];Converted["_/"]
 .Font=Enum.Font.FredokaOne;Converted["_/"]
 .Text="/";Converted["_/"]
@@ -145,30 +93,15 @@ function Framework.CreateHealthGUI()
 .Name="/";Converted["_/1"]
 .Parent=Converted["_freim"];Converted["_UIStroke8"].Parent=Converted["_/1"]
 ;Converted["_maxenergy"].Font=Enum.Font.FredokaOne;Converted["_maxenergy"].Text="nil";Converted["_maxenergy"].TextColor3=Color3.fromRGB(255,255,255);Converted["_maxenergy"].TextScaled=true;Converted["_maxenergy"].BackgroundColor3=Color3.fromRGB(255,255,255);Converted["_maxenergy"].BackgroundTransparency=1;Converted["_maxenergy"].Position=UDim2.new(0.6128,0,0,0);Converted["_maxenergy"].Size=UDim2.new(0.3871,0,1,0);Converted["_maxenergy"].Name="maxenergy";Converted["_maxenergy"].Parent=Converted["_freim"];Converted["_UIStroke9"].Parent=Converted["_maxenergy"];
-    local playerGui=Framework.player:WaitForChild("PlayerGui");local mainGui=playerGui:WaitForChild("Main",15)
-    if mainGui and mainGui:FindFirstChild("MainFrame") and mainGui.MainFrame:FindFirstChild("Bars") then mainGui.MainFrame.Bars.Visible=false end
-    local running=true
-    local function updateHealth()while running and task.wait(0.1)do if Framework.player.Character and Framework.player.Character:FindFirstChild("Humanoid")and Converted._health.Parent then local humanoid=Framework.player.Character.Humanoid;Converted._health.Text=Framework.formatNumber(humanoid.Health);Converted._maxhealth.Text=Framework.formatNumber(humanoid.MaxHealth)end end end
-    local function updateEnergy()while running and task.wait(0.1)do local livingChar=game.Workspace.Living:FindFirstChild(Framework.player.Name)if livingChar and livingChar:FindFirstChild("Stats")and livingChar.Stats:FindFirstChild("Ki")and Converted._energy.Parent then local ki=livingChar.Stats.Ki;Converted._energy.Text=Framework.formatNumber(ki.Value);Converted._maxenergy.Text=Framework.formatNumber(ki.MaxValue)end end end
-    task.spawn(updateHealth);task.spawn(updateEnergy)
-    game:GetService("RunService").RenderStepped:Connect(function()if Converted and Converted["_UIGradient1"]and Converted["_UIGradient1"].Parent then Converted["_UIGradient1"].Rotation+=2;Converted["_UIGradient"].Rotation+=2;Converted["_Uigrad"].Rotation+=2;Converted["_Uigraddd"].Rotation+=2 end end)
+    local playerGui=Framework.player:WaitForChild("PlayerGui");local mainGui=playerGui:WaitForChild("Main",15);if mainGui and mainGui:FindFirstChild("MainFrame")and mainGui.MainFrame:FindFirstChild("Bars")then mainGui.MainFrame.Bars.Visible=false end;local running=true;local function updateHealth()while running and task.wait(0.1)do if Framework.player.Character and Framework.player.Character:FindFirstChild("Humanoid")and Converted._health.Parent then local h=Framework.player.Character.Humanoid;Converted._health.Text=Framework.formatNumber(h.Health);Converted._maxhealth.Text=Framework.formatNumber(h.MaxHealth)end end end;local function updateEnergy()while running and task.wait(0.1)do local c=game.Workspace.Living:FindFirstChild(Framework.player.Name)if c and c:FindFirstChild("Stats")and c.Stats:FindFirstChild("Ki")and Converted._energy.Parent then local k=c.Stats.Ki;Converted._energy.Text=Framework.formatNumber(k.Value);Converted._maxenergy.Text=Framework.formatNumber(k.MaxValue)end end end;task.spawn(updateHealth);task.spawn(updateEnergy);game:GetService("RunService").RenderStepped:Connect(function()if Converted and Converted["_UIGradient1"]and Converted["_UIGradient1"].Parent then Converted["_UIGradient1"].Rotation+=2;Converted["_UIGradient"].Rotation+=2;Converted["_Uigrad"].Rotation+=2;Converted["_Uigraddd"].Rotation+=2 end end)
 end
 
 function Framework.CreateStatsGUI()
     if getgenv().StatsGUI then getgenv().StatsGUI:Destroy() end
-	local Converted = {["_AUTOFARM"]=Instance.new("ScreenGui"),["_Frame"]=Instance.new("Frame"),["_UICorner"]=Instance.new("UICorner"),["_UIStroke"]=Instance.new("UIStroke"),["_UIGradient"]=Instance.new("UIGradient"),["_UIGradient1"]=Instance.new("UIGradient"),["_ImageLabel"]=Instance.new("ImageLabel"),["_UICorner1"]=Instance.new("UICorner"),["_TextLabel"]=Instance.new("TextLabel"),["_UIStroke1"]=Instance.new("UIStroke"),["_Fortnait"]=Instance.new("ImageLabel"),["_Stren"]=Instance.new("TextLabel"),["_UIStroke2"]=Instance.new("UIStroke"),["_STRENGTHNUMBER"]=Instance.new("TextLabel"),["_UIStroke3"]=Instance.new("UIStroke"),["_Sped"]=Instance.new("TextLabel"),["_UIStroke4"]=Instance.new("UIStroke"),["_SPEEDNUMBER"]=Instance.new("TextLabel"),["_UIStroke5"]=Instance.new("UIStroke"),["_DEF"]=Instance.new("TextLabel"),["_UIStroke6"]=Instance.new("UIStroke"),["_DEFENSENUMBER"]=Instance.new("TextLabel"),["_UIStroke7"]=Instance.new("UIStroke"),["_ENERGY"]=Instance.new("TextLabel"),["_UIStroke8"]=Instance.new("UIStroke"),["_ENERGYNUMBER"]=Instance.new("TextLabel"),["_UIStroke9"]=Instance.new("UIStroke"),["_sup"]=Instance.new("ImageLabel"),["_UICorner2"]=Instance.new("UICorner"),["_DEF1"]=Instance.new("TextLabel"),["_UIStroke10"]=Instance.new("UIStroke"),["_REBS"]=Instance.new("TextLabel"),["_UIStroke11"]=Instance.new("UIStroke"),["_REBSNUMBER"]=Instance.new("TextLabel"),["_UIStroke12"]=Instance.new("UIStroke")}
+	local Converted={["_AUTOFARM"]=Instance.new("ScreenGui"),["_Frame"]=Instance.new("Frame"),["_UICorner"]=Instance.new("UICorner"),["_UIStroke"]=Instance.new("UIStroke"),["_UIGradient"]=Instance.new("UIGradient"),["_UIGradient1"]=Instance.new("UIGradient"),["_ImageLabel"]=Instance.new("ImageLabel"),["_UICorner1"]=Instance.new("UICorner"),["_TextLabel"]=Instance.new("TextLabel"),["_UIStroke1"]=Instance.new("UIStroke"),["_Fortnait"]=Instance.new("ImageLabel"),["_Stren"]=Instance.new("TextLabel"),["_UIStroke2"]=Instance.new("UIStroke"),["_STRENGTHNUMBER"]=Instance.new("TextLabel"),["_UIStroke3"]=Instance.new("UIStroke"),["_Sped"]=Instance.new("TextLabel"),["_UIStroke4"]=Instance.new("UIStroke"),["_SPEEDNUMBER"]=Instance.new("TextLabel"),["_UIStroke5"]=Instance.new("UIStroke"),["_DEF"]=Instance.new("TextLabel"),["_UIStroke6"]=Instance.new("UIStroke"),["_DEFENSENUMBER"]=Instance.new("TextLabel"),["_UIStroke7"]=Instance.new("UIStroke"),["_ENERGY"]=Instance.new("TextLabel"),["_UIStroke8"]=Instance.new("UIStroke"),["_ENERGYNUMBER"]=Instance.new("TextLabel"),["_UIStroke9"]=Instance.new("UIStroke"),["_sup"]=Instance.new("ImageLabel"),["_UICorner2"]=Instance.new("UICorner"),["_DEF1"]=Instance.new("TextLabel"),["_UIStroke10"]=Instance.new("UIStroke"),["_REBS"]=Instance.new("TextLabel"),["_UIStroke11"]=Instance.new("UIStroke"),["_REBSNUMBER"]=Instance.new("TextLabel"),["_UIStroke12"]=Instance.new("UIStroke")}
 	Converted["_AUTOFARM"].ZIndexBehavior=Enum.ZIndexBehavior.Sibling;Converted["_AUTOFARM"].Name="AUTOFARM";getgenv().StatsGUI=Converted["_AUTOFARM"];Converted["_AUTOFARM"].Parent=game:GetService("CoreGui");Converted["_Frame"].BackgroundColor3=Color3.fromRGB(255,255,255);Converted["_Frame"].BorderColor3=Color3.fromRGB(0,0,0);Converted["_Frame"].BorderSizePixel=0;Converted["_Frame"].Position=UDim2.new(0.021,0,0.26,0);Converted["_Frame"].Size=UDim2.new(0.2843,0,0.4962,0);Converted["_Frame"].Parent=Converted["_AUTOFARM"];Converted["_UICorner"].Parent=Converted["_Frame"];Converted["_UIStroke"].Color=Color3.fromRGB(255,255,255);Converted["_UIStroke"].Thickness=4;Converted["_UIStroke"].Parent=Converted["_Frame"];Converted["_UIGradient"].Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.fromRGB(255,0,0)),ColorSequenceKeypoint.new(0.0557,Color3.fromRGB(255,85,0)),ColorSequenceKeypoint.new(0.1114,Color3.fromRGB(255,170,0)),ColorSequenceKeypoint.new(0.1671,Color3.fromRGB(254,255,0)),ColorSequenceKeypoint.new(0.2228,Color3.fromRGB(169,255,0)),ColorSequenceKeypoint.new(0.2785,Color3.fromRGB(83,255,0)),ColorSequenceKeypoint.new(0.3342,Color3.fromRGB(0,255,1)),ColorSequenceKeypoint.new(0.3899,Color3.fromRGB(0,255,86)),ColorSequenceKeypoint.new(0.4456,Color3.fromRGB(0,255,171)),ColorSequenceKeypoint.new(0.5013,Color3.fromRGB(0,252,255)),ColorSequenceKeypoint.new(0.5571,Color3.fromRGB(0,167,255)),ColorSequenceKeypoint.new(0.6128,Color3.fromRGB(0,82,255)),ColorSequenceKeypoint.new(0.6685,Color3.fromRGB(2,0,255)),ColorSequenceKeypoint.new(0.7242,Color3.fromRGB(88,0,255)),ColorSequenceKeypoint.new(0.7799,Color3.fromRGB(173,0,255)),ColorSequenceKeypoint.new(0.8356,Color3.fromRGB(255,0,251)),ColorSequenceKeypoint.new(0.8913,Color3.fromRGB(255,0,166)),ColorSequenceKeypoint.new(0.947,Color3.fromRGB(255,0,80)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,0,0))};Converted["_UIGradient"].Parent=Converted["_UIStroke"];Converted["_UIGradient1"].Color=ColorSequence.new{ColorSequenceKeypoint.new(0,Color3.fromRGB(0,153,255)),ColorSequenceKeypoint.new(1,Color3.fromRGB(0,255,247))};Converted["_UIGradient1"].Parent=Converted["_Frame"];Converted["_ImageLabel"].BackgroundColor3=Color3.fromRGB(0,123,255);Converted["_ImageLabel"].Position=UDim2.new(0.0438,0,0.0208,0);Converted["_ImageLabel"].Size=UDim2.new(0.9122,0,0.1256,0);Converted["_ImageLabel"].Parent=Converted["_Frame"];Converted["_UICorner1"].Parent=Converted["_ImageLabel"];Converted["_TextLabel"].Font=Enum.Font.FredokaOne;Converted["_TextLabel"].Text="By Ciab";Converted["_TextLabel"].TextColor3=Color3.fromRGB(255,255,255);Converted["_TextLabel"].TextScaled=true;Converted["_TextLabel"].BackgroundTransparency=1;Converted["_TextLabel"].Position=UDim2.new(0,0,0.1184,0);Converted["_TextLabel"].Size=UDim2.new(1,0,0.7498,0);Converted["_TextLabel"].Parent=Converted["_ImageLabel"];Converted["_UIStroke1"].Parent=Converted["_TextLabel"];Converted["_Fortnait"].Image="rbxassetid://17207994014";Converted["_Fortnait"].Position=UDim2.new(0.0438,0,0.1964,0);Converted["_Fortnait"].Size=UDim2.new(0.9122,0,0.7744,0);Converted["_Fortnait"].Name="Fortnait";Converted["_Fortnait"].Parent=Converted["_Frame"];Converted["_Stren"].Font=Enum.Font.FredokaOne;Converted["_Stren"].Text="STRENGTH:";Converted["_Stren"].TextColor3=Color3.fromRGB(255,255,255);Converted["_Stren"].TextScaled=true;Converted["_Stren"].TextSize=25;Converted["_Stren"].BackgroundTransparency=1;Converted["_Stren"].Position=UDim2.new(0.0257,0,0.042,0);Converted["_Stren"].Size=UDim2.new(0.4377,0,0.1644,0);Converted["_Stren"].Name="Stren";Converted["_Stren"].Parent=Converted["_Fortnait"];Converted["_UIStroke2"].Parent=Converted["_Stren"];Converted["_STRENGTHNUMBER"].Font=Enum.Font.FredokaOne;Converted["_STRENGTHNUMBER"].Text="nil";Converted["_STRENGTHNUMBER"].TextColor3=Color3.fromRGB(255,255,255);Converted["_STRENGTHNUMBER"].TextScaled=true;Converted["_STRENGTHNUMBER"].TextSize=1;Converted["_STRENGTHNUMBER"].BackgroundTransparency=1;Converted["_STRENGTHNUMBER"].Position=UDim2.new(1,0,0,0);Converted["_STRENGTHNUMBER"].Size=UDim2.new(1.1337,0,0.9866,0);Converted["_STRENGTHNUMBER"].Name="STRENGTHNUMBER";Converted["_STRENGTHNUMBER"].Parent=Converted["_Stren"];Converted["_UIStroke3"].Parent=Converted["_STRENGTHNUMBER"];Converted["_Sped"].Font=Enum.Font.FredokaOne;Converted["_Sped"].Text="SPEED:";Converted["_Sped"].TextColor3=Color3.fromRGB(255,255,255);Converted["_Sped"].TextScaled=true;Converted["_Sped"].TextSize=29;Converted["_Sped"].BackgroundTransparency=1;Converted["_Sped"].Position=UDim2.new(0.0257,0,0.2042,0);Converted["_Sped"].Size=UDim2.new(0.4377,0,0.1644,0);Converted["_Sped"].Name="Sped";Converted["_Sped"].Parent=Converted["_Fortnait"];Converted["_UIStroke4"].Parent=Converted["_Sped"];Converted["_SPEEDNUMBER"].Font=Enum.Font.FredokaOne;Converted["_SPEEDNUMBER"].Text="nil";Converted["_SPEEDNUMBER"].TextColor3=Color3.fromRGB(255,255,255);Converted["_SPEEDNUMBER"].TextScaled=true;Converted["_SPEEDNUMBER"].TextSize=1;Converted["_SPEEDNUMBER"].BackgroundTransparency=1;Converted["_SPEEDNUMBER"].Position=UDim2.new(1,0,0,0);Converted["_SPEEDNUMBER"].Size=UDim2.new(1.1337,0,0.9866,0);Converted["_SPEEDNUMBER"].Name="SPEEDNUMBER";Converted["_SPEEDNUMBER"].Parent=Converted["_Sped"];Converted["_UIStroke5"].Parent=Converted["_SPEEDNUMBER"];Converted["_DEF"].Font=Enum.Font.FredokaOne;Converted["_DEF"].Text="DEFENSE:";Converted["_DEF"].TextColor3=Color3.fromRGB(255,255,255);Converted["_DEF"].TextScaled=true;Converted["_DEF"].TextSize=28;Converted["_DEF"].BackgroundTransparency=1;Converted["_DEF"].Position=UDim2.new(0.0257,0,0.3897,0);Converted["_DEF"].Size=UDim2.new(0.4377,0,0.1644,0);Converted["_DEF"].Name="DEF";Converted["_DEF"].Parent=Converted["_Fortnait"];Converted["_UIStroke6"].Parent=Converted["_DEF"];Converted["_DEFENSENUMBER"].Font=Enum.Font.FredokaOne;Converted["_DEFENSENUMBER"].Text="nil";Converted["_DEFENSENUMBER"].TextColor3=Color3.fromRGB(255,255,255);Converted["_DEFENSENUMBER"].TextScaled=true;Converted["_DEFENSENUMBER"].TextSize=1;Converted["_DEFENSENUMBER"].BackgroundTransparency=1;Converted["_DEFENSENUMBER"].Position=UDim2.new(1,0,0,0);Converted["_DEFENSENUMBER"].Size=UDim2.new(1.1337,0,0.9866,0);Converted["_DEFENSENUMBER"].Name="DEFENSENUMBER";Converted["_DEFENSENUMBER"].Parent=Converted["_DEF"];Converted["_UIStroke7"].Parent=Converted["_DEFENSENUMBER"];Converted["_ENERGY"].Font=Enum.Font.FredokaOne;Converted["_ENERGY"].Text="ENERGY:";Converted["_ENERGY"].TextColor3=Color3.fromRGB(255,255,255);Converted["_ENERGY"].TextScaled=true;Converted["_ENERGY"].TextSize=28;Converted["_ENERGY"].BackgroundTransparency=1;Converted["_ENERGY"].Position=UDim2.new(0.0257,0,0.552,0);Converted["_ENERGY"].Size=UDim2.new(0.4377,0,0.1644,0);Converted["_ENERGY"].Name="ENERGY";Converted["_ENERGY"].Parent=Converted["_Fortnait"];Converted["_UIStroke8"].Parent=Converted["_ENERGY"];Converted["_ENERGYNUMBER"].Font=Enum.Font.FredokaOne;Converted["_ENERGYNUMBER"].Text="nil";Converted["_ENERGYNUMBER"].TextColor3=Color3.fromRGB(255,255,255);Converted["_ENERGYNUMBER"].TextScaled=true;Converted["_ENERGYNUMBER"].TextSize=1;Converted["_ENERGYNUMBER"].BackgroundTransparency=1;Converted["_ENERGYNUMBER"].Position=UDim2.new(1,0,0,0);Converted["_ENERGYNUMBER"].Size=UDim2.new(1.1337,0,0.9866,0);Converted["_ENERGYNUMBER"].Name="ENERGYNUMBER";Converted["_ENERGYNUMBER"].Parent=Converted["_ENERGY"];Converted["_UIStroke9"].Parent=Converted["_ENERGYNUMBER"];Converted["_sup"].BackgroundColor3=Color3.fromRGB(0,255,204);Converted["_sup"].Position=UDim2.new(-0.026,0,0.8721,0);Converted["_sup"].Size=UDim2.new(1.0517,0,0.1278,0);Converted["_sup"].Name="sup";Converted["_sup"].Parent=Converted["_Fortnait"];Converted["_UICorner2"].Parent=Converted["_sup"];Converted["_DEF1"].Font=Enum.Font.FredokaOne;Converted["_DEF1"].Text="sup "..Framework.player.DisplayName;Converted["_DEF1"].TextColor3=Color3.fromRGB(255,255,255);Converted["_DEF1"].TextSize=28;Converted["_DEF1"].BackgroundTransparency=1;Converted["_DEF1"].Position=UDim2.new(0,0,0.1057,0);Converted["_DEF1"].Size=UDim2.new(1,0,0.7426,0);Converted["_DEF1"].Name="DEF";Converted["_DEF1"].Parent=Converted["_sup"];Converted["_UIStroke10"].Parent=Converted["_DEF1"];Converted["_REBS"].Font=Enum.Font.FredokaOne;Converted["_REBS"].Text="REBIRTHS";Converted["_REBS"].TextColor3=Color3.fromRGB(255,234,0);Converted["_REBS"].TextScaled=true;Converted["_REBS"].TextSize=28;Converted["_REBS"].BackgroundTransparency=1;Converted["_REBS"].Position=UDim2.new(0.0257,0,0.7068,0);Converted["_REBS"].Size=UDim2.new(0.4377,0,0.1644,0);Converted["_REBS"].Name="REBS";Converted["_REBS"].Parent=Converted["_Fortnait"];Converted["_UIStroke11"].Parent=Converted["_REBS"];Converted["_REBSNUMBER"].Font=Enum.Font.FredokaOne;Converted["_REBSNUMBER"].Text="nil";Converted["_REBSNUMBER"].TextColor3=Color3.fromRGB(255,255,255);Converted["_REBSNUMBER"].TextScaled=true;Converted["_REBSNUMBER"].TextSize=1;Converted["_REBSNUMBER"].BackgroundTransparency=1;Converted["_REBSNUMBER"].Position=UDim2.new(1,0,0,0);Converted["_REBSNUMBER"].Size=UDim2.new(1.1337,0,0.9866,0);Converted["_REBSNUMBER"].Name="REBSNUMBER";Converted["_REBSNUMBER"].Parent=Converted["_REBS"];Converted["_UIStroke12"].Parent=Converted["_REBSNUMBER"];
-    local function updateStats()
-        if not Converted["_STRENGTHNUMBER"].Parent then return end
-		Converted["_STRENGTHNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Strength.Value))
-		Converted["_DEFENSENUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Defense.Value))
-		Converted["_ENERGYNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Energy.Value))
-		Converted["_SPEEDNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Speed.Value))
-		Converted["_REBSNUMBER"].Text=tostring(Framework.playerData.Rebirth.Value)
-	end
- 
+    local function updateStats()if not Converted["_STRENGTHNUMBER"].Parent then return end;Converted["_STRENGTHNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Strength.Value));Converted["_DEFENSENUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Defense.Value));Converted["_ENERGYNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Energy.Value));Converted["_SPEEDNUMBER"].Text=Framework.formatNumberForTheStats(math.floor(Framework.playerData.Speed.Value));Converted["_REBSNUMBER"].Text=tostring(Framework.playerData.Rebirth.Value)end
 	updateStats();Framework.playerData.Strength.Changed:Connect(updateStats);Framework.playerData.Defense.Changed:Connect(updateStats);Framework.playerData.Energy.Changed:Connect(updateStats);Framework.playerData.Speed.Changed:Connect(updateStats);Framework.playerData.Rebirth.Changed:Connect(updateStats)
- 
 	game:GetService("RunService").RenderStepped:Connect(function()if Converted and Converted["_UIGradient"]and Converted["_UIGradient"].Parent then Converted["_UIGradient"].Rotation+=2;Converted["_UIGradient1"].Rotation+=2 end end)
 end
 
@@ -179,14 +112,12 @@ function Framework.CreateTimerGUI()
     Framework.TimerGUIElements={ScreenGui=TimerScreenGui,TextLabel=TimerTextLabel}
 end
 --==============================================================================
--- FUNZIONI DI AUTOMAZIONE (LOOP CONTINUI)
+-- FUNZIONI DI AUTOMAZIONE (TUTTE QUELLE CHE MANCAVANO)
 --==============================================================================
 function Framework.CheckToGo()
     while true do
         task.wait(1)
-        if Framework.statsz.Value < 100000000 and game.PlaceId == 114014249462644 then
-            Framework.State.lastBossName = nil -- Resettiamo il boss quando torniamo sulla terra
-            Framework.SaveState()
+        if Framework.playerData.Strength.Value < 100000000 and game.PlaceId == 114014249462644 then
             pcall(function() Framework.Events.TP:InvokeServer("Earth") end)
         end
     end
@@ -195,9 +126,9 @@ end
 function Framework.ANTIAFK()
     local vu = game:GetService("VirtualUser")
     Framework.player.Idled:connect(function()
-        vu:Button2Down(Vector2.new(0, 0), Framework.camera.CFrame)
+        vu:Button2Down(Vector2.new(0, 0), game.Workspace.CurrentCamera.CFrame)
         wait(1)
-        vu:Button2Up(Vector2.new(0, 0), Framework.camera.CFrame)
+        vu:Button2Up(Vector2.new(0, 0), game.Workspace.CurrentCamera.CFrame)
     end)
 end
 
@@ -207,10 +138,7 @@ function Framework.FloatByHimself()
 		if humanoidRootPart then
 			local bodyPosition = Instance.new("BodyPosition", humanoidRootPart)
 			bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.1, 0)
-			bodyPosition.MaxForce = Vector3.new(0, 4000, 0)
-			bodyPosition.P = 2000
-			bodyPosition.D = 100
- 
+			bodyPosition.MaxForce = Vector3.new(0, 4000, 0); bodyPosition.P = 2000; bodyPosition.D = 100
 			game:GetService("RunService").Stepped:Connect(function()
                 if bodyPosition and bodyPosition.Parent and humanoidRootPart and humanoidRootPart.Parent then
 				    bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.0001, 0)
@@ -218,7 +146,6 @@ function Framework.FloatByHimself()
 			end)
 		end
     end
-    
     Framework.player.CharacterAdded:Connect(floatPlayer)
     if Framework.player.Character then floatPlayer(Framework.player.Character) end
 end
@@ -228,9 +155,7 @@ function Framework.Block()
         task.wait(0.1)
         pcall(function()
             Framework.Events.block:InvokeServer(true)
-            if Framework.player and Framework.player.Status then
-                Framework.player.Status.Blocking.Value = true
-            end
+            if Framework.player and Framework.player.Status then Framework.player.Status.Blocking.Value = true end
         end)
     end
 end
@@ -245,99 +170,17 @@ end
 function Framework.ManagePlanetTeleport()
     while true do
         task.wait(1)
-        if game.PlaceId == 3311165597 then -- Terra
-            if Framework.defensestats.Value > 400000000 and Framework.zeni.Value > 15000 then
-                Framework.SaveState() -- Salviamo lo stato prima di teletrasportarci
-                pcall(function() Framework.Events.TP:InvokeServer("T.O.P") end)
-            end
+        if game.PlaceId == 3311165597 and Framework.defensestats.Value > 4E8 and Framework.zeni.Value > 15000 then
+            pcall(function() Framework.Events.TP:InvokeServer("T.O.P") end)
         end
     end
 end
 
 function Framework.ManageTransformations()
 	local transformaciones = {fases={{name="Time Breaker",fuerza=630000000},{name="True Jui",fuerza=750000000},{name="Corrupt Astral",fuerza=250000000},{name="Beast",fuerza=120000000},{name="SSJB4",fuerza=50000000},{name="LBSSJ4",fuerza=100000000},{name="True God of Creation",fuerza=30000000},{name="True God of Destruction",fuerza=30000000},{name="SSJR3",fuerza=50000000},{name="God of Creation",fuerza=30000000},{name="God of Destruction",fuerza=30000000},{name="Super Broly",fuerza=4000000},{name="Jiren Ultra Instinct",fuerza=14000000},{name="Mastered Ultra Instinct",fuerza=14000000},{name="Godly SSJ2",fuerza=8000000},{name="LSSJG",fuerza=3000000},{name="Ultra Instinct Omen",fuerza=5000000},{name="LSSJ4",fuerza=1800000},{name="SSJG4",fuerza=1000000},{name="Evil SSJ",fuerza=4000000},{name="Blue Evolution",fuerza=3500000},{name="LSSJ3",fuerza=800000},{name="Dark Rose",fuerza=3500000},{name="SSJ Berseker",fuerza=3000000},{name="Kefla SSJ2",fuerza=3000000},{name="True Rose",fuerza=2400000},{name="SSJ Blue Kaioken",fuerza=2200000},{name="SSJ5",fuerza=550000},{name="Mystic Kaioken",fuerza=250000},{name="SSJ Rose",fuerza=1400000},{name="SSJ Blue",fuerza=1200000},{name="LSSJ Kaioken",fuerza=160000},{name="Corrupt SSJ",fuerza=700000},{name="SSJ Rage",fuerza=700000},{name="SSJ2 Kaioken",fuerza=50000},{name="SSJ4",fuerza=300000},{name="Mystic",fuerza=200000},{name="LSSJ",fuerza=140000},{name="SSJ3",fuerza=95000},{name="SSJ2 Majin",fuerza=65000},{name="Spirit SSJ",fuerza=65000},{name="SSJ Kaioken",fuerza=16000}}}
-    local function ejecutarForma()
-        while Framework.player.Status.SelectedTransformation.Value~=Framework.player.Status.Transformation.Value do
-            pcall(function()if Framework.player.Character and Framework.player.Character:FindFirstChild("Stats")and Framework.player.Character.Stats.Ki.Value>(Framework.player.Character.Stats.Ki.MaxValue/10+10)then Framework.Events.Hehehe:InvokeServer()end end)
-            task.wait()
-        end
-    end
-    local function transformarse(array)
-        for _,v in pairs(transformaciones[array])do
-            if Framework.statsz.Value>=v.fuerza then
-                local s,r=pcall(function()return Framework.Events.equipskill:InvokeServer(v.name)end)
-                if s and r then break end
-            end
-        end
-        ejecutarForma()
-    end
-    while true do task.wait(1.2); pcall(function()transformarse("fases")end)end
-end
-
-function Framework.MainBossFarm()
-	local AllBosses={ {PlaceId=3311165597,Name="Klirin",MinStats=0,MaxStats=100000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-5},{PlaceId=3311165597,Name="Radish",MinStats=100001,MaxStats=200000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="Mapa",MinStats=200001,MaxStats=700000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="Super Vegetable",MinStats=700001,MaxStats=1400000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="Chilly",MinStats=1400001,MaxStats=5000001,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="Perfect Atom",MinStats=5000001,MaxStats=8000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="SSJ2 Wukong",MinStats=8000001,MaxStats=25000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="SSJB Wukong",MinStats=25000001,MaxStats=50000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="Broccoli",MinStats=50000001,MaxStats=150000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=3311165597,Name="SSJG Kakata",MinStats=150000001,MaxStats=2000000000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=114014249462644,Name="Piclow (Base)",MinStats=100000000,MaxStats=1500000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=114014249462644,Name="Caulla (Base)",MinStats=1500000001,MaxStats=1510000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=114014249462644,Name="Nohag (Potential Awoken)",MinStats=1510000001,MaxStats=1600000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=114014249462644,Name="Kall (LSSJ)",MinStats=1600000001,MaxStats=1700000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2},{PlaceId=114014249462644,Name="SSJBK Wukong",MinStats=1700000001,MaxStats=1700000000000000000000000000000000000000,QuestLocation=workspace.Others.NPCs,FightLocation=workspace.Living,Distance=-2}}
-    local character,humanoid,humanoidRootPart
-    local function updateCharacterRefs(newChar)character=newChar or Framework.player.Character;if character then humanoid=character:WaitForChild("Humanoid");humanoidRootPart=character:WaitForChild("HumanoidRootPart")end end
-    Framework.player.CharacterAdded:Connect(updateCharacterRefs);updateCharacterRefs()
-    local function SafeWaitForChild(parent,name,timeout)local s,r=pcall(function()return parent:WaitForChild(name,timeout)end);if not s then return nil end;return r end
-    local function TeleportAndFight(bossData)
-        local function getValidBoss()if not(humanoid and humanoid.Health>0)then return nil end;local bossModel=bossData.FightLocation:FindFirstChild(bossData.Name);if not(bossModel and bossModel.Parent)then return nil end;local bossHumanoid=bossModel:FindFirstChildOfClass("Humanoid");local bossHRP=bossModel:FindFirstChild("HumanoidRootPart");if bossHumanoid and bossHRP and bossHumanoid.Health>0 then return bossModel end;return nil end
-        while true do local currentBoss=getValidBoss();if not currentBoss then break end;local bossHRP=currentBoss.HumanoidRootPart;pcall(function()Framework.camera.CFrame=CFrame.new(Framework.camera.CFrame.Position,bossHRP.Position);humanoidRootPart.CFrame=CFrame.new(bossHRP.Position+(bossHRP.CFrame.LookVector*bossData.Distance),bossHRP.Position)end);pcall(function()local eventName=game.PlaceId==3311165597 and"letsplayagame"or"letsplayagame";local event=Framework.Events[eventName];Framework.Events.p:FireServer("Blacknwhite27",1);coroutine.wrap(function()event:InvokeServer("Meteor Crash","Blacknwhite27")end)();coroutine.wrap(function()event:InvokeServer("Wolf Fang Fist","Blacknwhite27")end)();coroutine.wrap(function()event:InvokeServer("Mach Kick","Blacknwhite27")end)();coroutine.wrap(function()event:InvokeServer("Spirit Barrage","Blacknwhite27")end)();coroutine.wrap(function()event:InvokeServer("Super Dragon Fist","Blacknwhite27")end)()end);task.wait()end
-        pcall(function()Framework.camera.CameraType=Enum.CameraType.Custom;Framework.camera.CameraSubject=humanoid end)
-    end
-    local function WaitForBossToSpawn(bossData,timeLimit)
-        local startTime=os.time();local bossReady=false;repeat if not(humanoid and humanoid.Health>0)then return end;task.wait();local boss=SafeWaitForChild(bossData.FightLocation,bossData.Name,1);bossReady=boss and boss:FindFirstChild("HumanoidRootPart")and boss:FindFirstChild("Humanoid")until bossReady or os.time()-startTime>timeLimit;if bossReady then task.wait();TeleportAndFight(bossData)end
-    end
-    local function CheckAndFightBoss(bossData)
-        if not(character and humanoid and humanoid.Health>0)then updateCharacterRefs()end;if not bossData or not humanoidRootPart then return end
-        Framework.State.lastBossName = bossData.Name -- **AGGIORNAMENTO DELLO STATO**
-        local questStarted=false;local startTime=os.time();local questTimeout=30
-        while not questStarted do if os.time()-startTime>questTimeout then humanoid.Health=0;return end;if not(humanoid and humanoid.Health>0)then return end;local bossNpc=SafeWaitForChild(bossData.QuestLocation,bossData.Name,1);if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart")then while Framework.playerData:WaitForChild("Quest").Value~=bossData.Name do if os.time()-startTime>questTimeout then break end;if not(humanoid and humanoid.Health>0)then return end;humanoidRootPart.CFrame=bossNpc.HumanoidRootPart.CFrame*CFrame.new(0,0,-3);Framework.Events:WaitForChild("Qaction"):InvokeServer(bossNpc);task.wait()end;if Framework.playerData:WaitForChild("Quest").Value==bossData.Name then questStarted=true end else task.wait()end end
-        if questStarted then WaitForBossToSpawn(bossData,60)end
-    end
-    
-    local villsPlanetReady=false
-    -- **NUOVA LOGICA DI AVVIO**
-    local startingBossIndex = 1
-    if Framework.State.lastBossName then
-        for i, bossData in ipairs(AllBosses) do
-            if bossData.Name == Framework.State.lastBossName then
-                startingBossIndex = i
-                break
-            end
-        end
-    end
-
-    while true do
-        task.wait(1)
-        if not(humanoid and humanoid.Health>0)then task.wait(1);continue end
-        local currentStats=Framework.defensestats.Value;local currentPlaceId=game.PlaceId
-        local foughtBoss=false
-        
-        -- Ciclo principale modificato per partire dal boss giusto
-        for i = startingBossIndex, #AllBosses do
-            local bossData = AllBosses[i]
-            if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                -- Logica speciale per il pianeta di Vills
-                if currentPlaceId == 114014249462644 and not villsPlanetReady then
-                    print("Rilevato pianeta di Vills. Attendo 7 secondi...")
-                    task.wait(7); villsPlanetReady = true
-                end
-                
-                CheckAndFightBoss(bossData)
-                foughtBoss = true
-                startingBossIndex = i -- Prepariamo il prossimo ciclo a partire da qui
-                break -- Usciamo dal ciclo for per ricontrollare le stats
-            end
-        end
-        
-        if not foughtBoss then
-            -- Se abbiamo finito la lista o non troviamo un boss, resettiamo l'indice
-            startingBossIndex = 1
-            Framework.State.lastBossName = nil
-            task.wait(5)
-        end
-    end
+    local function ejecutarForma() while Framework.player.Status.SelectedTransformation.Value~=Framework.player.Status.Transformation.Value do pcall(function()if Framework.player.Character and Framework.player.Character:FindFirstChild("Stats")and Framework.player.Character.Stats.Ki.Value>(Framework.player.Character.Stats.Ki.MaxValue/10+10)then Framework.Events.Hehehe:InvokeServer()end end);task.wait()end end
+    local function transformarse(array) for _,v in pairs(transformaciones[array])do if Framework.statsz.Value>=v.fuerza then local s,r=pcall(function()return Framework.Events.equipskill:InvokeServer(v.name)end);if s and r then break end end end;ejecutarForma()end
+    while true do task.wait(1.2);pcall(function()transformarse("fases")end)end
 end
 
 function Framework.InfiniteHealth()
@@ -346,69 +189,107 @@ function Framework.InfiniteHealth()
 end
 
 function Framework.CheckAndPerformRebirth()
-    while true do
-        task.wait(0.5);local strength=Framework.playerData.Strength;local rebirths=Framework.playerData.Rebirth;local requiredStrength=2000000*(rebirths.Value+1);local maxStrengthForRebirth=requiredStrength*2
-        if strength.Value>=requiredStrength and strength.Value<=maxStrengthForRebirth then pcall(function()Framework.Events.reb:InvokeServer()end)end
-    end
+    while true do task.wait(0.5);local s,r=Framework.playerData.Strength,Framework.playerData.Rebirth;local req=2E6*(r.Value+1);if s.Value>=req and s.Value<=req*2 then pcall(function()Framework.Events.reb:InvokeServer()end)end end
 end
 
 function Framework.RebirthTimerAndTeleport()
-    local VILLS_PLANET_ID=114014249462644;local TIMER_DURATION=6000
-    -- Ripristina il timer se era stato salvato
-    if Framework.State.rebirthTimerEndsAt and os.time() < Framework.State.rebirthTimerEndsAt then
-        print("Timer di Rebirth ripristinato dallo stato salvato.")
-    else
-        Framework.State.rebirthTimerEndsAt = nil
-    end
-
+    local VILLS,DURATION=114014249462644,6000
     while true do
         task.wait(1)
         if Framework.TimerGUIElements and Framework.TimerGUIElements.ScreenGui then
-            local strength=Framework.playerData.Strength;local rebirths=Framework.playerData.Rebirth;local requiredStrength=2000000*(rebirths.Value+1);local strengthThreshold=requiredStrength*2
-            if game.PlaceId==VILLS_PLANET_ID and strength.Value>strengthThreshold then
-                if Framework.State.rebirthTimerEndsAt==nil then
-                    Framework.State.rebirthTimerEndsAt=os.time()+TIMER_DURATION
+            local s,r=Framework.playerData.Strength,Framework.playerData.Rebirth;local thresh=2E6*(r.Value+1)*2
+            if game.PlaceId==VILLS and s.Value>thresh then
+                -- Non usiamo più lo stato salvato per il timer, si resetta ad ogni teletrasporto per semplicità
+                if not Framework.ActiveThreads["RebirthTimerCountdown"] then
+                    Framework.ActiveThreads["RebirthTimerCountdown"] = task.spawn(function()
+                        local endTime = os.time() + DURATION
+                        Framework.TimerGUIElements.ScreenGui.Enabled = true
+                        while os.time() < endTime do
+                            local timeLeft = math.max(0, math.floor(endTime - os.time()))
+                            Framework.TimerGUIElements.TextLabel.Text = "Teleport in: " .. timeLeft
+                            task.wait(1)
+                        end
+                        Framework.TimerGUIElements.ScreenGui.Enabled = false
+                        pcall(function()Framework.Events.TP:InvokeServer("Earth")end)
+                    end)
                 end
             else
-                if Framework.State.rebirthTimerEndsAt~=nil then
-                    Framework.State.rebirthTimerEndsAt=nil
+                if Framework.ActiveThreads["RebirthTimerCountdown"] then
+                    task.cancel(Framework.ActiveThreads["RebirthTimerCountdown"])
+                    Framework.ActiveThreads["RebirthTimerCountdown"] = nil
+                    Framework.TimerGUIElements.ScreenGui.Enabled = false
                 end
-            end
-            if Framework.State.rebirthTimerEndsAt~=nil then
-                local timeLeft=math.max(0,math.floor(Framework.State.rebirthTimerEndsAt-os.time()));Framework.TimerGUIElements.TextLabel.Text="Teleport in: "..timeLeft;Framework.TimerGUIElements.ScreenGui.Enabled=true
-                if timeLeft<=0 then
-                    Framework.State.rebirthTimerEndsAt=nil; Framework.State.lastBossName=nil; Framework.SaveState()
-                    pcall(function()Framework.Events.TP:InvokeServer("Earth")end)
-                end
-            else
-                Framework.TimerGUIElements.ScreenGui.Enabled=false
             end
         end
     end
 end
 
+function Framework.MainBossFarm()
+	local AllBosses={ {PlaceId=3311165597,Name="Klirin",MinStats=0,MaxStats=100000},{PlaceId=3311165597,Name="Radish",MinStats=100001,MaxStats=200000},{PlaceId=3311165597,Name="Mapa",MinStats=200001,MaxStats=700000},{PlaceId=3311165597,Name="Super Vegetable",MinStats=700001,MaxStats=1400000},{PlaceId=3311165597,Name="Chilly",MinStats=1400001,MaxStats=5000001},{PlaceId=3311165597,Name="Perfect Atom",MinStats=5000001,MaxStats=8000000},{PlaceId=3311165597,Name="SSJ2 Wukong",MinStats=8000001,MaxStats=25000000},{PlaceId=3311165597,Name="SSJB Wukong",MinStats=25000001,MaxStats=50000000},{PlaceId=3311165597,Name="Broccoli",MinStats=50000001,MaxStats=150000000},{PlaceId=3311165597,Name="SSJG Kakata",MinStats=150000001,MaxStats=2000000000000},{PlaceId=114014249462644,Name="Piclow (Base)",MinStats=100000000,MaxStats=1500000000},{PlaceId=114014249462644,Name="Caulla (Base)",MinStats=1500000001,MaxStats=1510000000},{PlaceId=114014249462644,Name="Nohag (Potential Awoken)",MinStats=1510000001,MaxStats=1600000000},{PlaceId=114014249462644,Name="Kall (LSSJ)",MinStats=1600000001,MaxStats=1700000000},{PlaceId=114014249462644,Name="SSJBK Wukong",MinStats=1700000001,MaxStats=1.7e39}}
+    for i,v in pairs(AllBosses)do v.QuestLocation=workspace.Others.NPCs;v.FightLocation=workspace.Living;v.Distance=v.Name=="Klirin"and -5 or -2 end
+    local character,humanoid,humanoidRootPart;local function updateCharRefs(c)character=c or Framework.player.Character;if character then humanoid=character:WaitForChild("Humanoid");humanoidRootPart=character:WaitForChild("HumanoidRootPart")end end
+    Framework.player.CharacterAdded:Connect(updateCharRefs);updateCharRefs()
+    local function SafeWaitForChild(p,n,t)local s,r=pcall(function()return p:WaitForChild(n,t)end);return s and r end
+    local function TeleportAndFight(bossData)
+        local function getValidBoss()if not(humanoid and humanoid.Health>0)then return end;local m=bossData.FightLocation:FindFirstChild(bossData.Name);if not(m and m.Parent)then return end;local h=m:FindFirstChildOfClass("Humanoid");local hrp=m:FindFirstChild("HumanoidRootPart");if h and hrp and h.Health>0 then return m end end
+        while true do local b=getValidBoss();if not b then break end;local hrp=b.HumanoidRootPart;pcall(function()game.Workspace.CurrentCamera.CFrame=CFrame.new(game.Workspace.CurrentCamera.CFrame.Position,hrp.Position);humanoidRootPart.CFrame=CFrame.new(hrp.Position+(hrp.CFrame.LookVector*bossData.Distance),hrp.Position)end);pcall(function()local e=Framework.Events.letsplayagame;Framework.Events.p:FireServer("Blacknwhite27",1);coroutine.wrap(function()e:InvokeServer("Meteor Crash","Blacknwhite27")end)();coroutine.wrap(function()e:InvokeServer("Wolf Fang Fist","Blacknwhite27")end)();coroutine.wrap(function()e:InvokeServer("Mach Kick","Blacknwhite27")end)();coroutine.wrap(function()e:InvokeServer("Spirit Barrage","Blacknwhite27")end)();coroutine.wrap(function()e:InvokeServer("Super Dragon Fist","Blacknwhite27")end)()end);task.wait()end
+        pcall(function()game.Workspace.CurrentCamera.CameraType=Enum.CameraType.Custom;game.Workspace.CurrentCamera.CameraSubject=humanoid end)
+    end
+    local function WaitForBossToSpawn(bossData,timeLimit) local s=os.time();local r=false;repeat if not(humanoid and humanoid.Health>0)then return end;task.wait();local b=SafeWaitForChild(bossData.FightLocation,bossData.Name,1);r=b and b:FindFirstChild("HumanoidRootPart")and b:FindFirstChild("Humanoid")until r or os.time()-s>timeLimit;if r then task.wait();TeleportAndFight(bossData)end end
+    local function CheckAndFightBoss(bossData)
+        if not(character and humanoid and humanoid.Health>0)then updateCharRefs()end;if not bossData or not humanoidRootPart then return end
+        print("[Farming] Obiettivo: "..bossData.Name)
+        local started,s,t=false,os.time(),30
+        while not started do if os.time()-s>t then humanoid.Health=0;return end;if not(humanoid and humanoid.Health>0)then return end;local npc=SafeWaitForChild(bossData.QuestLocation,bossData.Name,1);if npc and npc:FindFirstChild("HumanoidRootPart")then while Framework.playerData.Quest.Value~=bossData.Name do if os.time()-s>t then break end;if not(humanoid and humanoid.Health>0)then return end;humanoidRootPart.CFrame=npc.HumanoidRootPart.CFrame*CFrame.new(0,0,-3);Framework.Events.Qaction:InvokeServer(npc);task.wait()end;if Framework.playerData.Quest.Value==bossData.Name then started=true end else task.wait()end end
+        if started then WaitForBossToSpawn(bossData,60)end
+    end
+    local villsPlanetReady=false
+    while true do task.wait(1);if not(humanoid and humanoid.Health>0)then task.wait(1);continue end;local stats,place=Framework.defensestats.Value,game.PlaceId;local fought=false
+        for _,bossData in pairs(AllBosses)do if bossData.PlaceId==place and stats>=bossData.MinStats and stats<=bossData.MaxStats then if place==114014249462644 and not villsPlanetReady then print("[Sistema] Rilevato Vills, attendo 7s...");task.wait(7);villsPlanetReady=true end;CheckAndFightBoss(bossData);fought=true;break end end
+        if not fought then task.wait(5)end
+    end
+end
+
 --==============================================================================
--- CENTRO DI COMANDO: La funzione init()
+-- CENTRO DI COMANDO E INNESCO
 --==============================================================================
 function Framework.init()
-    print("INIZIALIZZAZIONE FRAMEWORK CIABATTOSO...")
-    for name,thread in pairs(Framework.ActiveThreads)do task.cancel(thread)end;Framework.ActiveThreads={}
+    print("[Sistema] Inizializzazione Framework...")
+    for n,t in pairs(Framework.ActiveThreads)do task.cancel(t)end;Framework.ActiveThreads={}
     
-    Framework.LoadState() -- Carichiamo lo stato all'inizio!
+    Framework.LoadSettings()
 
-    Framework.CreateHealthGUI();Framework.CreateStatsGUI();Framework.CreateTimerGUI()
-    local function start(name,func)Framework.ActiveThreads[name]=task.spawn(func)end
-    start("CheckToGo",Framework.CheckToGo);start("ANTIAFK",Framework.ANTIAFK);start("Float",Framework.FloatByHimself);start("Block",Framework.Block);start("Charge",Framework.Charge);start("PlanetTeleport",Framework.ManagePlanetTeleport);start("Transformations",Framework.ManageTransformations);start("MainBossFarm",Framework.MainBossFarm);start("InfiniteHealth",Framework.InfiniteHealth);start("RebirthCheck",Framework.CheckAndPerformRebirth);start("RebirthTimer",Framework.RebirthTimerAndTeleport)
-    print("FRAMEWORK AVVIATO CON SUCCESSO!")
+    if not Framework.Settings.AutofarmEnabled then
+        print("[Impostazioni] Prima esecuzione: Autofarm attivato e salvato.")
+        Framework.Settings.AutofarmEnabled = true
+        Framework.SaveSettings()
+    end
+
+    if Framework.Settings.AutofarmEnabled then
+        print("[Sistema] Autofarm è ATTIVATO. Avvio processi...")
+        local function start(name,func)Framework.ActiveThreads[name]=task.spawn(func)end
+        
+        -- Avvio di TUTTE le funzioni
+        start("CreateHealthGUI", Framework.CreateHealthGUI)
+        start("CreateStatsGUI", Framework.CreateStatsGUI)
+        start("CreateTimerGUI", Framework.CreateTimerGUI)
+        start("CheckToGo", Framework.CheckToGo)
+        start("ANTIAFK", Framework.ANTIAFK)
+        start("Float", Framework.FloatByHimself)
+        start("Block", Framework.Block)
+        start("Charge", Framework.Charge)
+        start("PlanetTeleport", Framework.ManagePlanetTeleport)
+        start("Transformations", Framework.ManageTransformations)
+        start("InfiniteHealth", Framework.InfiniteHealth)
+        start("RebirthCheck", Framework.CheckAndPerformRebirth)
+        start("RebirthTimer", Framework.RebirthTimerAndTeleport)
+        start("MainBossFarm", Framework.MainBossFarm)
+        
+        print("[Sistema] Tutti i processi sono stati avviati.")
+    else
+        print("[Sistema] Autofarm è DISATTIVATO. Nessun processo avviato.")
+    end
 end
 
---==============================================================================
--- INNESCO (TRIGGER)
---==============================================================================
-Framework.player.CharacterAdded:Connect(function(character)
-    print("Personaggio ricaricato. Ri-avvio il framework in 5 secondi...")
-    task.wait(5);Framework.init()
-end)
-if Framework.player.Character then
-    print("Avvio iniziale del framework...");task.wait(5);Framework.init()
-end
+-- Esecuzione finale che collega tutto
+Framework.init()
