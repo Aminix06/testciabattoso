@@ -1409,7 +1409,7 @@ local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul piane
 local function Main()
     -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
-    local nohagThreshold = findBossData("Nohag (Beast)").MinStats
+    local nohagThreshold = findBossData("Nogah (Awakened)").MinStats
 
     while true do
         task.wait(1) -- Attesa di base per ogni ciclo
