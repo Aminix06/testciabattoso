@@ -945,7 +945,7 @@ local function TeleportToWhis()
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 400000000 and zeni.Value > 15000 then
+	if statsz.Value > 1000000400000000 and zeni.Value > 15000 then
 		TeleportToWhis()
 	end
 end
