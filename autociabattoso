@@ -20,7 +20,7 @@ executionFlag.Parent = game:GetService("CoreGui")
 --==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
-local Players = game:GetService("Players")
+-[local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
 -- 1. Controllo Immediato: Eseguito una sola volta all'avvio dello script.
@@ -38,7 +38,7 @@ task.spawn(function()
         end
     end
 end)
-
+]-
 -- Il resto dello script verrà eseguito solo se il controllo iniziale ha successo.
 --==============================================================================
 
