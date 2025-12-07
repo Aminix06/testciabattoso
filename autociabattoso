@@ -1182,7 +1182,7 @@ local AllBosses = {
 		PlaceId = 3311165597,
 		Name = "Broccoli",
 		MinStats = 100000001,
-		MaxStats = 150000000,
+		MaxStats = 200000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1190,7 +1190,7 @@ local AllBosses = {
 	{
 		PlaceId = 3311165597, 
 		Name = "SSJG Kakata",
-		MinStats = 150000001,
+		MinStats = 200000001,
 		MaxStats = 2000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
