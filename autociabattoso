@@ -1751,3 +1751,111 @@ local function RebirthTimerAndTeleport()
 end
 
 task.spawn(RebirthTimerAndTeleport)
+-- ==============================================================================
+-- NUOVA GUI PER IL TIMER T.O.P (Terra -> T.O.P)
+-- ==============================================================================
+local function CreateTopTimerGUI()
+    -- Crea gli oggetti della GUI
+    local TimerScreenGui = Instance.new("ScreenGui")
+    local TimerFrame = Instance.new("Frame")
+    local TimerTextLabel = Instance.new("TextLabel")
+    local TextStroke = Instance.new("UIStroke")
+    local UICorner = Instance.new("UICorner")
+    local UIStroke = Instance.new("UIStroke")
+
+    -- Impostazioni ScreenGui
+    TimerScreenGui.Name = "TopTimerGUI"
+    TimerScreenGui.Parent = game:GetService("CoreGui")
+    TimerScreenGui.ResetOnSpawn = false
+    TimerScreenGui.Enabled = false
+    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    TimerScreenGui.DisplayOrder = 999
+
+    -- Impostazioni Frame (Stesso stile ma posizione leggermente diversa se necessario)
+    TimerFrame.Name = "TopTimerFrame"
+    TimerFrame.Parent = TimerScreenGui
+    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
+    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48) -- In alto al centro
+    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TimerFrame.BackgroundTransparency = 0.4
+    TimerFrame.Active = true
+    TimerFrame.Draggable = true
+
+    -- Stile del Frame
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = TimerFrame
+    UIStroke.Color = Color3.fromRGB(0, 255, 255) -- Colore Ciano per distinguerlo dall'altro
+    UIStroke.Thickness = 2
+    UIStroke.Parent = TimerFrame
+
+    -- Impostazioni TextLabel
+    TimerTextLabel.Name = "TimerTextLabel"
+    TimerTextLabel.Parent = TimerFrame
+    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TimerTextLabel.BackgroundTransparency = 1
+    TimerTextLabel.Font = Enum.Font.FredokaOne
+    TimerTextLabel.Text = "T.O.P in: 300"
+    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TimerTextLabel.TextScaled = true
+    TimerTextLabel.TextSize = 14
+    TimerTextLabel.TextWrapped = true
+    
+    -- Stile del Testo
+    TextStroke.Parent = TimerTextLabel
+    TextStroke.Color = Color3.fromRGB(0, 0, 0)
+    TextStroke.Thickness = 1.2
+    
+    return TimerScreenGui, TimerTextLabel
+end
+
+-- Crea la GUI specifica per il timer T.O.P
+local TopTimerGui, TopTimerLabel = CreateTopTimerGUI()
+
+-- ==============================================================================
+-- LOGICA TIMER T.O.P (Terra -> T.O.P dopo 5 minuti)
+-- ==============================================================================
+local function EarthToTopTimer()
+    local timerEndTime = nil
+    local EARTH_PLACE_ID = 3311165597
+    local TIMER_DURATION = 300 -- 5 minuti in secondi
+
+    while true do
+        task.wait(1) -- Controlla ogni secondo
+
+        if game.PlaceId == EARTH_PLACE_ID then
+            -- Se siamo sulla terra e il timer non è partito, avvialo
+            if timerEndTime == nil then
+                timerEndTime = os.time() + TIMER_DURATION
+                TopTimerGui.Enabled = true
+                print("TIMER T.O.P ATTIVATO: Destinazione T.O.P tra 5 minuti.")
+            end
+
+            -- Aggiorna il testo e controlla la scadenza
+            local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
+            TopTimerLabel.Text = "Go to T.O.P in: " .. timeLeft
+
+            if timeLeft <= 0 then
+                print("TIMER T.O.P SCADUTO: Teletrasporto in corso...")
+                
+                local args = {[1] = "T.O.P"}
+                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
+                
+                -- Resetta il timer (anche se il cambio mappa dovrebbe fermare il loop logico successivo)
+                timerEndTime = nil 
+                TopTimerGui.Enabled = false
+                
+                -- Piccola pausa per dare tempo al TP di avvenire senza spam
+                task.wait(5)
+            end
+        else
+            -- Se NON siamo sulla terra, resetta tutto
+            if timerEndTime ~= nil then
+                print("TIMER T.O.P RESETTATO: Non sei più sulla Terra.")
+                timerEndTime = nil
+                TopTimerGui.Enabled = false
+            end
+        end
+    end
+end
+
+task.spawn(EarthToTopTimer)
