@@ -1155,7 +1155,7 @@ local AllBosses = {
 		PlaceId = 3311165597, 
 		Name = "Perfect Atom",
 		MinStats = 70000001,
-		MaxStats = 80000000,
+		MaxStats = 200000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
@@ -1163,15 +1163,6 @@ local AllBosses = {
 	{
 		PlaceId = 3311165597, 
 		Name = "SSJ2 Wukong",
-		MinStats = 80000001,
-		MaxStats = 200000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597,
-		Name = "SSJB Wukong",
 		MinStats = 200000001,
 		MaxStats = 200000002,
 		QuestLocation = workspace.Others.NPCs,
@@ -1180,7 +1171,7 @@ local AllBosses = {
 	},
 	{
 		PlaceId = 3311165597,
-		Name = "Broccoli",
+		Name = "SSJB Wukong",
 		MinStats = 200000003,
 		MaxStats = 200000004,
 		QuestLocation = workspace.Others.NPCs,
@@ -1188,9 +1179,18 @@ local AllBosses = {
 		Distance = -2
 	},
 	{
+		PlaceId = 3311165597,
+		Name = "Broccoli",
+		MinStats = 200000005,
+		MaxStats = 200000006,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
 		PlaceId = 3311165597, 
 		Name = "SSJG Kakata",
-		MinStats = 200000005,
+		MinStats = 200000007,
 		MaxStats = 2000000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
