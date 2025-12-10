@@ -1811,7 +1811,7 @@ local TopTimerGui, TopTimerLabel = CreateTopTimerGUI()
 local function EarthToTopTimer()
     local timerEndTime = nil
     local EARTH_PLACE_ID = 3311165597
-    local TIMER_DURATION = math.huge
+    local TIMER_DURATION = 14000
 
     while true do
         task.wait(1) -- Controlla ogni secondo
