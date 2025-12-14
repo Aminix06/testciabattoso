@@ -1384,7 +1384,7 @@ local function TeleportAndFight(bossData)
 			end
 		end)
 
-		task.wait() -- Attendi il prossimo frame prima di ricontrollare
+		task.wait(0.2) -- Attendi il prossimo frame prima di ricontrollare
 	end
 
 	print(bossData.Name .. " non più valido. Fine del combattimento.")
