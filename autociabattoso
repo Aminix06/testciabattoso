@@ -52,7 +52,7 @@ local function CheckToGo()
 	local statsz = playerData:WaitForChild("Strength")
 	local zeni = playerData:WaitForChild("Zeni")
 	while true do
-		if statsz.Value < 100000000 and game.PlaceId == 114014249462644 then
+		if statsz.Value < 100000000 and game.PlaceId == 5151400895 then
 			local args = {
 				[1] = "Earth"
 			}
@@ -68,7 +68,7 @@ task.spawn(CheckToGo)
 local firstspawn = true
  
 local function startonskibidi()
-	if firstspawn and game.PlaceId == 114014249462644 then
+	if firstspawn and game.PlaceId == 5151400895 then
 		print("Start")
 		firstspawn = false
 	else
@@ -938,14 +938,15 @@ task.spawn(Charge)
  
 local function TeleportToWhis()
 	local args = {
-  	  [1] = "T.O.P"
-	}
+    [1] = "Vills Planet"
+}
 
-	game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
+game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
+
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 1000000400000000 and zeni.Value > 15000 then
+	if statsz.Value > 1000000000000 and zeni.Value > 100000 then
 		TeleportToWhis()
 	end
 end
@@ -986,12 +987,12 @@ task.spawn(function()
 	local millon = 1000000
 	local transformaciones = {
 		fases = {
-	--[[	{name = "Time Breaker", fuerza = 630000000},
+			{name = "Time Breaker", fuerza = 630000000},
 			{name = "True Jui", fuerza = 750000000},
-			{name = "Corrupt Astral", fuerza = 250000000},]]
+			{name = "Corrupt Astral", fuerza = 250000000},
 			{name = "Beast", fuerza = 120000000},
 			{name = "SSJB4", fuerza = 50000000},
-	--[[	{name = "LBSSJ4", fuerza = 100000000},
+			{name = "LBSSJ4", fuerza = 100000000},
 			{name = "True God of Creation", fuerza = 30000000},
 			{name = "True God of Destruction", fuerza = 30000000},
 			{name = "SSJR3", fuerza = 50000000},
@@ -1027,7 +1028,7 @@ task.spawn(function()
 			{name = "SSJ3", fuerza = 95000},
 			{name = "SSJ2 Majin", fuerza = 65000},
 			{name = "Spirit SSJ", fuerza = 65000},
-			{name = "SSJ Kaioken", fuerza = 16000},]]
+			{name = "SSJ Kaioken", fuerza = 16000},
 		}
 	}
  
@@ -1057,7 +1058,7 @@ task.spawn(function()
 				if ki() > (kiRequerido() + 10) then
 					if game.PlaceId == 3311165597 then
 					game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
-					elseif game.PlaceId == 114014249462644 then
+					elseif game.PlaceId == 5151400895 then
 						game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
 
 					end
@@ -1197,53 +1198,115 @@ local AllBosses = {
 		Distance = -2
 	},
 	{
-		PlaceId = 114014249462644,
-		Name = "Piclow (Base)",
-		MinStats = 100000000,
-		MaxStats = 1500000000,
+		PlaceId = 5151400895,
+		Name = "Vegetable (GoD in-training)",
+		MinStats = 121000000,
+		MaxStats = 250000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
 	},
 	{
-		PlaceId = 114014249462644,
-		Name = "Caulla (Base)",
-		MinStats = 1500000001,
-		MaxStats = 1510000000,
+		PlaceId = 5151400895,
+		Name = "Wukong (Omen)",
+		MinStats = 250000001,
+		MaxStats = 400000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
 	},
 	{
-		PlaceId = 114014249462644,
-		Name = "Nohag (Potential Awoken)",
-		MinStats = 1510000001,
-		MaxStats = 1600000000,
+		PlaceId = 5151400895,
+		Name = "Vills (50%)",
+		MinStats = 400000001,
+		MaxStats = 800000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
 	},
 	{
-		PlaceId = 114014249462644,
-		Name = "Kall (LSSJ)",
-		MinStats = 1600000001,
-		MaxStats = 1700000000,
+		PlaceId = 5151400895,
+		Name = "Vis (20%)",
+		MinStats = 800000001,
+		MaxStats = 2000000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
 	},
 	{
-		PlaceId = 114014249462644,
-		Name = "SSJBK Wukong",
-		MinStats = 1700000001,
-		MaxStats = 1700000000000000000000000000000000000000,
+		PlaceId = 5151400895,
+		Name = "Vegetable (LBSSJ4)",
+		MinStats = 2000000001,
+		MaxStats = 3100000000,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
 		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Wukong (LBSSJ4)",
+		MinStats = 3100000001,
+		MaxStats = 4300000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Vekuta (LBSSJ4)",
+		MinStats = 4300000001,
+		MaxStats = 15000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Wukong Rose",
+		MinStats = 15000000001,
+		MaxStats = 25000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Vekuta (SSJBUI)",
+		MinStats = 25000000001, 
+		MaxStats = 50000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Wukong (MUI)",
+		MinStats = 50000000001,
+		MaxStats = 75000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Vegetable (Ultra Ego)",
+		MinStats = 75000000001,
+		MaxStats = 100000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 5151400895,
+		Name = "Nohag (Beast)",
+		MinStats = 100000000001,
+		MaxStats = 100000000000000000000000000000000000000000000000,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2,
 	}
-
-
 }
+
 
 
 -- Variabili globali per il personaggio che verranno aggiornate al respawn
@@ -1307,7 +1370,7 @@ local function TeleportAndFight(bossData)
 				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
 				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-			elseif game.PlaceId == 114014249462644 then
+			elseif game.PlaceId == 5151400895 then
 				local ReplicatedStorage = game:GetService("ReplicatedStorage")
 				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
 						
@@ -1465,7 +1528,7 @@ local function Main()
         --======================================================================
         -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
         --======================================================================
-        if currentPlaceId == 114014249462644 then
+        if currentPlaceId == 5151400895 then
             -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
                 print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
@@ -1691,7 +1754,7 @@ local TimerScreenGui, TimerTextLabel = CreateTimerGUI()
 -- NUOVA FUNZIONE TIMER PER TELETRASPORTO (con controllo GUI)
 local function RebirthTimerAndTeleport()
     local timerEndTime = nil
-    local VILLS_PLANET_ID = 114014249462644
+    local VILLS_PLANET_ID = 5151400895
     local TIMER_DURATION = 6000 -- 6000 secondi
 
     while true do
@@ -1832,7 +1895,7 @@ local function EarthToTopTimer()
                 TopTimerLabel.Text = "TELEPORTING..."
                 print("TIMER T.O.P SCADUTO: Inizio SPAM del teletrasporto...")
                 
-                local args = {[1] = "T.O.P"}
+                local args = {[1] = "Vills Planet"}
                 
                 -- Questo loop continua a spammare finché non te ne vai dalla Terra
                 while game.PlaceId == EARTH_PLACE_ID do
