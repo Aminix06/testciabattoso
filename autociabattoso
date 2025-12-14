@@ -946,7 +946,7 @@ game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args)
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 1000000000000 and zeni.Value > 100000 then
+	if statsz.Value > 1000000000000000000000 and zeni.Value > 100000 then
 		TeleportToWhis()
 	end
 end
