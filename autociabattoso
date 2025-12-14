@@ -946,7 +946,7 @@ game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args)
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 1000000000000 and zeni.Value > 100000 then
+	if statsz.Value > 1000000000000000000000000 and zeni.Value > 100000 then
 		TeleportToWhis()
 	end
 end
@@ -1192,6 +1192,15 @@ local AllBosses = {
 		PlaceId = 3311165597, 
 		Name = "SSJG Kakata",
 		MinStats = 1500000007,
+		MaxStats = 1500000008,
+		QuestLocation = workspace.Others.NPCs,
+		FightLocation = workspace.Living,
+		Distance = -2
+	},
+	{
+		PlaceId = 3311165597, 
+		Name = "Christmas Wukong",
+		MinStats = 1500000009,
 		MaxStats = math.huge,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
@@ -1510,7 +1519,7 @@ local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul piane
 
 local function Main()
     -- Definisci le soglie di statistiche per i diversi stadi di farming
-    local kakataThreshold = findBossData("SSJG Kakata").MinStats
+    local kakataThreshold = findBossData("Christmas Wukong").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
@@ -1567,7 +1576,7 @@ local function Main()
 
             if currentStats >= kakataThreshold then
                 print("STATO FARMING [TERRA]: Kakata")
-                local kakataData = findBossData("SSJG Kakata")
+                local kakataData = findBossData("Christmas Wukong")
                 if kakataData then CheckAndFightBoss(kakataData) end
             else
                 print("STATO PROGRESSIONE [TERRA]")
