@@ -1,12 +1,25 @@
+-- ==============================================================================
+-- SCRIPT MODIFICATO: KAKATA FARM + AUTO TRANSFORMATION + OLD GUI + AUTO RESPAWN
+-- ==============================================================================
+
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
+-- Controllo esecuzione unica
+if game:GetService("CoreGui"):FindFirstChild("__MAIN_SCRIPT_RUNNING__") then
+    print("Avviso: Script già in esecuzione.")
+    return 
+end
 
+local executionFlag = Instance.new("ScreenGui")
+executionFlag.Name = "__MAIN_SCRIPT_RUNNING__"
+executionFlag.Parent = game:GetService("CoreGui")
+
+-- Controllo Server
 if #Players:GetPlayers() > 1 then
     localPlayer:Kick("Kick: Il server non è vuoto. Lo script non può essere eseguito.")
     return 
 end
-
 
 task.spawn(function()
     while task.wait() do 
@@ -17,6 +30,9 @@ task.spawn(function()
     end
 end)
 
+-- ==============================================================================
+-- GUI SETUP (STATS)
+-- ==============================================================================
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
 	["_Frame"] = Instance.new("Frame");
@@ -48,7 +64,6 @@ local Converted = {
 }
  
 -- Properties:
- 
 Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
 Converted["_HealthAndEnergy"].Parent = game:GetService("CoreGui")
@@ -280,11 +295,10 @@ Converted["_maxenergy"].Parent = Converted["_freim"]
  
 Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
  
--- FIX: Attendi che la GUI del gioco sia pronta prima di modificarla.
--- Questo previene l'errore "Main is not a valid member of PlayerGui".
+-- Hide Default Bars
 task.spawn(function()
     local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 15) -- Attendi fino a 15 secondi
+    local mainGui = playerGui:WaitForChild("Main", 15) 
     if mainGui then
         local mainFrame = mainGui:FindFirstChild("MainFrame")
         if mainFrame then
@@ -299,10 +313,9 @@ task.spawn(function()
     end
 end)
  
--- Flag to control the loops
+-- Stats Logic
 local running = true
  
--- Function to format numbers with suffixes
 local function formatNumber(number)
 	if number >= 1_000_000_000_000 then
 		return string.format("%.1fT", number / 1_000_000_000_000)
@@ -317,7 +330,6 @@ local function formatNumber(number)
 	end
 end
  
--- Function to update health in a loop
 local function CambiareVitaNormal()
 	while running do
 		local character = game.Players.LocalPlayer.Character
@@ -330,7 +342,6 @@ local function CambiareVitaNormal()
 	end
 end
  
--- Function to update energy in a loop
 local function CambiareEnergyaNormale()
 	while running do
 		local player = game.Players.LocalPlayer
@@ -353,10 +364,8 @@ local function setupCharacter(character)
 	task.spawn(CambiareEnergyaNormale)
 end
  
--- Connect to the CharacterAdded event
 game.Players.LocalPlayer.CharacterAdded:Connect(setupCharacter)
  
--- Handle character if already loaded
 if game.Players.LocalPlayer.Character then
 	setupCharacter(game.Players.LocalPlayer.Character)
 end
@@ -370,10 +379,6 @@ end)
  
  
 local function createGUI()
-	-- Generated using RoadToGlory's Converter v1.1 (RoadToGlory#9879)
- 
-	-- Instances:
- 
 	local Converted = {
 		["_AUTOFARM"] = Instance.new("ScreenGui");
 		["_Frame"] = Instance.new("Frame");
@@ -412,8 +417,6 @@ local function createGUI()
 		["_REBSNUMBER"] = Instance.new("TextLabel");
 		["_UIStroke12"] = Instance.new("UIStroke");
 	}
- 
-	-- Properties:
  
 	Converted["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	Converted["_AUTOFARM"].Name = "AUTOFARM"
@@ -691,7 +694,6 @@ local function createGUI()
  
 	Converted["_UIStroke12"].Parent = Converted["_REBSNUMBER"]
  
- 
 	local playerid = game.Players.LocalPlayer.UserId
 	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid))
  
@@ -709,7 +711,6 @@ local function createGUI()
 		end
 	end
  
- 
 	local function updateStats()
 		Converted["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
 		Converted["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
@@ -718,9 +719,7 @@ local function createGUI()
 		Converted["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
 	end
  
- 
 	updateStats()
- 
  
 	playerStats.Strength.Changed:Connect(updateStats)
 	playerStats.Defense.Changed:Connect(updateStats)
@@ -735,20 +734,14 @@ local function createGUI()
 	end)
 end
  
- 
 local function onPlayerRespawn()
 	createGUI()
 end
  
- 
 local player = game.Players.LocalPlayer
 player.CharacterAdded:Connect(onPlayerRespawn)
  
- 
- 
 createGUI()
- 
- 
  
 local player = game.Players.LocalPlayer
 local playerId = player.UserId
@@ -757,6 +750,9 @@ local playerData = data:WaitForChild(tostring(playerId))
 local statsz = playerData:WaitForChild("Defense")
 local zeni = playerData:WaitForChild("Zeni")
  
+-- ==============================================================================
+-- UTILITY FUNCTIONS (AFK, Float, Block, Charge)
+-- ==============================================================================
 local function ANTIAFK()
 	local vu = game:GetService("VirtualUser")
 	game:GetService("Players").LocalPlayer.Idled:connect(function()
@@ -765,10 +761,7 @@ local function ANTIAFK()
 		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	end)
 end
- 
 coroutine.wrap(ANTIAFK)()
- 
- 
  
 local function FloatByHimself()
 	local function floatPlayer(character)
@@ -781,7 +774,6 @@ local function FloatByHimself()
 			bodyPosition.D = 100
 			bodyPosition.Parent = humanoidRootPart
  
-			-- Update the BodyPosition in the Stepped event
 			game:GetService("RunService").Stepped:Connect(function()
                 if bodyPosition and bodyPosition.Parent and humanoidRootPart and humanoidRootPart.Parent then
 				    bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.0001, 0)
@@ -797,15 +789,11 @@ local function FloatByHimself()
 		floatPlayer(game.Players.LocalPlayer.Character)
 	end
 end
- 
 task.spawn(FloatByHimself)
  
 local function Block()
 	while true do
-		local args = {
-			[1] = true
-		}
- 
+		local args = { [1] = true }
 		game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(unpack(args))
 		wait(.1)
 	end
@@ -824,18 +812,15 @@ end)
 local function Charge()
 	while true do
 		wait(.1)
-		local args = {
-			[1] = "Blacknwhite27" -- **Replace with your actual username!**
-		}
- 
+		local args = { [1] = "Blacknwhite27" }
 		game:GetService("ReplicatedStorage").Package.Events.cha:InvokeServer(unpack(args))
 	end
 end
- 
 task.spawn(Charge)
 
--- furms
-
+-- ==============================================================================
+-- AUTO TRANSFORMATION LOGIC
+-- ==============================================================================
 task.spawn(function()
 	local yo = game:GetService('Players').LocalPlayer
 	local folderData = game.ReplicatedStorage.Datas[yo.UserId]
@@ -843,7 +828,7 @@ task.spawn(function()
 	
 	local transformaciones = {
 		fases = {
-			{name = "Ego Instinct", fuerza = math.huge},
+			{name = "Ego Instinct", fuerza = 4500000000},
 			{name = "Time Breaker", fuerza = 630000000},
 			{name = "True Jui", fuerza = 750000000},
 			{name = "Corrupt Astral", fuerza = 250000000},
@@ -954,81 +939,98 @@ task.spawn(function()
 	end
 end)
 
--- furming
-
-
+-- ==============================================================================
+-- FARMING LOGIC (KAKATA EGO INSTINCT) + AUTO RESPAWN
+-- ==============================================================================
 task.spawn(function ()
     local plr = game.Players.LocalPlayer
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
 
-local character = plr.Character or plr.CharacterAdded:Wait()
-local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-local camera = workspace.CurrentCamera
-
-local function waitForBoss(name, location, timeout)
-    local startTime = os.time()
-    repeat
-        local boss = location:FindFirstChild(name)
-        if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
-            return boss
-        end
-        task.wait(0.5)
-    until os.time() - startTime > timeout
-    return nil
-end
-
-local function Furming(boss)
-    print("Starting fight with boss:", boss.Name)
-    local bossHRP = boss.HumanoidRootPart
-    local behindOffset = bossHRP.CFrame.LookVector * -5  
-
-    while boss.Humanoid.Health > 0 do
-        pcall(function()
-            camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
-            local behindPosition = bossHRP.Position + behindOffset 
-            humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
-        end)
-
-        pcall(function()
-            if game.PlaceId == 3311165597 then
-                local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("letsplayagame")
-
-                Events.p:FireServer("Blacknwhite27", 1)
-
-                coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-                coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-                coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-                coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-            elseif game.PlaceId == 5151400895 then
-                local Higoober = ReplicatedStorage.Package.Events:WaitForChild("Haha")
-
-                Events.p:FireServer("Blacknwhite27", 1)
-
-                coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-                coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-                coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-                coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()    
+    local function waitForBoss(name, location, timeout)
+        local startTime = os.time()
+        repeat
+            -- Controllo se il giocatore muore durante l'attesa
+            if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
+                return nil -- Interrompe l'attesa per gestire il respawn
             end
-        end)
-        task.wait(0.1)
-    end
-    print("Boss defeated:", boss.Name)
-end
 
-while true do
-    print("Waiting for boss to spawn...")
-    local currentBoss = waitForBoss("Kakata (Ego Instinct)", workspace.Living, 300) -- wait max 5 minutes
-    if currentBoss then
-        Furming(currentBoss)
-    else
-        print("Boss did not spawn in time, retrying...")
+            local boss = location:FindFirstChild(name)
+            if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                return boss
+            end
+            task.wait(0.5)
+        until os.time() - startTime > timeout
+        return nil
     end
-    task.wait(1)
-end
+
+    local function Furming(boss)
+        if not boss then return end
+        print("Starting fight with boss:", boss.Name)
+        local bossHRP = boss.HumanoidRootPart
+        local behindOffset = bossHRP.CFrame.LookVector * -5  
+		
+		local character = plr.Character or plr.CharacterAdded:Wait()
+		local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+		local camera = workspace.CurrentCamera
+
+        while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
+            -- SAFETY CHECK: Se il giocatore muore, esce dal loop di combattimento
+            if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
+                print("Player died during fight. Stopping...")
+                break
+            end
+
+            pcall(function()
+                camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+                local behindPosition = bossHRP.Position + behindOffset 
+                humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
+            end)
+
+            pcall(function()
+                if game.PlaceId == 3311165597 then
+                    local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("letsplayagame")
+                    Events.p:FireServer("Blacknwhite27", 1)
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+                elseif game.PlaceId == 5151400895 then
+                    local Higoober = ReplicatedStorage.Package.Events:WaitForChild("Haha")
+                    Events.p:FireServer("Blacknwhite27", 1)
+                    coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+                    coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+                    coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+                    coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+                    coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()    
+                end
+            end)
+            task.wait(0.1)
+        end
+    end
+
+    while true do
+        -- RESPAWN CHECK: Assicurati che il personaggio esista prima di iniziare
+        if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
+            print("Player dead/missing. Waiting for respawn...")
+            plr.CharacterAdded:Wait() -- Aspetta che il personaggio venga caricato
+            task.wait(2) -- Piccola pausa per caricare tutto
+            print("Respawned! Resuming farm.")
+        end
+
+        print("Waiting for boss to spawn...")
+        local currentBoss = waitForBoss("Kakata (Ego Instinct)", workspace.Living, 300) 
+        
+        if currentBoss then
+            Furming(currentBoss)
+        else
+            print("Boss did not spawn in time or player died, retrying...")
+        end
+        task.wait(1)
+    end
 end)
+
 
 -- ==============================================================================
 -- AUTO TP & OLD COUNTDOWN GUI
