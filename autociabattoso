@@ -1193,15 +1193,6 @@ local AllBosses = {
 		PlaceId = 3311165597, 
 		Name = "SSJG Kakata",
 		MinStats = 1500000007,
-		MaxStats = 1500000008,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "Christmas Wukong",
-		MinStats = 1500000009,
 		MaxStats = math.huge,
 		QuestLocation = workspace.Others.NPCs,
 		FightLocation = workspace.Living,
@@ -1520,7 +1511,7 @@ local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul piane
 
 local function Main()
     -- Definisci le soglie di statistiche per i diversi stadi di farming
-    local kakataThreshold = findBossData("Christmas Wukong").MinStats
+    local kakataThreshold = findBossData("SSJG Kakata").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
@@ -1577,7 +1568,7 @@ local function Main()
 
             if currentStats >= kakataThreshold then
                 print("STATO FARMING [TERRA]: Kakata")
-                local kakataData = findBossData("Christmas Wukong")
+                local kakataData = findBossData("SSJG Kakata")
                 if kakataData then CheckAndFightBoss(kakataData) end
             else
                 print("STATO PROGRESSIONE [TERRA]")
