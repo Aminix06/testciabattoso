@@ -728,7 +728,9 @@ local function createGUI()
 	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid))
  
 	local function formatNumberForTheStats(number)
-		if number >= 1_000_000_000_000 then
+		if number >= 1_000_000_000_000_000 then
+			return string.format("%.2fQd", number / 1_000_000_000_000_000) 
+		elseif number >= 1_000_000_000_000 then
 			return string.format("%.2fT", number / 1_000_000_000_000) 
 		elseif number >= 1_000_000_000 then
 			return string.format("%.2fB", number / 1_000_000_000)
