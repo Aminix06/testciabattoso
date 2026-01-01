@@ -334,7 +334,9 @@ local running = true
  
 -- Function to format numbers with suffixes
 local function formatNumber(number)
-	if number >= 1_000_000_000_000 then
+	if number >= 1_000_000_000_000_000 then
+		return string.format("%.1fQd", number / 1_000_000_000_000_000)
+	elseif number >= 1_000_000_000_000 then
 		return string.format("%.1fT", number / 1_000_000_000_000)
 	elseif number >= 1_000_000_000 then
 		return string.format("%.1fB", number / 1_000_000_000)
