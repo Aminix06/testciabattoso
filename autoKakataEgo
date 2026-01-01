@@ -1,24 +1,5 @@
--- ==============================================================================
--- SCRIPT COMPLETO: RITARDO 7S SU VILLS + TUTTE LE LOGICHE
--- ==============================================================================
-
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
-
--- ==============================================================================
--- FUNZIONE DI RITARDO GLOBALE
--- ==============================================================================
--- Questa funzione blocca l'esecuzione del thread corrente per 7 secondi se siamo su Vills.
-local function WaitForVillsInit()
-    if game.PlaceId == 5151400895 then -- ID di Vills Planet
-        -- Non stampiamo spam, solo un'attesa silenziosa o un print singolo
-        local executed = getgenv().VillsWaitExecuted
-        if not executed then
-             print("Vills Planet rilevato: Attesa di stabilità (7 secondi)...")
-        end
-        task.wait(7)
-    end
-end
 
 -- ==============================================================================
 -- CONTROLLI INIZIALI
@@ -46,6 +27,22 @@ task.spawn(function()
         end
     end
 end)
+
+-- ==============================================================================
+-- FUNZIONE DI RITARDO GLOBALE
+-- ==============================================================================
+
+local function WaitForVillsInit()
+    if game.PlaceId == 5151400895 then -- ID di Vills Planet
+        -- Non stampiamo spam, solo un'attesa silenziosa o un print singolo
+        local executed = getgenv().VillsWaitExecuted
+        if not executed then
+             print("Vills Planet rilevato: Attesa di stabilità (7 secondi)...")
+        end
+        task.wait(7)
+    end
+end
+
 
 -- ==============================================================================
 -- GUI SETUP (STATS) - La GUI appare subito
