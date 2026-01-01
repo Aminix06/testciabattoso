@@ -1095,8 +1095,8 @@ task.spawn(function()
     -- Logica del Loop
     if PlaceId == 3311165597 then -- Terra
         TimerGui.Enabled = true
-        TimerLabel.Text = "Terra Rilevata. TP Vills in 15s..."
-        task.wait(15)
+        TimerLabel.Text = "Terra Rilevata. TP Vills in 10s..."
+        task.wait(10)
         TimerLabel.Text = "Teletrasporto su Vills..."
         TPEvent:InvokeServer("Vills Planet")
         TimerGui.Enabled = false
