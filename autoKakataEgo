@@ -95,7 +95,7 @@ task.spawn(function()
 
         if not isPrivate then
             -- 🚨 CASO 1: SEI IN UN SERVER PUBBLICO (Standard Matchmaking)
-            LocalPlayer:Kick("🛑 SECURITY: Script eseguito in server Pubblico! Entra nel tuo VIP.")
+            LocalPlayer:Kick("SECURITY: Script eseguito in server Pubblico! Entra nel tuo VIP.")
             break 
         else
             -- 🔒 CASO 2: SEI IN UN SERVER PRIVATO (VIP o Reserved)
