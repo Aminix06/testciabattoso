@@ -69,18 +69,47 @@ local localPlayer = Players.LocalPlayer
 -- CONTROLLI INIZIALI
 -- ==============================================================================
 
-if #Players:GetPlayers() > 1 then
-	localPlayer:Kick("Kick: Il server non è vuoto. Lo script non può essere eseguito.")
-	return 
-end
-
+-- ==============================================================================
+-- 🛡️ SECURITY MODE: GESTIONE SERVER PUBBLICI E PRIVATI
+-- ==============================================================================
 task.spawn(function()
-	while task.wait() do 
-		if #Players:GetPlayers() > 1 then
-			localPlayer:Kick("Kick: Un altro giocatore è entrato nel server.")
-			break 
-		end
-	end
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+    local TPEvent = game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+    local PlaceId = game.PlaceId
+    
+    -- IDs dei mondi
+    local EarthID = 3311165597
+    local VillsID = 5151400895
+
+    -- Loop di controllo continuo (controlla ogni secondo)
+    while task.wait(1) do
+        local playerCount = #Players:GetPlayers()
+        local isPrivate = (game.PrivateServerOwnerId ~= 0)
+
+        if not isPrivate then
+            -- 🚨 CASO 1: SEI IN UN SERVER PUBBLICO
+            LocalPlayer:Kick("🛑 SECURITY: Script eseguito in server Pubblico! Entra nel tuo VIP.")
+            break -- Ferma il loop
+        else
+            -- 🔒 CASO 2: SEI IN UN SERVER PRIVATO
+            if playerCount > 1 then
+                -- ⚠️ Ci sono intrusi! Scappiamo nell'altro mondo
+                warn("⚠️ INTRUSI NEL SERVER PRIVATO! Fuga tattica nell'altro mondo...")
+                
+                if PlaceId == EarthID then
+                    TPEvent:InvokeServer("Vills Planet")
+                elseif PlaceId == VillsID then
+                    TPEvent:InvokeServer("Earth")
+                end
+                
+                -- Aspetta un attimo per evitare spam di richieste mentre teletrasporta
+                task.wait(5) 
+            else
+                -- ✅ Tutto tranquillo, sei solo. Il farm continua.
+            end
+        end
+    end
 end)
 
 -- ==============================================================================
