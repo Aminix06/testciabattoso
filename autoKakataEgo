@@ -1130,7 +1130,7 @@ task.spawn(function ()
 			if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
 				return boss
 			end
-			task.wait(0.8)
+			task.wait(0.5)
 		until os.time() - startTime > timeout
 		return nil
 	end
@@ -1192,6 +1192,7 @@ task.spawn(function ()
 		local currentBoss = waitForBoss("Kakata (Ego Instinct)", workspace.Living, 300) 
 
 		if currentBoss then
+			task.wait(0.5)
 			Furming(currentBoss)
 		else
 			--print("Boss did not spawn in time or player died, retrying...")
