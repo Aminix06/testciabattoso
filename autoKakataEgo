@@ -442,23 +442,31 @@ Converted["_maxenergy"].Parent = Converted["_freim"]
 
 Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
 
--- FIX: Attendi che la GUI del gioco sia pronta prima di modificarla.
--- Questo previene l'errore "Main is not a valid member of PlayerGui".
+-- ==============================================================================
+-- RIMOZIONE GUI ORIGINALE (FIX ROBUSTO)
+-- ==============================================================================
 task.spawn(function()
-	local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-	local mainGui = playerGui:WaitForChild("Main", 15) -- Attendi fino a 15 secondi
-	if mainGui then
-		local mainFrame = mainGui:FindFirstChild("MainFrame")
-		if mainFrame then
-			local bars = mainFrame:FindFirstChild("Bars")
-			if bars then
-				bars.Visible = false
-				print("Barre della GUI di default nascoste con successo.")
-			end
-		end
-	else
-		warn("Impossibile trovare la GUI 'Main' per nascondere le barre.")
-	end
+    local RunService = game:GetService("RunService")
+    local Players = game:GetService("Players")
+    local LocalPlayer = Players.LocalPlayer
+
+    -- Usiamo RenderStepped per forzare la GUI a rimanere nascosta anche se il gioco prova a mostrarla
+    RunService.RenderStepped:Connect(function()
+        local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local mainGui = playerGui:FindFirstChild("Main")
+            if mainGui then
+                local mainFrame = mainGui:FindFirstChild("MainFrame")
+                if mainFrame then
+                    -- Nascondi le barre (HP/Energy originali)
+                    local bars = mainFrame:FindFirstChild("Bars")
+                    if bars then
+                        bars.Visible = false
+                    end
+                end
+            end
+        end
+    end)
 end)
 
 -- Flag to control the loops
