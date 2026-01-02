@@ -5,62 +5,6 @@ end
 
 getgenv().ScriptAlreadyRunning = true
 
-task.spawn(function()
-	local HttpService = game:GetService("HttpService")
-	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
-
-	local player = game.Players.LocalPlayer
-	local playerid = player.UserId
-
-
-	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid), 5)
-
-	if not playerStats then
-		warn("Could not find player stats!")
-		return
-	end
-
-
-	local statz = tostring(playerStats.Defense.Value)
-	local rebs = tostring(playerStats.Rebirth.Value)
-
-	local request = (syn and syn.request) or (http and http.request) or http_request or request
-
-	if not request then
-		warn("Your executor does not support HTTP requests.")
-		return
-	end
-
-	local response = request({
-		Url = Webhook_URL,
-		Method = 'POST',
-		Headers = {
-			['Content-Type'] = 'application/json'
-		},
-		Body = HttpService:JSONEncode({
-			["content"] = "",
-			["embeds"] = {{
-				["title"] = "Your script has been executed!",
-				["description"] = player.DisplayName .. " (@" .. player.Name .. ") has executed the script.",
-				["type"] = "rich",
-				["color"] = 16777215, 
-				["fields"] = {
-					{
-						["name"] = "Rebirths",
-						["value"] = rebs, 
-						["inline"] = true
-					},
-					{
-						["name"] = "Defense",
-						["value"] = statz,
-						["inline"] = true
-					}
-				}
-			}}
-		})
-	})
-end)
-
 
 local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
@@ -158,6 +102,66 @@ task.spawn(function()
 			CheckIntruders()
 		end)
 	end
+end)
+
+-- ==============================================================================
+-- WEBHOOK
+-- ==============================================================================
+
+task.spawn(function()
+	local HttpService = game:GetService("HttpService")
+	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
+
+	local player = game.Players.LocalPlayer
+	local playerid = player.UserId
+
+
+	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid), 5)
+
+	if not playerStats then
+		warn("Could not find player stats!")
+		return
+	end
+
+
+	local statz = tostring(playerStats.Defense.Value)
+	local rebs = tostring(playerStats.Rebirth.Value)
+
+	local request = (syn and syn.request) or (http and http.request) or http_request or request
+
+	if not request then
+		warn("Your executor does not support HTTP requests.")
+		return
+	end
+
+	local response = request({
+		Url = Webhook_URL,
+		Method = 'POST',
+		Headers = {
+			['Content-Type'] = 'application/json'
+		},
+		Body = HttpService:JSONEncode({
+			["content"] = "",
+			["embeds"] = {{
+				["title"] = "Your script has been executed!",
+				["description"] = player.DisplayName .. " (@" .. player.Name .. ") has executed the script.",
+				["type"] = "rich",
+				["color"] = 16777215, 
+				["fields"] = {
+					{
+						["name"] = "Rebirths",
+						["value"] = rebs, 
+						["inline"] = true
+					},
+					{
+						["name"] = "Defense",
+						["value"] = statz,
+						["inline"] = true
+					}
+				}
+			}}
+		})
+	})
 end)
 
 -- ==============================================================================
