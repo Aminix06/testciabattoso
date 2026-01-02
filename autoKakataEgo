@@ -1192,7 +1192,7 @@ task.spawn(function ()
 		local currentBoss = waitForBoss("Kakata (Ego Instinct)", workspace.Living, 300) 
 
 		if currentBoss then
-			task.wait(0.5)
+			task.wait(0.15)
 			Furming(currentBoss)
 		else
 			--print("Boss did not spawn in time or player died, retrying...")
