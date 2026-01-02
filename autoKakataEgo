@@ -89,11 +89,7 @@ end)
 
 local function WaitForVillsInit()
 	if game.PlaceId == 5151400895 then -- ID di Vills Planet
-		-- Non stampiamo spam, solo un'attesa silenziosa o un print singolo
 		local executed = getgenv().VillsWaitExecuted
-		if not executed then
-			print("Vills Planet rilevato: Attesa di stabilità (7 secondi)...")
-		end
 		task.wait(15)
 	end
 end
