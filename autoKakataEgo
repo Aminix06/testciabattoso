@@ -121,7 +121,7 @@ task.spawn(function()
 
 	if publico then
 		-- CASO 1: SEI IN PUBBLICA -> KICK
-		LocalPlayer:Kick("🚫 SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+		LocalPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
 		-- CASO 2: SEI IN PRIVATA
 		print("🔒 Server Privato confermato.")
