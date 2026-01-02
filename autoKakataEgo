@@ -1130,7 +1130,7 @@ task.spawn(function ()
 			if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
 				return boss
 			end
-			task.wait(0.5)
+			task.wait(0.8)
 		until os.time() - startTime > timeout
 		return nil
 	end
