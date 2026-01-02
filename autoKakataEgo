@@ -1164,7 +1164,7 @@ local function CreateTimerGUI()
 end
 
 task.spawn(function()
-	WaitForVillsInit() -- Anche il timer aspetta 7s prima di partire su Vills
+	WaitForVillsInit()
 
 	local PlaceId = game.PlaceId
 	local TPEvent = game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
