@@ -69,68 +69,18 @@ local localPlayer = Players.LocalPlayer
 -- CONTROLLI INIZIALI
 -- ==============================================================================
 
+if #Players:GetPlayers() > 1 then
+	localPlayer:Kick("Kick: Il server non è vuoto. Lo script non può essere eseguito.")
+	return 
+end
+
 task.spawn(function()
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local TPEvent = game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-    
-    -- IDs dei mondi
-    local EarthID = 3311165597
-    local VillsID = 5151400895
-
-    -- 🛑 PASSO 1: ASPETTA CHE IL GIOCO SIA CARICATO COMPLETAMENTE
-    if not game:IsLoaded() then
-        game.Loaded:Wait()
-    end
-    
-    -- 🛑 PASSO 2: PICCOLO RITARDO DI SICUREZZA
-    -- Spesso l'ID del server privato arriva 1-2 secondi dopo che sei entrato
-    task.wait(3)
-
-    print("--- DEBUG SECURITY ---")
-    print("PrivateServerId (Stringa):", game.PrivateServerId)
-    print("PrivateServerOwnerId (Numero):", game.PrivateServerOwnerId)
-    print("----------------------")
-
-    -- Loop di controllo continuo
-    while task.wait(1) do
-        local PlaceId = game.PlaceId
-        local playerCount = #Players:GetPlayers()
-        
-        -- LOGICA MIGLIORATA:
-        -- isReserved: Controlla se c'è un codice server (Server Riservato/VIP Linkato)
-        -- isVIP: Controlla se c'è un proprietario (VIP Server classico)
-        local isReserved = (game.PrivateServerId ~= "" and game.PrivateServerId ~= nil)
-        local isVIP = (game.PrivateServerOwnerId ~= 0 and game.PrivateServerOwnerId ~= nil)
-        
-        local isPrivate = isReserved or isVIP
-
-        if not isPrivate then
-            -- 🚨 CASO 1: SERVER PUBBLICO
-            -- Controllo extra: Se sei DA SOLO in un pubblico, tecnicamente sei al sicuro.
-            -- Ti kicka solo se il server è pubblico e c'è gente (opzionale, ma più sicuro)
-            warn("🛑 RILEVATO SERVER PUBBLICO! ID Server vuoto o Owner ID 0.")
-            LocalPlayer:Kick("🛑 SECURITY: Il gioco non ha rilevato il VIP. Riprova o controlla F9.")
-            break 
-        else
-            -- 🔒 CASO 2: SERVER PRIVATO (VIP o Reserved)
-            if playerCount > 1 then
-                warn("⚠️ INTRUSI NEL SERVER PRIVATO! Fuga tattica...")
-                
-                if TPEvent then
-                    if PlaceId == EarthID then
-                        TPEvent:InvokeServer("Vills Planet")
-                    elseif PlaceId == VillsID then
-                        TPEvent:InvokeServer("Earth")
-                    end
-                end
-                
-                task.wait(5) -- Attesa anti-crash
-            else
-                -- ✅ Tutto tranquillo
-            end
-        end
-    end
+	while task.wait() do 
+		if #Players:GetPlayers() > 1 then
+			localPlayer:Kick("Kick: Un altro giocatore è entrato nel server.")
+			break 
+		end
+	end
 end)
 
 -- ==============================================================================
