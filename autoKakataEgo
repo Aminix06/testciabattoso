@@ -69,44 +69,52 @@ local localPlayer = Players.LocalPlayer
 -- CONTROLLI INIZIALI
 -- ==============================================================================
 
--- ==============================================================================
--- 🛡️ SECURITY MODE: GESTIONE SERVER PUBBLICI E PRIVATI
--- ==============================================================================
 task.spawn(function()
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
     local TPEvent = game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-    local PlaceId = game.PlaceId
     
     -- IDs dei mondi
     local EarthID = 3311165597
     local VillsID = 5151400895
 
-    -- Loop di controllo continuo (controlla ogni secondo)
+    print("Script Security Avviato. Controllo il tipo di server...")
+    -- Debug iniziale per capire dove ti trovi
+    print("PrivateServerId:", game.PrivateServerId)
+    print("PrivateServerOwnerId:", game.PrivateServerOwnerId)
+
+    -- Loop di controllo continuo
     while task.wait(1) do
+        local PlaceId = game.PlaceId -- Aggiorna il PlaceId se cambi mondo
         local playerCount = #Players:GetPlayers()
-        local isPrivate = (game.PrivateServerOwnerId ~= 0)
+        
+        -- LOGICA CORRETTA:
+        -- Un server è privato se ha un ID proprietario DIVERSO da 0
+        -- OPPURE se ha un ID server riservato (stringa non vuota)
+        local isPrivate = (game.PrivateServerOwnerId ~= 0) or (game.PrivateServerId ~= "")
 
         if not isPrivate then
-            -- 🚨 CASO 1: SEI IN UN SERVER PUBBLICO
+            -- 🚨 CASO 1: SEI IN UN SERVER PUBBLICO (Standard Matchmaking)
             LocalPlayer:Kick("🛑 SECURITY: Script eseguito in server Pubblico! Entra nel tuo VIP.")
-            break -- Ferma il loop
+            break 
         else
-            -- 🔒 CASO 2: SEI IN UN SERVER PRIVATO
+            -- 🔒 CASO 2: SEI IN UN SERVER PRIVATO (VIP o Reserved)
             if playerCount > 1 then
-                -- ⚠️ Ci sono intrusi! Scappiamo nell'altro mondo
+                -- ⚠️ Ci sono intrusi!
                 warn("⚠️ INTRUSI NEL SERVER PRIVATO! Fuga tattica nell'altro mondo...")
                 
-                if PlaceId == EarthID then
-                    TPEvent:InvokeServer("Vills Planet")
-                elseif PlaceId == VillsID then
-                    TPEvent:InvokeServer("Earth")
+                -- Controllo per evitare errori se l'evento non esiste ancora nel nuovo mondo
+                if TPEvent then
+                    if PlaceId == EarthID then
+                        TPEvent:InvokeServer("Vills Planet")
+                    elseif PlaceId == VillsID then
+                        TPEvent:InvokeServer("Earth")
+                    end
                 end
                 
-                -- Aspetta un attimo per evitare spam di richieste mentre teletrasporta
                 task.wait(5) 
             else
-                -- ✅ Tutto tranquillo, sei solo. Il farm continua.
+                -- ✅ Tutto tranquillo
             end
         end
     end
