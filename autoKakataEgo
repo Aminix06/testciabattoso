@@ -94,7 +94,7 @@ local function WaitForVillsInit()
 		if not executed then
 			print("Vills Planet rilevato: Attesa di stabilità (7 secondi)...")
 		end
-		task.wait(7)
+		task.wait(15)
 	end
 end
 
