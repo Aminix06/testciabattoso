@@ -1013,7 +1013,7 @@ task.spawn(Charge)
 -- AUTO TRANSFORMATION
 -- ==============================================================================
 task.spawn(function()
-	WaitForVillsInit() -- Attende qui prima di iniziare a trasformarsi
+	task.wait(7)
 
 	local yo = game:GetService('Players').LocalPlayer
 	local folderData = game.ReplicatedStorage.Datas[yo.UserId]
