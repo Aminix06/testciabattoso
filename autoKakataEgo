@@ -1062,12 +1062,19 @@ task.spawn(Charge)
 -- ==============================================================================
 
 task.spawn(function()
-task.wait(7)
+	task.wait(7)
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local yo = Players.LocalPlayer
 
+    -- 1. IDENTIFICAZIONE DATI (Proviamo entrambi i modi)
     local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
+    
+    if not folderData then
+        warn("IL SOMMO dice: Cartella dati non trovata per l'ID " .. yo.UserId)
+        return
+    end
+
     local equipRemote = ReplicatedStorage.Package.Events.equipskill
     local transformRemote = ReplicatedStorage.Package.Events.Hehehe
 
@@ -1118,9 +1125,12 @@ task.wait(7)
         {name = "SSJ Kaioken", forza = 16000},
     }
 
+    -- Funzione per trovare la cartella Status ovunque sia
     local function getStatusFolder()
         return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
     end
+
+    print("IL SOMMO: Script Avviato con successo!")
 
     while true do
         pcall(function()
@@ -1139,14 +1149,20 @@ task.wait(7)
                             task.wait(0.3) -- Tempo per il server di rispondere
                         end
 
+                        -- Se l'equip ha funzionato (o era già giusto)
                         if selected.Value == v.name then
+                            -- Se non siamo trasformati, trasformiamoci!
                             if actual.Value ~= selected.Value then
+                                -- Controllo Ki (opzionale, rimosso per massima velocità)
                                 transformRemote:InvokeServer()
                             end
-                            break
+                            break -- Esci dal ciclo, abbiamo la forma migliore
                         end
                     end
                 end
+            else
+                warn("IL SOMMO: Cartella 'Status' non trovata né nel Player né nel Character!")
+            end
         end)
         task.wait(1.5)
     end
