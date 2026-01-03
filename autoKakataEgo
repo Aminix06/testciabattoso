@@ -1021,6 +1021,8 @@ task.spawn(function()
 
 	local transformaciones = {
 		fases = {
+			{name = "Evil Saiyan", fuerza = 5000000000},
+			{name = "Angelic Saiyan", fuerza = 5000000000},
 			{name = "Ego Instinct", fuerza = 4500000000},
 			{name = "Time Breaker", fuerza = 630000000},
 			{name = "True Jui", fuerza = 750000000},
