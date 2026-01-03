@@ -1060,104 +1060,128 @@ task.spawn(Charge)
 -- ==============================================================================
 -- AUTO TRANSFORMATION
 -- ==============================================================================
+-- IL SCRIPT SUPREMO DEL SOMMO
 task.spawn(function()
 	task.wait(7)
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local yo = Players.LocalPlayer
+    
+    -- Attesa caricamento dati e remotes
+    local folderData = ReplicatedStorage:WaitForChild("Datas"):WaitForChild(tostring(yo.UserId))
+    local equipRemote = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("equipskill")
+    local transformRemote = ReplicatedStorage.Package.Events:WaitForChild("Hehehe")
+    local statusFolder = yo:WaitForChild("Status")
 
-	local yo = game:GetService('Players').LocalPlayer
-	local folderData = game.ReplicatedStorage.Datas[yo.UserId]
-	local equipRemote = game:GetService("ReplicatedStorage").Package.Events.equipskill
+    -- Tabella ORDINATA correttamente (dalla più forte alla più debole)
+    local transformaciones = {
+        {name = "Evil Saiyan", forza = 5000000000},
+        {name = "Angelic Saiyan", forza = 5000000000},
+        {name = "Ego Instinct", forza = 4500000000},
+        {name = "True Jui", forza = 750000000},
+        {name = "Time Breaker", forza = 630000000},
+        {name = "Corrupt Astral", forza = 250000000},
+        {name = "Beast", forza = 120000000},
+        {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000},
+        {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000},
+        {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000},
+        {name = "God of Destruction", forza = 30000000},
+        {name = "Jiren Ultra Instinct", forza = 14000000},
+        {name = "Mastered Ultra Instinct", forza = 14000000},
+        {name = "Godly SSJ2", forza = 8000000},
+        {name = "Ultra Instinct Omen", forza = 5000000},
+        {name = "Super Broly", forza = 4000000},
+        {name = "Evil SSJ", forza = 4000000},
+        {name = "Blue Evolution", forza = 3500000},
+        {name = "Dark Rose", forza = 3500000},
+        {name = "LSSJG", forza = 3000000},
+        {name = "SSJ Berseker", forza = 3000000},
+        {name = "Kefla SSJ2", forza = 3000000},
+        {name = "True Rose", forza = 2400000},
+        {name = "SSJ Blue Kaioken", forza = 2200000},
+        {name = "SSJ Rose", forza = 1400000},
+        {name = "SSJ Blue", forza = 1200000},
+        {name = "SSJG4", forza = 1000000},
+        {name = "LSSJ3", forza = 800000},
+        {name = "Corrupt SSJ", forza = 700000},
+        {name = "SSJ Rage", forza = 700000},
+        {name = "SSJ5", forza = 550000},
+        {name = "SSJ4", forza = 300000},
+        {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000},
+        {name = "LSSJ Kaioken", forza = 160000},
+        {name = "LSSJ", forza = 140000},
+        {name = "SSJ3", forza = 95000},
+        {name = "SSJ2 Majin", forza = 65000},
+        {name = "Spirit SSJ", forza = 65000},
+        {name = "SSJ2 Kaioken", forza = 50000},
+        {name = "SSJ Kaioken", forza = 16000},
+    }
 
-	local transformaciones = {
-		fases = {
-			{name = "Evil Saiyan", fuerza = 5000000000},
-			{name = "Angelic Saiyan", fuerza = 5000000000},
-			{name = "Ego Instinct", fuerza = 4500000000},
-			{name = "Time Breaker", fuerza = 630000000},
-			{name = "True Jui", fuerza = 750000000},
-			{name = "Corrupt Astral", fuerza = 250000000},
-			{name = "Beast", fuerza = 120000000},
-			{name = "SSJB4", fuerza = 50000000},
-			{name = "LBSSJ4", fuerza = 100000000},
-			{name = "True God of Creation", fuerza = 30000000},
-			{name = "True God of Destruction", fuerza = 30000000},
-			{name = "SSJR3", fuerza = 50000000},
-			{name = "God of Creation", fuerza = 30000000},
-			{name = "God of Destruction", fuerza = 30000000},
-			{name = "Super Broly", fuerza = 4000000},
-			{name = "Jiren Ultra Instinct", fuerza = 14000000},
-			{name = "Mastered Ultra Instinct", fuerza = 14000000},
-			{name = "Godly SSJ2", fuerza = 8000000},
-			{name = "LSSJG", fuerza = 3000000},
-			{name = "Ultra Instinct Omen", fuerza = 5000000},
-			{name = "LSSJ4", fuerza = 1800000},
-			{name = "SSJG4", fuerza = 1000000},
-			{name = "Evil SSJ", fuerza = 4000000},
-			{name = "Blue Evolution", fuerza = 3500000},
-			{name = "LSSJ3", fuerza = 800000},
-			{name = "Dark Rose", fuerza = 3500000},
-			{name = "SSJ Berseker", fuerza = 3000000},
-			{name = "Kefla SSJ2", fuerza = 3000000},
-			{name = "True Rose", fuerza = 2400000},
-			{name = "SSJ Blue Kaioken", fuerza = 2200000},
-			{name = "SSJ5", fuerza = 550000},
-			{name = "Mystic Kaioken", fuerza = 250000},
-			{name = "SSJ Rose", fuerza = 1400000},
-			{name = "SSJ Blue", fuerza = 1200000},
-			{name = "LSSJ Kaioken", fuerza = 160000},
-			{name = "Corrupt SSJ", fuerza = 700000},
-			{name = "SSJ Rage", fuerza = 700000},
-			{name = "SSJ2 Kaioken", fuerza = 50000},
-			{name = "SSJ4", fuerza = 300000},
-			{name = "Mystic", fuerza = 200000},
-			{name = "LSSJ", fuerza = 140000},
-			{name = "SSJ3", fuerza = 95000},
-			{name = "SSJ2 Majin", fuerza = 65000},
-			{name = "Spirit SSJ", fuerza = 65000},
-			{name = "SSJ Kaioken", fuerza = 16000},
-		}
-	}
+    local function getStrength() return folderData.Strength.Value end
 
-	local function strength() return folderData.Strength.Value end
-	local function selectedForm()
-		if game.Players.LocalPlayer.Status:FindFirstChild("SelectedTransformation") then return game.Players.LocalPlayer.Status.SelectedTransformation.Value end
-		return ""
-	end
-	local function valorFase()
-		if game.Players.LocalPlayer.Status:FindFirstChild("Transformation") then return game.Players.LocalPlayer.Status.Transformation.Value end
-		return ""
-	end
-	local function ki()
-		if game.Workspace.Living:FindFirstChild(yo.Name) then return game.Workspace.Living[yo.Name].Stats.Ki.Value end
-		return 0
-	end
-	local function kiRequerido()
-		if game:GetService("Players").LocalPlayer.Character and game:GetService("Players").LocalPlayer.Character:FindFirstChild("Stats") then return game:GetService("Players").LocalPlayer.Character.Stats.Ki.MaxValue / 10 end
-		return 999999999
-	end
-	local function ejecutarForma()
-		while selectedForm() ~= valorFase() do
-			pcall(function()
-				if ki() > (kiRequerido() + 10) then
-					game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
-				end
-			end)
-			task.wait()
-		end
-	end
-	local function transformarse(array)
-		for _, v in pairs(transformaciones[array]) do
-			if strength() >= v.fuerza then
-				local success, err = pcall(function() equipRemote:InvokeServer(v.name) end)
-				if success then break end
-			end
-		end
-		ejecutarForma()
-	end
+    local function getKiInfo()
+        local char = yo.Character
+        local stats = char and char:FindFirstChild("Stats")
+        if stats then
+            return stats.Ki.Value, stats.Ki.MaxValue
+        end
+        return 0, 1 -- Evita divisione per zero
+    end
 
-	while true do
-		pcall(function() transformarse("fases") end)
-		task.wait(1.5)
-	end
+    local function eseguireTrasformazione()
+        local selected = statusFolder:FindFirstChild("SelectedTransformation")
+        local current = statusFolder:FindFirstChild("Transformation")
+        
+        if not selected or not current then return end
+
+        -- Se la forma selezionata è diversa da quella attiva, carica il Ki e trasforma
+        while selected.Value ~= "" and selected.Value ~= current.Value do
+            local kiActual, kiMax = getKiInfo()
+            if kiActual >= (kiMax / 10) then
+                pcall(function() transformRemote:InvokeServer() end)
+            end
+            task.wait(0.3)
+        end
+    end
+
+    -- LOOP PRINCIPALE
+    while true do
+        local strength = getStrength()
+        local selectedObj = statusFolder:FindFirstChild("SelectedTransformation")
+
+        if selectedObj then
+            for _, v in ipairs(transformaciones) do
+                if strength >= v.forza then
+                    -- Se è già la nostra forma selezionata, passiamo subito all'attivazione
+                    if selectedObj.Value == v.name then
+                        eseguireTrasformazione()
+                        break
+                    end
+
+                    -- Prova a equipaggiare
+                    pcall(function() equipRemote:InvokeServer(v.name) end)
+                    
+                    -- Breve attesa per il feedback del server
+                    task.wait(0.2)
+
+                    -- VERIFICA POSSESSO: Se SelectedTransformation è cambiata, allora la possediamo
+                    if selectedObj.Value == v.name then
+                        eseguireTrasformazione()
+                        break -- Abbiamo trovato la migliore posseduta, usciamo dal ciclo for
+                    else
+                        -- Se non è cambiata, significa che non la abbiamo. Il ciclo for continua.
+                        -- warn("Salto " .. v.name .. " perché non sbloccata.")
+                    end
+                end
+            end
+        end
+        
+        task.wait(2) -- Non sovraccaricare il gioco, controlla ogni 2 secondi
+    end
 end)
 
 -- ==============================================================================
