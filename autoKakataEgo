@@ -1060,20 +1060,23 @@ task.spawn(Charge)
 -- ==============================================================================
 -- AUTO TRANSFORMATION
 -- ==============================================================================
--- IL SCRIPT SUPREMO DEL SOMMO
 task.spawn(function()
-	task.wait(7)
+task.wait(7)
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local yo = Players.LocalPlayer
-    
-    -- Attesa caricamento dati e remotes
-    local folderData = ReplicatedStorage:WaitForChild("Datas"):WaitForChild(tostring(yo.UserId))
-    local equipRemote = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("equipskill")
-    local transformRemote = ReplicatedStorage.Package.Events:WaitForChild("Hehehe")
-    local statusFolder = yo:WaitForChild("Status")
 
-    -- Tabella ORDINATA correttamente (dalla più forte alla più debole)
+    -- 1. IDENTIFICAZIONE DATI (Proviamo entrambi i modi)
+    local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
+    
+    if not folderData then
+        warn("IL SOMMO dice: Cartella dati non trovata per l'ID " .. yo.UserId)
+        return
+    end
+
+    local equipRemote = ReplicatedStorage.Package.Events.equipskill
+    local transformRemote = ReplicatedStorage.Package.Events.Hehehe
+
     local transformaciones = {
         {name = "Evil Saiyan", forza = 5000000000},
         {name = "Angelic Saiyan", forza = 5000000000},
@@ -1121,66 +1124,46 @@ task.spawn(function()
         {name = "SSJ Kaioken", forza = 16000},
     }
 
-    local function getStrength() return folderData.Strength.Value end
-
-    local function getKiInfo()
-        local char = yo.Character
-        local stats = char and char:FindFirstChild("Stats")
-        if stats then
-            return stats.Ki.Value, stats.Ki.MaxValue
-        end
-        return 0, 1 -- Evita divisione per zero
+    -- Funzione per trovare la cartella Status ovunque sia
+    local function getStatusFolder()
+        return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
     end
 
-    local function eseguireTrasformazione()
-        local selected = statusFolder:FindFirstChild("SelectedTransformation")
-        local current = statusFolder:FindFirstChild("Transformation")
-        
-        if not selected or not current then return end
+    print("IL SOMMO: Script Avviato con successo!")
 
-        -- Se la forma selezionata è diversa da quella attiva, carica il Ki e trasforma
-        while selected.Value ~= "" and selected.Value ~= current.Value do
-            local kiActual, kiMax = getKiInfo()
-            if kiActual >= (kiMax / 10) then
-                pcall(function() transformRemote:InvokeServer() end)
-            end
-            task.wait(0.3)
-        end
-    end
-
-    -- LOOP PRINCIPALE
     while true do
-        local strength = getStrength()
-        local selectedObj = statusFolder:FindFirstChild("SelectedTransformation")
+        pcall(function()
+            local strength = folderData.Strength.Value
+            local status = getStatusFolder()
+            
+            if status then
+                local selected = status:FindFirstChild("SelectedTransformation")
+                local actual = status:FindFirstChild("Transformation")
 
-        if selectedObj then
-            for _, v in ipairs(transformaciones) do
-                if strength >= v.forza then
-                    -- Se è già la nostra forma selezionata, passiamo subito all'attivazione
-                    if selectedObj.Value == v.name then
-                        eseguireTrasformazione()
-                        break
-                    end
+                for _, v in ipairs(transformaciones) do
+                    if strength >= v.forza then
+                        -- Se non è già quella selezionata, proviamo a equipparla
+                        if selected.Value ~= v.name then
+                            equipRemote:InvokeServer(v.name)
+                            task.wait(0.3) -- Tempo per il server di rispondere
+                        end
 
-                    -- Prova a equipaggiare
-                    pcall(function() equipRemote:InvokeServer(v.name) end)
-                    
-                    -- Breve attesa per il feedback del server
-                    task.wait(0.2)
-
-                    -- VERIFICA POSSESSO: Se SelectedTransformation è cambiata, allora la possediamo
-                    if selectedObj.Value == v.name then
-                        eseguireTrasformazione()
-                        break -- Abbiamo trovato la migliore posseduta, usciamo dal ciclo for
-                    else
-                        -- Se non è cambiata, significa che non la abbiamo. Il ciclo for continua.
-                        -- warn("Salto " .. v.name .. " perché non sbloccata.")
+                        -- Se l'equip ha funzionato (o era già giusto)
+                        if selected.Value == v.name then
+                            -- Se non siamo trasformati, trasformiamoci!
+                            if actual.Value ~= selected.Value then
+                                -- Controllo Ki (opzionale, rimosso per massima velocità)
+                                transformRemote:InvokeServer()
+                            end
+                            break -- Esci dal ciclo, abbiamo la forma migliore
+                        end
                     end
                 end
+            else
+                warn("IL SOMMO: Cartella 'Status' non trovata né nel Player né nel Character!")
             end
-        end
-        
-        task.wait(2) -- Non sovraccaricare il gioco, controlla ogni 2 secondi
+        end)
+        task.wait(1.5)
     end
 end)
 
