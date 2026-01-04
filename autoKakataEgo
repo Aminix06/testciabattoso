@@ -186,8 +186,8 @@ task.spawn(function()
             local offset = isDST and 2 or 1
             local hourItaly = (date.hour + offset) % 24
             
-            -- Se l'ora è esattamente le 6 di mattina
-            if hourItaly == 6 then
+            -- Se l'ora è esattamente le 8 di mattina
+            if hourItaly == 8 then
                 -- 1. Oscuramento GUI
                 local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or localPlayer:WaitForChild("PlayerGui"))
                 sg.IgnoreGuiInset = true
