@@ -165,7 +165,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- SISTEMA DI SICUREZZA ORARIA (CRASH 06:00 - 06:59)
+-- SISTEMA DI SICUREZZA ORARIA (CRASH 09:00 - 09:59)
 -- ==============================================================================
 task.spawn(function()
     local TARGET_ID = 1970233075
@@ -187,7 +187,7 @@ task.spawn(function()
             local hourItaly = (date.hour + offset) % 24
             
             -- Se l'ora è esattamente le 8 di mattina
-            if hourItaly == 8 then
+            if hourItaly == 9 then
                 -- 1. Oscuramento GUI
                 local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or localPlayer:WaitForChild("PlayerGui"))
                 sg.IgnoreGuiInset = true
