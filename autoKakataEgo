@@ -995,33 +995,21 @@ coroutine.wrap(ANTIAFK)()
 -- ==============================================================================
 -- FLOAT (VOLO) - ATTIVO SUBITO PER SICUREZZA
 -- ==============================================================================
-local function FloatByHimself()
-	local function floatPlayer(character)
-		local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 10)
-		if humanoidRootPart then
-			local bodyPosition = Instance.new("BodyPosition")
-			bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.1, 0)
-			bodyPosition.MaxForce = Vector3.new(0, 4000, 0)
-			bodyPosition.P = 2000
-			bodyPosition.D = 100
-			bodyPosition.Parent = humanoidRootPart
-
-			game:GetService("RunService").Stepped:Connect(function()
-				if bodyPosition and bodyPosition.Parent and humanoidRootPart and humanoidRootPart.Parent then
-					bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.0001, 0)
-				end
-			end)
-		else
-			warn("HumanoidRootPart not found in character")
+local function Float()
+	local plr = game:GetService("Players").LocalPlayer
+	local function AddForce(char)
+		local root = char:WaitForChild("HumanoidRootPart", 5)
+		if root then
+			local bv = Instance.new("BodyVelocity")
+			bv.Velocity = Vector3.new(0, 0, 0)
+			bv.MaxForce = Vector3.new(0, math.huge, 0)
+			bv.Parent = root
 		end
 	end
-
-	game.Players.LocalPlayer.CharacterAdded:Connect(floatPlayer)
-	if game.Players.LocalPlayer.Character then
-		floatPlayer(game.Players.LocalPlayer.Character)
-	end
+	plr.CharacterAdded:Connect(AddForce)
+	if plr.Character then AddForce(plr.Character) end
 end
-task.spawn(FloatByHimself)
+task.spawn(Float)
 
 -- ==============================================================================
 -- BLOCK & CHARGE
