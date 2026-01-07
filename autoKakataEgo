@@ -1005,7 +1005,7 @@ local function Float()
 			local root = char:FindFirstChild("HumanoidRootPart")
 			if root then
 				local vel = root.AssemblyLinearVelocity
-				root.AssemblyLinearVelocity = Vector3.new(vel.X, 2, vel.Z)
+				root.AssemblyLinearVelocity = Vector3.new(vel.X, 8, vel.Z)
 			end
 		end
 	end)
