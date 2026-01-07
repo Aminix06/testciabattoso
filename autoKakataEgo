@@ -995,19 +995,23 @@ coroutine.wrap(ANTIAFK)()
 -- ==============================================================================
 -- FLOAT (VOLO) - ATTIVO SUBITO PER SICUREZZA
 -- ==============================================================================
-local rs = game:GetService("RunService")
-local pl = game:GetService("Players")
-
-rs.Heartbeat:Connect(function()
-	local char = pl.LocalPlayer.Character
-	if char then
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if root then
-			local vel = root.AssemblyLinearVelocity
-			root.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
+local function Float()
+	local rs = game:GetService("RunService")
+	local pl = game:GetService("Players")
+	
+	rs.Heartbeat:Connect(function()
+		local char = pl.LocalPlayer.Character
+		if char then
+			local root = char:FindFirstChild("HumanoidRootPart")
+			if root then
+				local vel = root.AssemblyLinearVelocity
+				-- Mantiene X e Z invariati, ma blocca Y a 0 (Anti-Gravità assoluta)
+				root.AssemblyLinearVelocity = Vector3.new(vel.X, 0, vel.Z)
+			end
 		end
-	end
-end)
+	end)
+end
+task.spawn(Float)
 
 -- ==============================================================================
 -- BLOCK & CHARGE
