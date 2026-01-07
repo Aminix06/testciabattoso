@@ -996,40 +996,29 @@ coroutine.wrap(ANTIAFK)()
 -- FLOAT (VOLO) - ATTIVO SUBITO PER SICUREZZA
 -- ==============================================================================
 local function Float()
-	local pl = game:GetService("Players")
-	
+	local pl = game:GetService("Players")	
 	local function ApplyFloat(char)
 		local root = char:WaitForChild("HumanoidRootPart", 5)
 		if root then
-			-- Pulizia vecchi float se presenti
 			for _, child in pairs(root:GetChildren()) do
 				if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then
 					child:Destroy()
 				end
 			end
-
-			-- 1. Creiamo un "punto di aggancio"
 			local att = Instance.new("Attachment")
 			att.Name = "FloatAttachment"
 			att.Parent = root
-
-			-- 2. Creiamo la forza lineare
 			local lv = Instance.new("LinearVelocity")
 			lv.Name = "FloatVelocity"
 			lv.Attachment0 = att
 			lv.MaxForce = math.huge -- Forza infinita disponibile
 			lv.VectorVelocity = Vector3.new(0, 0, 0) -- Velocità target 0
-			
-			-- 3. MAGIA: Blocchiamo SOLO l'asse Y (Verticale)
-			-- Lasciamo X e Z liberi (0 forza) così puoi camminare, ma Y è infinito
 			lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
 			lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
 			lv.MaxAxesForce = Vector3.new(0, math.huge, 0) 
-			
 			lv.Parent = root
 		end
 	end
-
 	pl.LocalPlayer.CharacterAdded:Connect(ApplyFloat)
 	if pl.LocalPlayer.Character then ApplyFloat(pl.LocalPlayer.Character) end
 end
