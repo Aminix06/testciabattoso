@@ -1,4 +1,3 @@
-
 if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
@@ -7,7 +6,7 @@ end
 getgenv().ScriptAlreadyRunning = true
 
 --==============================================================================
--- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
+-- CONTROLLO SERVER VUOTO (MODIFICATO: REJOIN STESSO PIANETA)
 --==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -18,21 +17,19 @@ task.spawn(function()
 	local LocalPlayer = Players.LocalPlayer
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	
-	-- Verifica API per vedere se il server è Pubblico (metodo sicuro per Executor)
+	-- Verifica API per vedere se il server è Pubblico
 	local function IsPublicServer()
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
-		local isPublic = false
 		
-		-- Loop attraverso la lista dei server pubblici
 		while true do
 			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
 			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
 			
 			if not requestFunc then
 				warn("Executor non supporta request. Impossibile verificare server pubblico.")
-				return true -- Nel dubbio assumiamo pubblico per sicurezza
+				return true 
 			end
 
 			local success, response = pcall(function()
@@ -40,12 +37,12 @@ task.spawn(function()
 			end)
 
 			if not success or not response or response.StatusCode ~= 200 then
-				task.wait(1) -- Riprova se fallisce
+				task.wait(1) 
 			else
 				local data = HttpService:JSONDecode(response.Body)
 				for _, server in ipairs(data.data) do
 					if server.id == jobId then
-						return true -- Trovato nella lista pubblica!
+						return true 
 					end
 				end
 				cursor = data.nextPageCursor
@@ -53,25 +50,23 @@ task.spawn(function()
 			end
 			task.wait(0.1)
 		end
-		return false -- Non trovato nella lista pubblica -> È PRIVATO
+		return false 
 	end
 
 	print("🔍 Analisi tipo di server in corso...")
 	local publico = IsPublicServer()
 
 	if publico then
-		-- CASO 1: SEI IN PUBBLICA -> KICK
 		LocalPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
-		-- CASO 2: SEI IN PRIVATA
 		print("🔒 Server Privato confermato.")
 		
 		-- Controlliamo se ci sono intrusi
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
-				warn("⚠️ Intruso rilevato nel server privato! Cambio mondo...")
+				warn("⚠️ Intruso rilevato! Eseguo Server Hop sullo stesso pianeta...")
 				
-				-- Funzione Queue per ricaricare lo script dopo il TP
+				-- Queue on teleport
 				local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 				if queue_on_teleport then
 					queue_on_teleport([[
@@ -80,25 +75,24 @@ task.spawn(function()
 					]])
 				end
 
-				-- Logica TP Vills <-> Terra
+				-- MODIFICA: Rejoin sullo stesso pianeta
 				local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
 				if game.PlaceId == 3311165597 then -- Terra
-					TPEvent:InvokeServer("Vills Planet")
+					TPEvent:InvokeServer("Earth") -- Rimani sulla Terra
 				elseif game.PlaceId == 5151400895 then -- Vills
-					TPEvent:InvokeServer("Earth")
+					TPEvent:InvokeServer("Vills Planet") -- Rimani su Vills
 				end
 			end
 		end
 
-		-- Controllo iniziale
 		CheckIntruders()
-
-		-- Controllo continuo (se entra qualcuno dopo)
 		Players.PlayerAdded:Connect(function()
 			CheckIntruders()
 		end)
 	end
 end)
+
+-- [IL RESTO DELLO SCRIPT RIMANE INVARIATO FINO ALLA FUNZIONE DEL BOSS E DEL TIMER]
 
 local function CheckToGo()
 	local player = game.Players.LocalPlayer
@@ -137,12 +131,11 @@ game.Players.LocalPlayer.CharacterAdded:Connect(startonskibidi)
  
  
 local function StartTheGame()
-    -- FIX: Attendi che la GUI 'Main' sia disponibile prima di interagire con essa.
     local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 10) -- Attendi fino a 10 secondi
+    local mainGui = playerGui:WaitForChild("Main", 10) 
 
     if not mainGui then
-        warn("StartTheGame: GUI 'Main' non trovata. Impossibile continuare la funzione.")
+        warn("StartTheGame: GUI 'Main' non trovata.")
         return
     end
 
@@ -170,8 +163,7 @@ end
 StartTheGame()
  
 wait(.5)
- 
- 
+
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
 	["_Frame"] = Instance.new("Frame");
@@ -894,18 +886,10 @@ end
 local function onPlayerRespawn()
 	createGUI()
 end
- 
- 
+
 local player = game.Players.LocalPlayer
 player.CharacterAdded:Connect(onPlayerRespawn)
- 
- 
- 
-createGUI()
- 
- 
- 
-local player = game.Players.LocalPlayer
+
 local playerId = player.UserId
 local data = game:GetService("ReplicatedStorage").Datas
 local playerData = data:WaitForChild(tostring(playerId))
@@ -920,10 +904,7 @@ local function ANTIAFK()
 		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	end)
 end
- 
 coroutine.wrap(ANTIAFK)()
- 
- 
  
 local function FloatByHimself()
 	local function floatPlayer(character)
@@ -935,33 +916,21 @@ local function FloatByHimself()
 			bodyPosition.P = 2000
 			bodyPosition.D = 100
 			bodyPosition.Parent = humanoidRootPart
- 
-			-- Update the BodyPosition in the Stepped event
 			game:GetService("RunService").Stepped:Connect(function()
                 if bodyPosition and bodyPosition.Parent and humanoidRootPart and humanoidRootPart.Parent then
 				    bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.0001, 0)
                 end
 			end)
-		else
-			warn("HumanoidRootPart not found in character")
 		end
 	end
- 
 	game.Players.LocalPlayer.CharacterAdded:Connect(floatPlayer)
-	if game.Players.LocalPlayer.Character then
-		floatPlayer(game.Players.LocalPlayer.Character)
-	end
+	if game.Players.LocalPlayer.Character then floatPlayer(game.Players.LocalPlayer.Character) end
 end
- 
 task.spawn(FloatByHimself)
  
 local function Block()
 	while true do
-		local args = {
-			[1] = true
-		}
- 
-		game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(unpack(args))
+		game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(true)
 		wait(.1)
 	end
 end
@@ -970,36 +939,20 @@ task.spawn(Block)
 local camera = game.Workspace.CurrentCamera
 task.spawn(function()
 	while true and task.wait() do
-		pcall(function()
-			game.Players.LocalPlayer.Status.Blocking.Value = true
-		end)
+		pcall(function() game.Players.LocalPlayer.Status.Blocking.Value = true end)
 	end
 end)
  
 local function Charge()
 	while true do
 		wait(.1)
-		local args = {
-			[1] = "Blacknwhite27" -- **Replace with your actual username!**
-		}
- 
-		game:GetService("ReplicatedStorage").Package.Events.cha:InvokeServer(unpack(args))
+		game:GetService("ReplicatedStorage").Package.Events.cha:InvokeServer("Blacknwhite27")
 	end
 end
- 
 task.spawn(Charge)
  
- 
-
--- Go to bills
- 
 local function TeleportToWhis()
-	local args = {
-    [1] = "Vills Planet"
-}
-
-game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-
+	game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer("Vills Planet")
 end
  
 local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
@@ -1023,83 +976,49 @@ local function CheckGameId()
 		end
 	end
 end
- 
 coroutine.wrap(CheckGameId)()
- 
- 
- 
--- stack
- 
+
+-- STACK TRANSFORMATIONS
 task.spawn(function()
 	task.wait()
     local Players = game:GetService("Players")
     local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local yo = Players.LocalPlayer
-
-    -- 1. IDENTIFICAZIONE DATI (Proviamo entrambi i modi)
     local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
     
-    if not folderData then
-        warn("IL SOMMO dice: Cartella dati non trovata per l'ID " .. yo.UserId)
-        return
-    end
+    if not folderData then return end
 
     local equipRemote = ReplicatedStorage.Package.Events.equipskill
     local transformRemote = ReplicatedStorage.Package.Events.Hehehe
 
     local transformaciones = {
-        {name = "Evil Saiyan", forza = 5000000000},
-        {name = "Angelic Saiyan", forza = 5000000000},
-        {name = "Ego Instinct", forza = 4500000000},
-        {name = "True Jui", forza = 750000000},
-        {name = "Time Breaker", forza = 630000000},
-        {name = "Corrupt Astral", forza = 250000000},
-        {name = "Beast", forza = 120000000},
-        {name = "LBSSJ4", forza = 100000000},
-        {name = "SSJB4", forza = 50000000},
-        {name = "SSJR3", forza = 50000000},
-        {name = "True God of Creation", forza = 30000000},
-        {name = "True God of Destruction", forza = 30000000},
-        {name = "God of Creation", forza = 30000000},
-        {name = "God of Destruction", forza = 30000000},
-        {name = "Jiren Ultra Instinct", forza = 14000000},
-        {name = "Mastered Ultra Instinct", forza = 14000000},
-        {name = "Godly SSJ2", forza = 8000000},
-        {name = "Ultra Instinct Omen", forza = 5000000},
-        {name = "Super Broly", forza = 4000000},
-        {name = "Evil SSJ", forza = 4000000},
-        {name = "Blue Evolution", forza = 3500000},
-        {name = "Dark Rose", forza = 3500000},
-        {name = "LSSJG", forza = 3000000},
-        {name = "SSJ Berseker", forza = 3000000},
-        {name = "Kefla SSJ2", forza = 3000000},
-        {name = "True Rose", forza = 2400000},
-        {name = "SSJ Blue Kaioken", forza = 2200000},
-        {name = "SSJ Rose", forza = 1400000},
-        {name = "SSJ Blue", forza = 1200000},
-        {name = "SSJG4", forza = 1000000},
-        {name = "LSSJ3", forza = 800000},
-        {name = "Corrupt SSJ", forza = 700000},
-        {name = "SSJ Rage", forza = 700000},
-        {name = "SSJ5", forza = 550000},
-        {name = "SSJ4", forza = 300000},
-        {name = "Mystic Kaioken", forza = 250000},
-        {name = "Mystic", forza = 200000},
-        {name = "LSSJ Kaioken", forza = 160000},
-        {name = "LSSJ", forza = 140000},
-        {name = "SSJ3", forza = 95000},
-        {name = "SSJ2 Majin", forza = 65000},
-        {name = "Spirit SSJ", forza = 65000},
-        {name = "SSJ2 Kaioken", forza = 50000},
-        {name = "SSJ Kaioken", forza = 16000},
+        {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
+        {name = "Ego Instinct", forza = 4500000000}, {name = "True Jui", forza = 750000000},
+        {name = "Time Breaker", forza = 630000000}, {name = "Corrupt Astral", forza = 250000000},
+        {name = "Beast", forza = 120000000}, {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000}, {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000}, {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000}, {name = "God of Destruction", forza = 30000000},
+        {name = "Jiren Ultra Instinct", forza = 14000000}, {name = "Mastered Ultra Instinct", forza = 14000000},
+        {name = "Godly SSJ2", forza = 8000000}, {name = "Ultra Instinct Omen", forza = 5000000},
+        {name = "Super Broly", forza = 4000000}, {name = "Evil SSJ", forza = 4000000},
+        {name = "Blue Evolution", forza = 3500000}, {name = "Dark Rose", forza = 3500000},
+        {name = "LSSJG", forza = 3000000}, {name = "SSJ Berseker", forza = 3000000},
+        {name = "Kefla SSJ2", forza = 3000000}, {name = "True Rose", forza = 2400000},
+        {name = "SSJ Blue Kaioken", forza = 2200000}, {name = "SSJ Rose", forza = 1400000},
+        {name = "SSJ Blue", forza = 1200000}, {name = "SSJG4", forza = 1000000},
+        {name = "LSSJ3", forza = 800000}, {name = "Corrupt SSJ", forza = 700000},
+        {name = "SSJ Rage", forza = 700000}, {name = "SSJ5", forza = 550000},
+        {name = "SSJ4", forza = 300000}, {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000}, {name = "LSSJ Kaioken", forza = 160000},
+        {name = "LSSJ", forza = 140000}, {name = "SSJ3", forza = 95000},
+        {name = "SSJ2 Majin", forza = 65000}, {name = "Spirit SSJ", forza = 65000},
+        {name = "SSJ2 Kaioken", forza = 50000}, {name = "SSJ Kaioken", forza = 16000},
     }
 
-    -- Funzione per trovare la cartella Status ovunque sia
     local function getStatusFolder()
         return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
     end
-
-    print("IL SOMMO: Script Avviato con successo!")
 
     while true do
         pcall(function()
@@ -1112,25 +1031,18 @@ task.spawn(function()
 
                 for _, v in ipairs(transformaciones) do
                     if strength >= v.forza then
-                        -- Se non è già quella selezionata, proviamo a equipparla
                         if selected.Value ~= v.name then
                             equipRemote:InvokeServer(v.name)
-                            task.wait(0.3) -- Tempo per il server di rispondere
+                            task.wait(0.3) 
                         end
-
-                        -- Se l'equip ha funzionato (o era già giusto)
                         if selected.Value == v.name then
-                            -- Se non siamo trasformati, trasformiamoci!
                             if actual.Value ~= selected.Value then
-                                -- Controllo Ki (opzionale, rimosso per massima velocità)
                                 transformRemote:InvokeServer()
                             end
-                            break -- Esci dal ciclo, abbiamo la forma migliore
+                            break 
                         end
                     end
                 end
-            else
-                warn("IL SOMMO: Cartella 'Status' non trovata né nel Player né nel Character!")
             end
         end)
         task.wait(1.5)
@@ -1141,260 +1053,54 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
  
 local function SafeWaitForChild(parent, name, timeout)
-	local success, result = pcall(function()
-		return parent:WaitForChild(name, timeout)
-	end)
-	if not success then
-		warn("Failed to find " .. name .. ": " .. tostring(result))
-		return nil
-	end
+	local success, result = pcall(function() return parent:WaitForChild(name, timeout) end)
+	if not success then return nil end
 	return result
 end
  
 local AllBosses = {
-	{
-		PlaceId = 3311165597, 
-		Name = "Klirin",
-		MinStats = 0,
-		MaxStats = 10000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -5
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "Radish",
-		MinStats = 10000001,
-		MaxStats = 40000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597,
-		Name = "Mapa",
-		MinStats = 40000000,
-		MaxStats = 50000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "Super Vegetable",
-		MinStats = 50000001,
-		MaxStats = 60000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "Chilly",
-		MinStats = 60000001,
-		MaxStats = 70000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "Perfect Atom",
-		MinStats = 70000001,
-		MaxStats = 1500000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "SSJ2 Wukong",
-		MinStats = 1500000001,
-		MaxStats = 1500000002,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597,
-		Name = "SSJB Wukong",
-		MinStats = 1500000003,
-		MaxStats = 1500000004,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597,
-		Name = "Broccoli",
-		MinStats = 1500000005,
-		MaxStats = 1500000006,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 3311165597, 
-		Name = "SSJG Kakata",
-		MinStats = 1500000007,
-		MaxStats = math.huge,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (GoD in-training)",
-		MinStats = 121000000,
-		MaxStats = 250000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong (Omen)",
-		MinStats = 250000001,
-		MaxStats = 400000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vills (50%)",
-		MinStats = 400000001,
-		MaxStats = 800000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vis (20%)",
-		MinStats = 800000001,
-		MaxStats = 2000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (LBSSJ4)",
-		MinStats = 2000000001,
-		MaxStats = 3100000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong (LBSSJ4)",
-		MinStats = 3100000001,
-		MaxStats = 4300000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vekuta (LBSSJ4)",
-		MinStats = 4300000001,
-		MaxStats = 15000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong Rose",
-		MinStats = 15000000001,
-		MaxStats = 25000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vekuta (SSJBUI)",
-		MinStats = 25000000001, 
-		MaxStats = 50000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Wukong (MUI)",
-		MinStats = 50000000001,
-		MaxStats = 75000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Vegetable (Ultra Ego)",
-		MinStats = 75000000001,
-		MaxStats = 100000000000,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2
-	},
-	{
-		PlaceId = 5151400895,
-		Name = "Nohag (Beast)",
-		MinStats = 100000000001,
-		MaxStats = math.huge,
-		QuestLocation = workspace.Others.NPCs,
-		FightLocation = workspace.Living,
-		Distance = -2,
-	}
+	{PlaceId = 3311165597, Name = "Klirin", MinStats = 0, MaxStats = 10000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -5},
+	{PlaceId = 3311165597, Name = "Radish", MinStats = 10000001, MaxStats = 40000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "Mapa", MinStats = 40000000, MaxStats = 50000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "Super Vegetable", MinStats = 50000001, MaxStats = 60000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "Chilly", MinStats = 60000001, MaxStats = 70000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "Perfect Atom", MinStats = 70000001, MaxStats = 1500000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "SSJ2 Wukong", MinStats = 1500000001, MaxStats = 1500000002, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "SSJB Wukong", MinStats = 1500000003, MaxStats = 1500000004, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "Broccoli", MinStats = 1500000005, MaxStats = 1500000006, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 3311165597, Name = "SSJG Kakata", MinStats = 1500000007, MaxStats = math.huge, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vegetable (GoD in-training)", MinStats = 121000000, MaxStats = 250000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Wukong (Omen)", MinStats = 250000001, MaxStats = 400000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vills (50%)", MinStats = 400000001, MaxStats = 800000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vis (20%)", MinStats = 800000001, MaxStats = 2000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vegetable (LBSSJ4)", MinStats = 2000000001, MaxStats = 3100000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Wukong (LBSSJ4)", MinStats = 3100000001, MaxStats = 4300000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vekuta (LBSSJ4)", MinStats = 4300000001, MaxStats = 15000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Wukong Rose", MinStats = 15000000001, MaxStats = 25000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vekuta (SSJBUI)", MinStats = 25000000001, MaxStats = 50000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Wukong (MUI)", MinStats = 50000000001, MaxStats = 75000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Vegetable (Ultra Ego)", MinStats = 75000000001, MaxStats = 100000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
+	{PlaceId = 5151400895, Name = "Nohag (Beast)", MinStats = 100000000001, MaxStats = math.huge, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
 }
 
-
-
--- Variabili globali per il personaggio che verranno aggiornate al respawn
 local character, humanoid, humanoidRootPart
 
- 
--- ==============================================================================
--- NUOVA SEZIONE DI COMBATTIMENTO (ANTI RACE-CONDITION V2 - "PARANOID MODE")
--- ==============================================================================
 local function TeleportAndFight(bossData)
-	-- Questa funzione di combattimento è progettata per essere estremamente sicura.
-	-- Invece di fare affidamento su un riferimento iniziale al boss,
-	-- lo cercherà attivamente ad ogni ciclo per evitare di lavorare su un oggetto "fantasma".
-
 	local function getValidBoss()
-		-- Se il giocatore è morto, non c'è bisogno di cercare un boss.
 		if not (humanoid and humanoid.Health > 0) then return nil end
-
 		local bossModel = bossData.FightLocation:FindFirstChild(bossData.Name)
 		if not (bossModel and bossModel.Parent) then return nil end
-
 		local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
 		local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
-
-		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
-			return bossModel -- Ritorna il modello del boss solo se è completamente valido
-		end
+		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then return bossModel end
 		return nil
 	end
 
-	-- Ciclo di combattimento principale
 	while true do
 		local currentBoss = getValidBoss()
+		if not currentBoss then break end
+		local bossHRP = currentBoss.HumanoidRootPart 
 
-		-- Se in qualsiasi momento il boss non è più valido (sconfitto, despawnato)
-		-- o il giocatore muore, esci dal ciclo di combattimento.
-		if not currentBoss then
-			break
-		end
-
-		local bossHRP = currentBoss.HumanoidRootPart -- Ora è sicuro accedervi
-
-		-- Aggiorna la telecamera e la posizione
 		pcall(function()
 			camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
 			local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
@@ -1402,38 +1108,20 @@ local function TeleportAndFight(bossData)
 			humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
 		end)
 
-		-- Esegui gli attacchi
 		pcall(function()
-			if game.PlaceId == 3311165597 then
-				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
-						
-				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
-
-				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-			elseif game.PlaceId == 5151400895 then
-				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
-						
-				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
-
-				coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
-			end
+			local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):FindFirstChild("letsplayagame") or ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):FindFirstChild("Haha")
+            game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+            if letsplayagame then
+			    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+			    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+			    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+			    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+			    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+            end
 		end)
-
-		task.wait() -- Attendi il prossimo frame prima di ricontrollare
+		task.wait() 
 	end
 
-	print(bossData.Name .. " non più valido. Fine del combattimento.")
-	-- Ripristina la telecamera
 	pcall(function()
 		camera.CameraType = Enum.CameraType.Custom
 		camera.CameraSubject = humanoid
@@ -1443,9 +1131,7 @@ end
 local function WaitForBossToSpawn(bossData, timeLimit)
 	local startTime = os.time()
 	local bossReady = false
- 
 	repeat
-        -- Se il giocatore muore mentre aspetta, interrompe la funzione
         if not (humanoid and humanoid.Health > 0) then return end
 		task.wait() 
 		local boss = SafeWaitForChild(bossData.FightLocation, bossData.Name)
@@ -1453,58 +1139,40 @@ local function WaitForBossToSpawn(bossData, timeLimit)
 	until bossReady or os.time() - startTime > timeLimit 
  
 	if bossReady then
-		print("Boss " .. bossData.Name .. " è apparso!")
-        
         task.wait()
-        
 		TeleportAndFight(bossData)
-	else
-		print("Impossibile trovare " .. bossData.Name .. " entro il tempo limite. Passo al boss successivo.")
 	end
 end
  
+-- FUNZIONE CHECK BOSS AGGIORNATA CON FIX REBIRTH
 local function CheckAndFightBoss(bossData)
     if not bossData then return end
-	
 	local questStarted = false
-	-- print("Inizio la missione per " .. bossData.Name) -- Commentato per meno spam
-
-	if bossData.Request then 
-		bossData.Request() 
-	end
+	if bossData.Request then bossData.Request() end
 
 	local startTime = os.time()
 	local questTimeout = 30 
 
 	while not questStarted do
-		-- 1. Controllo Timeout
 		if os.time() - startTime > questTimeout then
-			print("TIMEOUT MISSIONE: Impossibile ottenere la quest per " .. bossData.Name .. ". Resetto...")
-			humanoid.Health = 0
+			humanoid.Health = 0 -- Reset carattere se buggato
 			return 
 		end
-		
-        -- 2. Controllo Morte
         if not (humanoid and humanoid.Health > 0) then return end
 
-		-- 3. NUOVO FIX: Controllo se le stats sono crollate (Rebirth avvenuto)
-		-- Se le tue statistiche attuali sono inferiori a quelle richieste dal boss, esci subito!
-		if statsz.Value < bossData.MinStats then
-			print("⚠️ REBIRTH RILEVATO! Le stats sono troppo basse per " .. bossData.Name .. ". Annullamento...")
-			return -- Esce dalla funzione così il Main loop può scegliere il boss giusto (Klirin)
-		end
+        -- FIX REBIRTH: SE LE STATS CROLLANO, ESCI DALLA FUNZIONE
+        if statsz.Value < bossData.MinStats then
+            return
+        end
 
 		local bossNpc = SafeWaitForChild(bossData.QuestLocation, bossData.Name)
 		if bossNpc then
-			-- Ciclo di richiesta quest
 			while playerData:WaitForChild("Quest").Value ~= bossData.Name do
 				if os.time() - startTime > questTimeout then break end
                 if not (humanoid and humanoid.Health > 0) then return end
-				
-				-- ANCHE QUI: Controllo anti-blocco post-rebirth
-				if statsz.Value < bossData.MinStats then
-					return 
-				end
+                
+                -- FIX REBIRTH ANCHE NEL LOOP INTERNO
+                if statsz.Value < bossData.MinStats then return end
 
 				humanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
 				Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
@@ -1512,7 +1180,6 @@ local function CheckAndFightBoss(bossData)
 			end
 
 			if playerData:WaitForChild("Quest").Value == bossData.Name then
-				-- print("Azione missione invocata e confermata per " .. bossData.Name) 
 				questStarted = true
 			end
 		else
@@ -1524,87 +1191,48 @@ local function CheckAndFightBoss(bossData)
 		WaitForBossToSpawn(bossData, 60)
 	end
 end
--- ==============================================================================
--- NUOVA SEZIONE CENTRALE PER LA GESTIONE DEL RESPAWN (AFFIDABILE)
--- ==============================================================================
+ 
 local function onCharacterAdded(newCharacter)
-    print("Nuovo personaggio rilevato. Aggiornamento variabili globali...")
 	character = newCharacter
 	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
 	humanoid = character:WaitForChild("Humanoid")
- 
-	humanoid.Died:Connect(function()
-		print("EVENTO DIED RILEVATO! In attesa di respawn...")
-	end)
 end
  
 player.CharacterAdded:Connect(onCharacterAdded)
- 
--- Gestisce il caso in cui lo script viene eseguito dopo che il personaggio è già caricato
-if player.Character then
-	onCharacterAdded(player.Character)
-else
-    -- Se il personaggio non è ancora pronto, attende la prima volta
-    print("In attesa del caricamento iniziale del personaggio...")
-    onCharacterAdded(player.CharacterAdded:Wait())
-end
--- ==============================================================================
+if player.Character then onCharacterAdded(player.Character) else onCharacterAdded(player.CharacterAdded:Wait()) end
 
-
--- Funzione di supporto per trovare i dati di un boss per nome
 local function findBossData(bossName)
     for _, data in ipairs(AllBosses) do
-        if data.Name == bossName then
-            return data
-        end
+        if data.Name == bossName then return data end
     end
-    return nil -- Ritorna nil se non trovato
+    return nil
 end
 
--- ==============================================================================
--- FUNZIONE PRINCIPALE DI CONTROLLO (Main) CON LOGICA DI RITARDO
--- ==============================================================================
-
-local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul pianeta di Vills
-local toggleKakataBroccoli = true -- Flag per alternare tra Kakata e Broccoli (True = Kakata, False = Broccoli)
+local villsPlanetReady = false 
+local toggleKakataBroccoli = true 
 
 local function Main()
-    -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
-        task.wait(1) -- Attesa di base per ogni ciclo
-        
-        if not (humanoid and humanoid.Health > 0) then
-            print("Il giocatore è morto o non valido. In attesa del respawn...")
-            task.wait(1) 
-            continue 
-        end
+        task.wait(1) 
+        if not (humanoid and humanoid.Health > 0) then task.wait(1) continue end
 
         local currentStats = statsz.Value
         local currentPlaceId = game.PlaceId
 
-        --======================================================================
-        -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
-        --======================================================================
         if currentPlaceId == 5151400895 then
-            -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
-                print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
                 task.wait(7)
                 villsPlanetReady = true
-                print("Stabilizzazione completata. Avvio del farm.")
-                continue -- Riavvia il ciclo per iniziare subito a farmare
+                continue 
             end
 
-            -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
             if currentStats >= nohagThreshold then
-                print("STATO FARMING [PIANETA DI VILLS]: Nohag")
                 local nohagData = findBossData("Nohag (Beast)")
                 if nohagData then CheckAndFightBoss(nohagData) end
             else
-                print("STATO PROGRESSIONE [PIANETA DI VILLS]")
                 local foughtBoss = false
                 for _, bossData in ipairs(AllBosses) do
                     if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
@@ -1613,35 +1241,21 @@ local function Main()
                         break
                     end
                 end
-                if not foughtBoss then
-                    print("Nessun boss adatto trovato sul pianeta di Vills per le statistiche attuali. Attendo...")
-                    task.wait(5)
-                end
+                if not foughtBoss then task.wait(5) end
             end
 
-        --======================================================================
-        -- LOGICA PER IL PIANETA TERRA (E RESET DEL FLAG)
-        --======================================================================
         elseif currentPlaceId == 3311165597 then
-            villsPlanetReady = false -- Resetta il flag quando siamo sulla Terra
-
-            -- MODIFICA QUI: Se hai le stats per Kakata, alterna tra Kakata e Broccoli
+            villsPlanetReady = false 
             if currentStats >= kakataThreshold then
                 if toggleKakataBroccoli then
-                    print("STATO FARMING [TERRA]: Ciclo Loop -> SSJG Kakata")
                     local kakataData = findBossData("SSJG Kakata")
                     if kakataData then CheckAndFightBoss(kakataData) end
                 else
-                    print("STATO FARMING [TERRA]: Ciclo Loop -> Broccoli")
                     local broccoliData = findBossData("Broccoli")
                     if broccoliData then CheckAndFightBoss(broccoliData) end
                 end
-                
-                -- Inverte la scelta per il prossimo giro (Se era vero diventa falso, e viceversa)
                 toggleKakataBroccoli = not toggleKakataBroccoli 
             else
-                -- Logica normale di progressione se NON hai ancora le stats per Kakata
-                print("STATO PROGRESSIONE [TERRA]")
                 local foughtBoss = false
                 for _, bossData in ipairs(AllBosses) do
                     if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
@@ -1650,349 +1264,156 @@ local function Main()
                         break 
                     end
                 end
-                if not foughtBoss then
-                    print("Nessun boss adatto trovato sulla Terra per le statistiche attuali. Attendo...")
-                    task.wait(5)
-                end
+                if not foughtBoss then task.wait(5) end
             end
-        
-        --======================================================================
-        -- LOGICA PER ALTRI LUOGHI (E RESET DEL FLAG)
-        --======================================================================
         else
-			villsPlanetReady = false -- Resetta il flag anche se siamo in un luogo sconosciuto
+			villsPlanetReady = false 
 			task.wait(1) 
         end
     end
 end
-
 task.spawn(Main) 
 
--- Questa parte per la vita infinita potrebbe interferire con la logica di morte,
--- ma la lasciamo dato che il reset forzato (humanoid.Health = 0) la bypassa.
 task.spawn(function()
     while true do
         if humanoid then
             humanoid.HealthChanged:Connect(function(newHealth)
-                if newHealth < humanoid.MaxHealth then
-                    humanoid.Health = humanoid.MaxHealth
-                end
+                if newHealth < humanoid.MaxHealth then humanoid.Health = humanoid.MaxHealth end
             end)
         end
         task.wait(1)
     end
 end)
 
-
--- NUOVA FUNZIONE PER IL REBIRTH
 local function CheckAndPerformRebirth()
     while true do
-        task.wait(.5) -- Attendi 5 secondi tra un controllo e l'altro per non sovraccaricare il gioco
-
+        task.wait(.5) 
         local player = game.Players.LocalPlayer
         local playerData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(player.UserId))
-
         if playerData then
             local strength = playerData:FindFirstChild("Strength")
             local rebirths = playerData:FindFirstChild("Rebirth")
-
             if strength and rebirths then
                 local requiredStrength = 2000000 * (rebirths.Value + 1)
-                local maxStrengthForRebirth = requiredStrength * 2 -- Fino a 2 volte le stats richieste
-
+                local maxStrengthForRebirth = requiredStrength * 2 
                 if strength.Value >= requiredStrength and strength.Value <= maxStrengthForRebirth then
-                    print("Tentativo di Rebirth: Statistiche sufficienti. Forza attuale: " .. tostring(strength.Value) .. ", Richiesto: " .. tostring(requiredStrength) .. ", Max per Rebirth: " .. tostring(maxStrengthForRebirth))
-                    
-                    -- Esegui l'evento di rebirth specificato dall'utente
-                    local success, err = pcall(function()
-                        game:GetService("ReplicatedStorage").Package.Events.reb:InvokeServer()
-                    end)
-
-                    if success then
-                        print("Rebirth eseguito con successo usando Events.d!")
-                    else
-                        warn("Errore durante l'esecuzione del Rebirth (Events.d): " .. tostring(err))
-                    end
-                else
-                    -- print("Condizioni per il rebirth non soddisfatte. Forza: " .. tostring(strength.Value) .. ", Richiesto: " .. tostring(requiredStrength))
+                    pcall(function() game:GetService("ReplicatedStorage").Package.Events.reb:InvokeServer() end)
                 end
             end
         end
     end
 end
-
 task.spawn(CheckAndPerformRebirth)
 
-
--- ==============================================================================
--- NUOVA GUI PER IL TIMER (Stile Aggiornato)
--- ==============================================================================
-local function CreateTimerGUI()
-    -- Crea gli oggetti della GUI
-    local TimerScreenGui = Instance.new("ScreenGui")
-    local TimerFrame = Instance.new("Frame")
-    local TimerTextLabel = Instance.new("TextLabel")
-    local TextStroke = Instance.new("UIStroke") -- Bordo per il testo
-    local UICorner = Instance.new("UICorner")
-    local UIStroke = Instance.new("UIStroke") -- Bordo per il frame
-
-    -- Impostazioni ScreenGui
-    TimerScreenGui.Name = "RebirthTimerGUI"
-    TimerScreenGui.Parent = game:GetService("CoreGui")
-    TimerScreenGui.ResetOnSpawn = false
-    TimerScreenGui.Enabled = false
-    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    TimerScreenGui.DisplayOrder = 999
-
-    -- Impostazioni Frame
-    TimerFrame.Name = "TimerFrame"
-    TimerFrame.Parent = TimerScreenGui
-    TimerFrame.Size = UDim2.new(0, 220, 0, 40) -- Leggermente più largo per il testo
-    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
-    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0) -- Sfondo nero
-    TimerFrame.BackgroundTransparency = 0.4 -- Trasparenza come in foto
-    TimerFrame.Active = true
-    TimerFrame.Draggable = true
-
-    -- Stile del Frame
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = TimerFrame
-    UIStroke.Color = Color3.fromRGB(255, 255, 0)
-    UIStroke.Thickness = 2
-    UIStroke.Parent = TimerFrame
-
-    -- Impostazioni TextLabel
-    TimerTextLabel.Name = "TimerTextLabel"
-    TimerTextLabel.Parent = TimerFrame
-    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    TimerTextLabel.BackgroundTransparency = 1
-    TimerTextLabel.Font = Enum.Font.FredokaOne
-    TimerTextLabel.Text = "Teleport in: 6000"
-    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255) -- Testo bianco
-    TimerTextLabel.TextScaled = true
-    TimerTextLabel.TextSize = 14
-    TimerTextLabel.TextWrapped = true
-    
-    -- Stile del Testo (Bordo nero)
-    TextStroke.Parent = TimerTextLabel
-    TextStroke.Color = Color3.fromRGB(0, 0, 0)
-    TextStroke.Thickness = 1.2
-    
-    -- Logica per il trascinamento (Identica a prima)
-    local userInputService = game:GetService("UserInputService")
-    local dragging
-    local dragInput
-    local dragStart
-    local startPos
-
-    TimerFrame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = TimerFrame.Position
-
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-
-    TimerFrame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-
-    userInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local newPos = UDim2.new(startPos.X.Scale, startPos.X.Offset + (input.Position.X - dragStart.X),
-                                     startPos.Y.Scale, startPos.Y.Offset + (input.Position.Y - dragStart.Y))
-            TimerFrame.Position = newPos
-        end
-    end)
-
-    return TimerScreenGui, TimerTextLabel
+-- GUI SETUP (Simplified for logic)
+local function CreateTimerGUI(name, yPos)
+    local sg = Instance.new("ScreenGui")
+    sg.Name = name
+    sg.Parent = game:GetService("CoreGui")
+    sg.Enabled = false
+    local fr = Instance.new("Frame")
+    fr.Parent = sg
+    fr.Size = UDim2.new(0, 220, 0, 40)
+    fr.Position = UDim2.new(0.5, -110, 0, yPos)
+    fr.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    fr.BackgroundTransparency = 0.4
+    local tl = Instance.new("TextLabel")
+    tl.Parent = fr
+    tl.Size = UDim2.new(1,0,1,0)
+    tl.BackgroundTransparency = 1
+    tl.TextColor3 = Color3.new(1,1,1)
+    tl.TextScaled = true
+    return sg, tl
 end
 
--- Crea la GUI una sola volta e ottieni i riferimenti
-local TimerScreenGui, TimerTextLabel = CreateTimerGUI()
--- ==============================================================================
+local TimerScreenGui, TimerTextLabel = CreateTimerGUI("RebirthTimerGUI", -48)
 
-
--- NUOVA FUNZIONE TIMER PER TELETRASPORTO (con controllo GUI)
 local function RebirthTimerAndTeleport()
     local timerEndTime = nil
     local VILLS_PLANET_ID = 5151400895
-    local TIMER_DURATION = 6000 -- 6000 secondi
+    local TIMER_DURATION = 6000 
 
     while true do
-        task.wait(1) -- Controlla ogni secondo
-
+        task.wait(1) 
         local player = game.Players.LocalPlayer
         local playerData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(player.UserId))
-
         if playerData and game.PlaceId == VILLS_PLANET_ID then
             local strength = playerData:FindFirstChild("Strength")
             local rebirths = playerData:FindFirstChild("Rebirth")
-
             if strength and rebirths then
                 local requiredStrength = 2000000 * (rebirths.Value + 1)
                 local strengthThreshold = requiredStrength * 2
-
-                -- CONDIZIONE DI ATTIVAZIONE: Stats > 2x e si trova su Vills
                 if strength.Value > strengthThreshold then
                     if timerEndTime == nil then
-                        -- Se il timer non è attivo, avvialo
                         timerEndTime = os.time() + TIMER_DURATION
-                        TimerScreenGui.Enabled = true -- Mostra la GUI
-                        print("TIMER ATTIVATO: Verrai teletrasportato sulla Terra tra " .. TIMER_DURATION .. " secondi se le condizioni rimangono invariate.")
+                        TimerScreenGui.Enabled = true 
                     end
                 else
-                    -- CONDIZIONE DI RESET: Le stats non sono più sufficienti
-                    if timerEndTime ~= nil then
-                        print("TIMER RESETTATO: Le statistiche non sono più sufficienti.")
-                        timerEndTime = nil
-                        TimerScreenGui.Enabled = false -- Nascondi la GUI
-                    end
+                    if timerEndTime ~= nil then timerEndTime = nil; TimerScreenGui.Enabled = false end
                 end
             end
         else
-            -- CONDIZIONE DI RESET: Non si trova più sul pianeta di Vills
-            if timerEndTime ~= nil then
-                print("TIMER RESETTATO: Hai lasciato il pianeta di Vills.")
-                timerEndTime = nil
-                TimerScreenGui.Enabled = false -- Nascondi la GUI
-            end
+            if timerEndTime ~= nil then timerEndTime = nil; TimerScreenGui.Enabled = false end
         end
 
-        -- Aggiorna il testo della GUI se il timer è attivo
         if timerEndTime ~= nil then
             local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
             TimerTextLabel.Text = "Teleport in: " .. timeLeft
-
             if timeLeft <= 0 then
-                print("TIMER SCADUTO: Teletrasporto sulla Terra in corso...")
-                local args = {[1] = "Earth"}
-                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-                timerEndTime = nil -- Resetta il timer
-                TimerScreenGui.Enabled = false -- Nascondi la GUI
+                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer("Earth")
+                timerEndTime = nil 
+                TimerScreenGui.Enabled = false 
             end
         end
     end
 end
-
 task.spawn(RebirthTimerAndTeleport)
 
--- ==============================================================================
--- NUOVA GUI PER IL TIMER T.O.P (Terra -> T.O.P)
--- ==============================================================================
-local function CreateTopTimerGUI()
-    local TimerScreenGui = Instance.new("ScreenGui")
-    local TimerFrame = Instance.new("Frame")
-    local TimerTextLabel = Instance.new("TextLabel")
-    local TextStroke = Instance.new("UIStroke")
-    local UICorner = Instance.new("UICorner")
-    local UIStroke = Instance.new("UIStroke")
+local TopTimerGui, TopTimerLabel = CreateTimerGUI("TopTimerGUI", -100)
 
-    TimerScreenGui.Name = "TopTimerGUI"
-    TimerScreenGui.Parent = game:GetService("CoreGui")
-    TimerScreenGui.ResetOnSpawn = false
-    TimerScreenGui.Enabled = false
-    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    TimerScreenGui.DisplayOrder = 999
-
-    TimerFrame.Name = "TopTimerFrame"
-    TimerFrame.Parent = TimerScreenGui
-    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
-    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
-    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    TimerFrame.BackgroundTransparency = 0.4
-    TimerFrame.Active = true
-    TimerFrame.Draggable = true
-
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = TimerFrame
-    UIStroke.Color = Color3.fromRGB(0, 255, 255) 
-    UIStroke.Thickness = 2
-    UIStroke.Parent = TimerFrame
-
-    TimerTextLabel.Name = "TimerTextLabel"
-    TimerTextLabel.Parent = TimerFrame
-    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    TimerTextLabel.BackgroundTransparency = 1
-    TimerTextLabel.Font = Enum.Font.FredokaOne
-    TimerTextLabel.Text = "T.O.P in: 1000"
-    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TimerTextLabel.TextScaled = true
-    TimerTextLabel.TextSize = 14
-    TimerTextLabel.TextWrapped = true
-    
-    TextStroke.Parent = TimerTextLabel
-    TextStroke.Color = Color3.fromRGB(0, 0, 0)
-    TextStroke.Thickness = 1.2
-    
-    return TimerScreenGui, TimerTextLabel
-end
-
-local TopTimerGui, TopTimerLabel = CreateTopTimerGUI()
-
--- ==============================================================================
--- LOGICA TIMER T.O.P (Terra -> T.O.P dopo 5 minuti con SPAM)
--- ==============================================================================
+-- MODIFICA: TIMER 2000s SU TERRA -> REJOIN TERRA
 local function EarthToTopTimer()
     local timerEndTime = nil
     local EARTH_PLACE_ID = 3311165597
     local TIMER_DURATION = 2000
 
     while true do
-        task.wait(1) -- Controlla ogni secondo
+        task.wait(1) 
 
         if game.PlaceId == EARTH_PLACE_ID then
-            -- Avvia il timer se non è già attivo
             if timerEndTime == nil then
                 timerEndTime = os.time() + TIMER_DURATION
                 TopTimerGui.Enabled = true
-                print("TIMER Vills ATTIVATO: Destinazione T.O.P tra 5 minuti.")
             end
 
             local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TopTimerLabel.Text = "Go to Vills in: " .. timeLeft
+            TopTimerLabel.Text = "Rejoining Earth in: " .. timeLeft
 
-            -- SE IL TIMER SCADE: SPAM TELETRASPORTO
+            -- SE SCADE: SPAM REJOIN TERRA
             if timeLeft <= 0 then
-                TopTimerLabel.Text = "TELEPORTING..."
-                print("TIMER Vills SCADUTO: Inizio SPAM del teletrasporto...")
+                TopTimerLabel.Text = "REFRESHING SERVER..."
+                local args = {[1] = "Earth"} -- MODIFICA: Ritorna sulla Terra
                 
-                local args = {[1] = "Vills Planet"}
-                
-                -- Questo loop continua a spammare finché non te ne vai dalla Terra
                 while game.PlaceId == EARTH_PLACE_ID do
                     game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-                    task.wait(0.5) -- Spamma ogni 0.5 secondi
+                    task.wait(0.5) 
                 end
                 
-                -- Se il loop finisce, significa che sei arrivato a T.O.P (o crashato/uscito)
                 timerEndTime = nil 
                 TopTimerGui.Enabled = false
             end
         else
-            -- Resetta se non sei sulla terra
             if timerEndTime ~= nil then
-                print("TIMER Vills RESETTATO: Non sei più sulla Terra.")
                 timerEndTime = nil
                 TopTimerGui.Enabled = false
             end
         end
     end
 end
-
 task.spawn(EarthToTopTimer)
 
 task.spawn(function()
     local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
-
     if queue_on_teleport then
         queue_on_teleport([[
             repeat task.wait() until game:IsLoaded()
