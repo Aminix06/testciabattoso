@@ -6,7 +6,7 @@ end
 getgenv().ScriptAlreadyRunning = true
 
 --==============================================================================
--- CONTROLLO SERVER VUOTO (MODIFICATO: REJOIN STESSO PIANETA)
+-- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -17,7 +17,6 @@ task.spawn(function()
 	local LocalPlayer = Players.LocalPlayer
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	
-	-- Verifica API per vedere se il server è Pubblico
 	local function IsPublicServer()
 		local jobId = game.JobId
 		local placeId = game.PlaceId
@@ -61,12 +60,10 @@ task.spawn(function()
 	else
 		print("🔒 Server Privato confermato.")
 		
-		-- Controlliamo se ci sono intrusi
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
 				warn("⚠️ Intruso rilevato! Eseguo Server Hop sullo stesso pianeta...")
 				
-				-- Queue on teleport
 				local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 				if queue_on_teleport then
 					queue_on_teleport([[
@@ -75,12 +72,12 @@ task.spawn(function()
 					]])
 				end
 
-				-- MODIFICA: Rejoin sullo stesso pianeta
+				-- REJOIN STESSO PIANETA
 				local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-				if game.PlaceId == 3311165597 then -- Terra
-					TPEvent:InvokeServer("Earth") -- Rimani sulla Terra
-				elseif game.PlaceId == 5151400895 then -- Vills
-					TPEvent:InvokeServer("Vills Planet") -- Rimani su Vills
+				if game.PlaceId == 3311165597 then 
+					TPEvent:InvokeServer("Earth")
+				elseif game.PlaceId == 5151400895 then 
+					TPEvent:InvokeServer("Vills Planet")
 				end
 			end
 		end
@@ -92,22 +89,15 @@ task.spawn(function()
 	end
 end)
 
--- [IL RESTO DELLO SCRIPT RIMANE INVARIATO FINO ALLA FUNZIONE DEL BOSS E DEL TIMER]
-
 local function CheckToGo()
 	local player = game.Players.LocalPlayer
-	local humanoidRootPart = player.Character:WaitForChild("HumanoidRootPart")
 	local playerId = player.UserId
 	local data = game:GetService("ReplicatedStorage").Datas
 	local playerData = data:WaitForChild(tostring(playerId))
 	local statsz = playerData:WaitForChild("Strength")
-	local zeni = playerData:WaitForChild("Zeni")
 	while true do
 		if statsz.Value < 100000000 and game.PlaceId == 5151400895 then
-			local args = {
-				[1] = "Earth"
-			}
- 
+			local args = {[1] = "Earth"}
 			game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
 		end
 		wait(.1)
@@ -115,9 +105,7 @@ local function CheckToGo()
 end
 task.spawn(CheckToGo)
  
- 
 local firstspawn = true
- 
 local function startonskibidi()
 	if firstspawn and game.PlaceId == 5151400895 then
 		print("Start")
@@ -126,27 +114,18 @@ local function startonskibidi()
 		print("died")
 	end
 end
- 
 game.Players.LocalPlayer.CharacterAdded:Connect(startonskibidi)
- 
  
 local function StartTheGame()
     local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 10) 
+    local mainGui = playerGui:WaitForChild("Main", 10)
 
-    if not mainGui then
-        warn("StartTheGame: GUI 'Main' non trovata.")
-        return
-    end
+    if not mainGui then return end
 
 	task.wait()
-	local Event = game:GetService("ReplicatedStorage").Package.Events.Start
-	Event:InvokeServer()
+	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
 	task.wait()
- 
-	local Event = game:GetService("ReplicatedStorage").Package.Events.Start
-	Event:InvokeServer()
- 
+	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
 	task.wait()
  
     local bruhButton = mainGui:FindFirstChild("bruh")
@@ -156,14 +135,12 @@ local function StartTheGame()
     end
  
 	task.wait()
-	local Event = game:GetService("ReplicatedStorage").Package.Events.Start
-	Event:InvokeServer()
+	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
 end
- 
 StartTheGame()
- 
 wait(.5)
-
+ 
+-- GUI ORIGINAL 1 (BARRE VITA/ENERGIA)
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
 	["_Frame"] = Instance.new("Frame");
@@ -193,8 +170,6 @@ local Converted = {
 	["_maxenergy"] = Instance.new("TextLabel");
 	["_UIStroke9"] = Instance.new("UIStroke");
 }
- 
--- Properties:
  
 Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
@@ -427,11 +402,9 @@ Converted["_maxenergy"].Parent = Converted["_freim"]
  
 Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
  
--- FIX: Attendi che la GUI del gioco sia pronta prima di modificarla.
--- Questo previene l'errore "Main is not a valid member of PlayerGui".
 task.spawn(function()
     local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 15) -- Attendi fino a 15 secondi
+    local mainGui = playerGui:WaitForChild("Main", 15)
     if mainGui then
         local mainFrame = mainGui:FindFirstChild("MainFrame")
         if mainFrame then
@@ -446,25 +419,15 @@ task.spawn(function()
     end
 end)
  
--- Flag to control the loops
 local running = true
- 
--- Function to format numbers with suffixes
 local function formatNumber(number)
-	if number >= 1_000_000_000_000 then
-		return string.format("%.1fT", number / 1_000_000_000_000)
-	elseif number >= 1_000_000_000 then
-		return string.format("%.1fB", number / 1_000_000_000)
-	elseif number >= 1_000_000 then
-		return string.format("%.1fM", number / 1_000_000)
-	elseif number >= 1_000 then
-		return string.format("%.1fK", number / 1_000)
-	else
-		return tostring(number)
-	end
+	if number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
+	elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
+	elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
+	elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
+	else return tostring(number) end
 end
  
--- Function to update health in a loop
 local function CambiareVitaNormal()
 	while running do
 		local character = game.Players.LocalPlayer.Character
@@ -477,7 +440,6 @@ local function CambiareVitaNormal()
 	end
 end
  
--- Function to update energy in a loop
 local function CambiareEnergyaNormale()
 	while running do
 		local player = game.Players.LocalPlayer
@@ -494,19 +456,12 @@ end
 local function setupCharacter(character)
 	running = false
 	wait(0.1)
- 
 	running = true 
 	task.spawn(CambiareVitaNormal)
 	task.spawn(CambiareEnergyaNormale)
 end
- 
--- Connect to the CharacterAdded event
 game.Players.LocalPlayer.CharacterAdded:Connect(setupCharacter)
- 
--- Handle character if already loaded
-if game.Players.LocalPlayer.Character then
-	setupCharacter(game.Players.LocalPlayer.Character)
-end
+if game.Players.LocalPlayer.Character then setupCharacter(game.Players.LocalPlayer.Character) end
  
 game:GetService("RunService").RenderStepped:Connect(function()
 	Converted["_UIGradient1"].Rotation += 2
@@ -514,13 +469,9 @@ game:GetService("RunService").RenderStepped:Connect(function()
 	Converted["_Uigrad"].Rotation += 2
 	Converted["_Uigraddd"].Rotation += 2
 end)
- 
- 
+
+-- GUI ORIGINAL 2 (STATS AUTOFARM)
 local function createGUI()
-	-- Generated using RoadToGlory's Converter v1.1 (RoadToGlory#9879)
- 
-	-- Instances:
- 
 	local Converted = {
 		["_AUTOFARM"] = Instance.new("ScreenGui");
 		["_Frame"] = Instance.new("Frame");
@@ -559,8 +510,6 @@ local function createGUI()
 		["_REBSNUMBER"] = Instance.new("TextLabel");
 		["_UIStroke12"] = Instance.new("UIStroke");
 	}
- 
-	-- Properties:
  
 	Converted["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	Converted["_AUTOFARM"].Name = "AUTOFARM"
@@ -789,7 +738,7 @@ local function createGUI()
 	Converted["_UICorner2"].Parent = Converted["_sup"]
  
 	Converted["_DEF1"].Font = Enum.Font.FredokaOne
-	Converted["_DEF1"].Text = "sup" .. game.Players.LocalPlayer.DisplayName
+	Converted["_DEF1"].Text = "sup " .. game.Players.LocalPlayer.DisplayName
 	Converted["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
 	Converted["_DEF1"].TextSize = 28
 	Converted["_DEF1"].TextWrapped = true
@@ -838,24 +787,16 @@ local function createGUI()
  
 	Converted["_UIStroke12"].Parent = Converted["_REBSNUMBER"]
  
- 
 	local playerid = game.Players.LocalPlayer.UserId
 	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid))
  
 	local function formatNumberForTheStats(number)
-		if number >= 1_000_000_000_000 then
-			return string.format("%.2fT", number / 1_000_000_000_000) 
-		elseif number >= 1_000_000_000 then
-			return string.format("%.2fB", number / 1_000_000_000)
-		elseif number >= 1_000_000 then
-			return string.format("%.2fM", number / 1_000_000)
-		elseif number >= 1_000 then
-			return string.format("%.2fK", number / 1_000)
-		else
-			return tostring(number)
-		end
+		if number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000) 
+		elseif number >= 1_000_000_000 then return string.format("%.2fB", number / 1_000_000_000)
+		elseif number >= 1_000_000 then return string.format("%.2fM", number / 1_000_000)
+		elseif number >= 1_000 then return string.format("%.2fK", number / 1_000)
+		else return tostring(number) end
 	end
- 
  
 	local function updateStats()
 		Converted["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
@@ -864,32 +805,26 @@ local function createGUI()
 		Converted["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
 		Converted["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
 	end
- 
- 
 	updateStats()
- 
  
 	playerStats.Strength.Changed:Connect(updateStats)
 	playerStats.Defense.Changed:Connect(updateStats)
 	playerStats.Energy.Changed:Connect(updateStats)
 	playerStats.Speed.Changed:Connect(updateStats)
  
-	local runService = game:GetService("RunService")
- 
-	runService.RenderStepped:Connect(function()
+	game:GetService("RunService").RenderStepped:Connect(function()
 		Converted["_UIGradient"].Rotation += 2
 		Converted["_UIGradient1"].Rotation += 2
 	end)
 end
  
- 
 local function onPlayerRespawn()
 	createGUI()
 end
-
 local player = game.Players.LocalPlayer
 player.CharacterAdded:Connect(onPlayerRespawn)
-
+createGUI()
+ 
 local playerId = player.UserId
 local data = game:GetService("ReplicatedStorage").Datas
 local playerData = data:WaitForChild(tostring(playerId))
@@ -1024,11 +959,9 @@ task.spawn(function()
         pcall(function()
             local strength = folderData.Strength.Value
             local status = getStatusFolder()
-            
             if status then
                 local selected = status:FindFirstChild("SelectedTransformation")
                 local actual = status:FindFirstChild("Transformation")
-
                 for _, v in ipairs(transformaciones) do
                     if strength >= v.forza then
                         if selected.Value ~= v.name then
@@ -1086,21 +1019,39 @@ local AllBosses = {
 local character, humanoid, humanoidRootPart
 
 local function TeleportAndFight(bossData)
+	-- Questa funzione di combattimento è progettata per essere estremamente sicura.
+	-- Invece di fare affidamento su un riferimento iniziale al boss,
+	-- lo cercherà attivamente ad ogni ciclo per evitare di lavorare su un oggetto "fantasma".
+
 	local function getValidBoss()
+		-- Se il giocatore è morto, non c'è bisogno di cercare un boss.
 		if not (humanoid and humanoid.Health > 0) then return nil end
+
 		local bossModel = bossData.FightLocation:FindFirstChild(bossData.Name)
 		if not (bossModel and bossModel.Parent) then return nil end
+
 		local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
 		local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
-		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then return bossModel end
+
+		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+			return bossModel -- Ritorna il modello del boss solo se è completamente valido
+		end
 		return nil
 	end
 
+	-- Ciclo di combattimento principale
 	while true do
 		local currentBoss = getValidBoss()
-		if not currentBoss then break end
-		local bossHRP = currentBoss.HumanoidRootPart 
 
+		-- Se in qualsiasi momento il boss non è più valido (sconfitto, despawnato)
+		-- o il giocatore muore, esci dal ciclo di combattimento.
+		if not currentBoss then
+			break
+		end
+
+		local bossHRP = currentBoss.HumanoidRootPart -- Ora è sicuro accedervi
+
+		-- Aggiorna la telecamera e la posizione
 		pcall(function()
 			camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
 			local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
@@ -1108,20 +1059,38 @@ local function TeleportAndFight(bossData)
 			humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
 		end)
 
+		-- Esegui gli attacchi
 		pcall(function()
-			local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):FindFirstChild("letsplayagame") or ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):FindFirstChild("Haha")
-            game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
-            if letsplayagame then
-			    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-			    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-			    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-			    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-			    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-            end
+			if game.PlaceId == 3311165597 then
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
+				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+			elseif game.PlaceId == 5151400895 then
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
+				coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
+			end
 		end)
-		task.wait() 
+
+		task.wait() -- Attendi il prossimo frame prima di ricontrollare
 	end
 
+	print(bossData.Name .. " non più valido. Fine del combattimento.")
+	-- Ripristina la telecamera
 	pcall(function()
 		camera.CameraType = Enum.CameraType.Custom
 		camera.CameraSubject = humanoid
@@ -1131,7 +1100,9 @@ end
 local function WaitForBossToSpawn(bossData, timeLimit)
 	local startTime = os.time()
 	local bossReady = false
+ 
 	repeat
+        -- Se il giocatore muore mentre aspetta, interrompe la funzione
         if not (humanoid and humanoid.Health > 0) then return end
 		task.wait() 
 		local boss = SafeWaitForChild(bossData.FightLocation, bossData.Name)
@@ -1139,40 +1110,58 @@ local function WaitForBossToSpawn(bossData, timeLimit)
 	until bossReady or os.time() - startTime > timeLimit 
  
 	if bossReady then
+		print("Boss " .. bossData.Name .. " è apparso!")
+        
         task.wait()
+        
 		TeleportAndFight(bossData)
+	else
+		print("Impossibile trovare " .. bossData.Name .. " entro il tempo limite. Passo al boss successivo.")
 	end
 end
  
--- FUNZIONE CHECK BOSS AGGIORNATA CON FIX REBIRTH
 local function CheckAndFightBoss(bossData)
     if not bossData then return end
+	
 	local questStarted = false
-	if bossData.Request then bossData.Request() end
+	-- print("Inizio la missione per " .. bossData.Name) -- Commentato per meno spam
+
+	if bossData.Request then 
+		bossData.Request() 
+	end
 
 	local startTime = os.time()
 	local questTimeout = 30 
 
 	while not questStarted do
+		-- 1. Controllo Timeout
 		if os.time() - startTime > questTimeout then
-			humanoid.Health = 0 -- Reset carattere se buggato
+			print("TIMEOUT MISSIONE: Impossibile ottenere la quest per " .. bossData.Name .. ". Resetto...")
+			humanoid.Health = 0
 			return 
 		end
+		
+        -- 2. Controllo Morte
         if not (humanoid and humanoid.Health > 0) then return end
 
-        -- FIX REBIRTH: SE LE STATS CROLLANO, ESCI DALLA FUNZIONE
-        if statsz.Value < bossData.MinStats then
-            return
-        end
+		-- 3. NUOVO FIX: Controllo se le stats sono crollate (Rebirth avvenuto)
+		-- Se le tue statistiche attuali sono inferiori a quelle richieste dal boss, esci subito!
+		if statsz.Value < bossData.MinStats then
+			print("⚠️ REBIRTH RILEVATO! Le stats sono troppo basse per " .. bossData.Name .. ". Annullamento...")
+			return -- Esce dalla funzione così il Main loop può scegliere il boss giusto (Klirin)
+		end
 
 		local bossNpc = SafeWaitForChild(bossData.QuestLocation, bossData.Name)
 		if bossNpc then
+			-- Ciclo di richiesta quest
 			while playerData:WaitForChild("Quest").Value ~= bossData.Name do
 				if os.time() - startTime > questTimeout then break end
                 if not (humanoid and humanoid.Health > 0) then return end
-                
-                -- FIX REBIRTH ANCHE NEL LOOP INTERNO
-                if statsz.Value < bossData.MinStats then return end
+				
+				-- ANCHE QUI: Controllo anti-blocco post-rebirth
+				if statsz.Value < bossData.MinStats then
+					return 
+				end
 
 				humanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
 				Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
@@ -1180,6 +1169,7 @@ local function CheckAndFightBoss(bossData)
 			end
 
 			if playerData:WaitForChild("Quest").Value == bossData.Name then
+				-- print("Azione missione invocata e confermata per " .. bossData.Name) 
 				questStarted = true
 			end
 		else
@@ -1191,6 +1181,7 @@ local function CheckAndFightBoss(bossData)
 		WaitForBossToSpawn(bossData, 60)
 	end
 end
+
  
 local function onCharacterAdded(newCharacter)
 	character = newCharacter
@@ -1305,73 +1296,179 @@ local function CheckAndPerformRebirth()
 end
 task.spawn(CheckAndPerformRebirth)
 
--- GUI SETUP (Simplified for logic)
-local function CreateTimerGUI(name, yPos)
-    local sg = Instance.new("ScreenGui")
-    sg.Name = name
-    sg.Parent = game:GetService("CoreGui")
-    sg.Enabled = false
-    local fr = Instance.new("Frame")
-    fr.Parent = sg
-    fr.Size = UDim2.new(0, 220, 0, 40)
-    fr.Position = UDim2.new(0.5, -110, 0, yPos)
-    fr.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    fr.BackgroundTransparency = 0.4
-    local tl = Instance.new("TextLabel")
-    tl.Parent = fr
-    tl.Size = UDim2.new(1,0,1,0)
-    tl.BackgroundTransparency = 1
-    tl.TextColor3 = Color3.new(1,1,1)
-    tl.TextScaled = true
-    return sg, tl
+-- ==============================================================================
+-- GUI TIMER 1: VILLS PLANET (Rejoin Vills)
+-- ==============================================================================
+local function CreateTimerGUI()
+    local TimerScreenGui = Instance.new("ScreenGui")
+    local TimerFrame = Instance.new("Frame")
+    local TimerTextLabel = Instance.new("TextLabel")
+    local TextStroke = Instance.new("UIStroke") 
+    local UICorner = Instance.new("UICorner")
+    local UIStroke = Instance.new("UIStroke") 
+
+    TimerScreenGui.Name = "RebirthTimerGUI"
+    TimerScreenGui.Parent = game:GetService("CoreGui")
+    TimerScreenGui.ResetOnSpawn = false
+    TimerScreenGui.Enabled = false
+    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    TimerScreenGui.DisplayOrder = 999
+
+    TimerFrame.Name = "TimerFrame"
+    TimerFrame.Parent = TimerScreenGui
+    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
+    -- FIX POSIZIONE: Messo a 50 pixel dall'alto (prima era -48 e non si vedeva)
+    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
+    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TimerFrame.BackgroundTransparency = 0.4
+    TimerFrame.Active = true
+    TimerFrame.Draggable = true
+
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = TimerFrame
+    
+    -- Bordo Rosso per Vills
+    UIStroke.Color = Color3.fromRGB(255, 50, 50) 
+    UIStroke.Thickness = 2
+    UIStroke.Parent = TimerFrame
+
+    TimerTextLabel.Name = "TimerTextLabel"
+    TimerTextLabel.Parent = TimerFrame
+    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TimerTextLabel.BackgroundTransparency = 1
+    TimerTextLabel.Font = Enum.Font.FredokaOne
+    TimerTextLabel.Text = "Loading..."
+    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TimerTextLabel.TextScaled = true
+    TimerTextLabel.TextSize = 14
+    TimerTextLabel.TextWrapped = true
+    
+    TextStroke.Parent = TimerTextLabel
+    TextStroke.Color = Color3.fromRGB(0, 0, 0)
+    TextStroke.Thickness = 1.2
+    
+    return TimerScreenGui, TimerTextLabel
 end
 
-local TimerScreenGui, TimerTextLabel = CreateTimerGUI("RebirthTimerGUI", -48)
+local TimerScreenGui, TimerTextLabel = CreateTimerGUI()
 
+-- LOGICA TIMER VILLS -> REJOIN VILLS
 local function RebirthTimerAndTeleport()
     local timerEndTime = nil
     local VILLS_PLANET_ID = 5151400895
-    local TIMER_DURATION = 6000 
+    local TIMER_DURATION = 6000 -- 6000 secondi
 
     while true do
         task.wait(1) 
+
         local player = game.Players.LocalPlayer
         local playerData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(player.UserId))
+
         if playerData and game.PlaceId == VILLS_PLANET_ID then
             local strength = playerData:FindFirstChild("Strength")
             local rebirths = playerData:FindFirstChild("Rebirth")
+
             if strength and rebirths then
                 local requiredStrength = 2000000 * (rebirths.Value + 1)
                 local strengthThreshold = requiredStrength * 2
+
                 if strength.Value > strengthThreshold then
                     if timerEndTime == nil then
                         timerEndTime = os.time() + TIMER_DURATION
                         TimerScreenGui.Enabled = true 
+                        print("TIMER VILLS ATTIVATO: Rejoin su Vills tra " .. TIMER_DURATION .. "s.")
                     end
                 else
-                    if timerEndTime ~= nil then timerEndTime = nil; TimerScreenGui.Enabled = false end
+                    if timerEndTime ~= nil then
+                        timerEndTime = nil
+                        TimerScreenGui.Enabled = false 
+                    end
                 end
             end
         else
-            if timerEndTime ~= nil then timerEndTime = nil; TimerScreenGui.Enabled = false end
+            if timerEndTime ~= nil then
+                timerEndTime = nil
+                TimerScreenGui.Enabled = false 
+            end
         end
 
         if timerEndTime ~= nil then
             local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TimerTextLabel.Text = "Teleport in: " .. timeLeft
+            TimerTextLabel.Text = "Rejoin Vills in: " .. timeLeft
+
             if timeLeft <= 0 then
-                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer("Earth")
+                print("TIMER SCADUTO: Rejoin Vills Planet...")
+                -- MODIFICA: Ora tippa su Vills Planet
+                local args = {[1] = "Vills Planet"}
+                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
+                
                 timerEndTime = nil 
                 TimerScreenGui.Enabled = false 
             end
         end
     end
 end
+
 task.spawn(RebirthTimerAndTeleport)
 
-local TopTimerGui, TopTimerLabel = CreateTimerGUI("TopTimerGUI", -100)
 
--- MODIFICA: TIMER 2000s SU TERRA -> REJOIN TERRA
+-- ==============================================================================
+-- GUI TIMER 2: EARTH (Rejoin Earth)
+-- ==============================================================================
+local function CreateTopTimerGUI()
+    local TimerScreenGui = Instance.new("ScreenGui")
+    local TimerFrame = Instance.new("Frame")
+    local TimerTextLabel = Instance.new("TextLabel")
+    local TextStroke = Instance.new("UIStroke")
+    local UICorner = Instance.new("UICorner")
+    local UIStroke = Instance.new("UIStroke")
+
+    TimerScreenGui.Name = "TopTimerGUI"
+    TimerScreenGui.Parent = game:GetService("CoreGui")
+    TimerScreenGui.ResetOnSpawn = false
+    TimerScreenGui.Enabled = false
+    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    TimerScreenGui.DisplayOrder = 999
+
+    TimerFrame.Name = "TopTimerFrame"
+    TimerFrame.Parent = TimerScreenGui
+    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
+    -- FIX POSIZIONE: Messo a 100 pixel dall'alto per non sovrapporsi all'altro
+    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
+    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TimerFrame.BackgroundTransparency = 0.4
+    TimerFrame.Active = true
+    TimerFrame.Draggable = true
+
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = TimerFrame
+    
+    -- Bordo Ciano per Terra
+    UIStroke.Color = Color3.fromRGB(0, 255, 255) 
+    UIStroke.Thickness = 2
+    UIStroke.Parent = TimerFrame
+
+    TimerTextLabel.Name = "TimerTextLabel"
+    TimerTextLabel.Parent = TimerFrame
+    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
+    TimerTextLabel.BackgroundTransparency = 1
+    TimerTextLabel.Font = Enum.Font.FredokaOne
+    TimerTextLabel.Text = "Loading..."
+    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TimerTextLabel.TextScaled = true
+    TimerTextLabel.TextSize = 14
+    TimerTextLabel.TextWrapped = true
+    
+    TextStroke.Parent = TimerTextLabel
+    TextStroke.Color = Color3.fromRGB(0, 0, 0)
+    TextStroke.Thickness = 1.2
+    
+    return TimerScreenGui, TimerTextLabel
+end
+
+local TopTimerGui, TopTimerLabel = CreateTopTimerGUI()
+
+-- LOGICA TIMER TERRA -> REJOIN TERRA
 local function EarthToTopTimer()
     local timerEndTime = nil
     local EARTH_PLACE_ID = 3311165597
@@ -1384,16 +1481,20 @@ local function EarthToTopTimer()
             if timerEndTime == nil then
                 timerEndTime = os.time() + TIMER_DURATION
                 TopTimerGui.Enabled = true
+                print("TIMER TERRA ATTIVATO: Rejoin su Terra tra " .. TIMER_DURATION .. "s.")
             end
 
             local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TopTimerLabel.Text = "Rejoining Earth in: " .. timeLeft
+            TopTimerLabel.Text = "Rejoin Earth in: " .. timeLeft
 
-            -- SE SCADE: SPAM REJOIN TERRA
             if timeLeft <= 0 then
-                TopTimerLabel.Text = "REFRESHING SERVER..."
-                local args = {[1] = "Earth"} -- MODIFICA: Ritorna sulla Terra
+                TopTimerLabel.Text = "REJOINING..."
+                print("TIMER TERRA SCADUTO: Rejoin in corso...")
                 
+                -- MODIFICA: Ora tippa su Earth
+                local args = {[1] = "Earth"}
+                
+                -- Loop finché non avviene il TP (refresh del server)
                 while game.PlaceId == EARTH_PLACE_ID do
                     game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
                     task.wait(0.5) 
@@ -1410,6 +1511,7 @@ local function EarthToTopTimer()
         end
     end
 end
+
 task.spawn(EarthToTopTimer)
 
 task.spawn(function()
