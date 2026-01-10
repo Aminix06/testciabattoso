@@ -1550,16 +1550,16 @@ end
 -- FUNZIONE PRINCIPALE DI CONTROLLO (Main) CON LOGICA DI RITARDO
 -- ==============================================================================
 
-local villsPlanetReady = false 
-local toggleKakataBroccoli = true -- Variabile per alternare (True = Kakata, False = Broccoli)
+local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul pianeta di Vills
+local toggleKakataBroccoli = true -- Flag per alternare tra Kakata e Broccoli (True = Kakata, False = Broccoli)
 
 local function Main()
-    -- Definisci le soglie di statistiche
+    -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
-        task.wait(1) 
+        task.wait(1) -- Attesa di base per ogni ciclo
         
         if not (humanoid and humanoid.Health > 0) then
             print("Il giocatore è morto o non valido. In attesa del respawn...")
@@ -1571,16 +1571,19 @@ local function Main()
         local currentPlaceId = game.PlaceId
 
         --======================================================================
-        -- LOGICA PIANETA VILLS 
+        -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
         --======================================================================
         if currentPlaceId == 5151400895 then
+            -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
                 print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
                 task.wait(7)
                 villsPlanetReady = true
-                continue 
+                print("Stabilizzazione completata. Avvio del farm.")
+                continue -- Riavvia il ciclo per iniziare subito a farmare
             end
 
+            -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
             if currentStats >= nohagThreshold then
                 print("STATO FARMING [PIANETA DI VILLS]: Nohag")
                 local nohagData = findBossData("Nohag (Beast)")
@@ -1596,70 +1599,33 @@ local function Main()
                     end
                 end
                 if not foughtBoss then
-                    print("Nessun boss adatto su Vills. Attendo...")
+                    print("Nessun boss adatto trovato sul pianeta di Vills per le statistiche attuali. Attendo...")
                     task.wait(5)
                 end
             end
 
-        --======================================================================
-        -- LOGICA PIANETA TERRA (MODIFICATA PER IL LOOP KAKATA <-> BROCCOLI)
-        --======================================================================
-        elseif currentPlaceId == 3311165597 then
-            villsPlanetReady = false 
-
-            -- Se hai le statistiche per Kakata, inizia il loop alternato
-            if currentStats >= kakataThreshold then
-                print("STATO FARMING [TERRA]: Loop Kakata <-> Broccoli")
-                
-                if toggleKakataBroccoli then
-                    -- PRIMO GIRO: KAKATA
-                    print(">>> TURNO: SSJG Kakata")
-                    local kakataData = findBossData("SSJG Kakata")
-                    if kakataData then CheckAndFightBoss(kakataData) end
-                else
-                    -- SECONDO GIRO: BROCCOLI
-                    print(">>> TURNO: Broccoli")
-                    local broccoliData = findBossData("Broccoli")
-                    if broccoliData then CheckAndFightBoss(broccoliData) end
-                end
-
-                -- Inverte l'interruttore per il prossimo giro
-                toggleKakataBroccoli = not toggleKakataBroccoli
-
-            else
-                -- Logica normale per i livelli bassi (prima di Kakata)
-                print("STATO PROGRESSIONE [TERRA]")
-                local foughtBoss = false
-                for _, bossData in ipairs(AllBosses) do
-                    if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                        CheckAndFightBoss(bossData)
-                        foughtBoss = true
-                        break 
-                    end
-                end
-                if not foughtBoss then
-                    print("Nessun boss adatto sulla Terra. Attendo...")
-                    task.wait(5)
-                end
-            end
-        
-        else
-			villsPlanetReady = false 
-			task.wait(1) 
-        end
-    end
-end
         --======================================================================
         -- LOGICA PER IL PIANETA TERRA (E RESET DEL FLAG)
         --======================================================================
         elseif currentPlaceId == 3311165597 then
             villsPlanetReady = false -- Resetta il flag quando siamo sulla Terra
 
+            -- MODIFICA QUI: Se hai le stats per Kakata, alterna tra Kakata e Broccoli
             if currentStats >= kakataThreshold then
-                print("STATO FARMING [TERRA]: Kakata")
-                local kakataData = findBossData("SSJG Kakata")
-                if kakataData then CheckAndFightBoss(kakataData) end
+                if toggleKakataBroccoli then
+                    print("STATO FARMING [TERRA]: Ciclo Loop -> SSJG Kakata")
+                    local kakataData = findBossData("SSJG Kakata")
+                    if kakataData then CheckAndFightBoss(kakataData) end
+                else
+                    print("STATO FARMING [TERRA]: Ciclo Loop -> Broccoli")
+                    local broccoliData = findBossData("Broccoli")
+                    if broccoliData then CheckAndFightBoss(broccoliData) end
+                end
+                
+                -- Inverte la scelta per il prossimo giro (Se era vero diventa falso, e viceversa)
+                toggleKakataBroccoli = not toggleKakataBroccoli 
             else
+                -- Logica normale di progressione se NON hai ancora le stats per Kakata
                 print("STATO PROGRESSIONE [TERRA]")
                 local foughtBoss = false
                 for _, bossData in ipairs(AllBosses) do
@@ -1685,9 +1651,8 @@ end
     end
 end
 
+task.spawn(Main) 
 
-task.spawn(Main)
- 
 -- Questa parte per la vita infinita potrebbe interferire con la logica di morte,
 -- ma la lasciamo dato che il reset forzato (humanoid.Health = 0) la bypassa.
 task.spawn(function()
