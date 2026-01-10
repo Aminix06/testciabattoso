@@ -72,7 +72,7 @@ task.spawn(function()
 		
 		-- Controlliamo se ci sono intrusi
 		local function CheckIntruders()
-			if #Players:GetPlayers() > 1 then
+			if #Players:GetPlayers() > 2 then
 				warn("⚠️ Intruso rilevato nel server privato! Cambio mondo...")
 				
 				-- Funzione Queue per ricaricare lo script dopo il TP
@@ -1336,7 +1336,7 @@ task.spawn(function()
 
 	elseif PlaceId == 5151400895 then -- Vills Planet
 		TimerGui.Enabled = true
-		local timeLeft = 6000 -- 6000 secondi
+		local timeLeft = 20000 -- 6000 secondi
 
 		while timeLeft > 0 do
 			TimerLabel.Text = "Farm su Vills. TP Terra in: " .. timeLeft .. "s"
