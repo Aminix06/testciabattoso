@@ -1,4 +1,4 @@
---[[if getgenv().ScriptAlreadyRunning then
+if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
 end
@@ -1363,4 +1363,3 @@ task.spawn(function()
         ]])
     end
 end)
-]]
