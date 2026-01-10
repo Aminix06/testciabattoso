@@ -1030,125 +1030,112 @@ coroutine.wrap(CheckGameId)()
 -- stack
  
 task.spawn(function()
-	local yo = game:GetService('Players').LocalPlayer
-	local folderData = game.ReplicatedStorage.Datas[yo.UserId]
-	local afk = game:service'VirtualUser'
-	local statsRequeridosFarm = 10000
-	local events = game.ReplicatedStorage.Package.Events
-	local equipRemote = game:GetService("ReplicatedStorage").Package.Events.equipskill
-	local cargaAndBloqueo = true
-	local activadaSpeed = false
-	local statsPlayerFarmSa
- 
-	local millon = 1000000
-	local transformaciones = {
-		fases = {
-			{name = "Ego Instinct", fuerza = 4500000000},
-			{name = "Time Breaker", fuerza = 630000000},
-			{name = "True Jui", fuerza = 750000000},
-			{name = "Corrupt Astral", fuerza = 250000000},
-			{name = "Beast", fuerza = 120000000},
-			{name = "SSJB4", fuerza = 50000000},
-			{name = "LBSSJ4", fuerza = 100000000},
-			{name = "True God of Creation", fuerza = 30000000},
-			{name = "True God of Destruction", fuerza = 30000000},
-			{name = "SSJR3", fuerza = 50000000},
-			{name = "God of Creation", fuerza = 30000000},
-			{name = "God of Destruction", fuerza = 30000000},
-			{name = "Super Broly", fuerza = 4000000},
-			{name = "Jiren Ultra Instinct", fuerza = 14000000},
-			{name = "Mastered Ultra Instinct", fuerza = 14000000},
-			{name = "Godly SSJ2", fuerza = 8000000},
-			{name = "LSSJG", fuerza = 3000000},
-			{name = "Ultra Instinct Omen", fuerza = 5000000},
-			{name = "LSSJ4", fuerza = 1800000},
-			{name = "SSJG4", fuerza = 1000000},
-			{name = "Evil SSJ", fuerza = 4000000},
-			{name = "Blue Evolution", fuerza = 3500000},
-			{name = "LSSJ3", fuerza = 800000},
-			{name = "Dark Rose", fuerza = 3500000},
-			{name = "SSJ Berseker", fuerza = 3000000},
-			{name = "Kefla SSJ2", fuerza = 3000000},
-			{name = "True Rose", fuerza = 2400000},
-			{name = "SSJ Blue Kaioken", fuerza = 2200000},
-			{name = "SSJ5", fuerza = 550000},
-			{name = "Mystic Kaioken", fuerza = 250000},
-			{name = "SSJ Rose", fuerza = 1400000},
-			{name = "SSJ Blue", fuerza = 1200000},
-			{name = "LSSJ Kaioken", fuerza = 160000},
-			{name = "Corrupt SSJ", fuerza = 700000},
-			{name = "SSJ Rage", fuerza = 700000},
-			{name = "SSJ2 Kaioken", fuerza = 50000},
-			{name = "SSJ4", fuerza = 300000},
-			{name = "Mystic", fuerza = 200000},
-			{name = "LSSJ", fuerza = 140000},
-			{name = "SSJ3", fuerza = 95000},
-			{name = "SSJ2 Majin", fuerza = 65000},
-			{name = "Spirit SSJ", fuerza = 65000},
-			{name = "SSJ Kaioken", fuerza = 16000},
-		}
-	}
- 
-	local function strength()
-		return folderData.Strength.Value
-	end
- 
-	local function selectedForm()
-		return game.Players.LocalPlayer.Status.SelectedTransformation.Value
-	end
- 
-	local function valorFase()
-		return game.Players.LocalPlayer.Status.Transformation.Value
-	end
- 
-	local function ki()
-		return game.Workspace.Living[yo.Name].Stats.Ki.Value
-	end
- 
-	local function kiRequerido()
-		return game:GetService("Players").LocalPlayer.Character.Stats.Ki.MaxValue / 10
-	end
- 
-	local function ejecutarForma()
-		while selectedForm() ~= valorFase() do
-			pcall(function()
-				if ki() > (kiRequerido() + 10) then
-					if game.PlaceId == 3311165597 then
-					game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
-					elseif game.PlaceId == 5151400895 then
-						game:GetService("ReplicatedStorage").Package.Events.Hehehe:InvokeServer()
+	task.wait()
+    local Players = game:GetService("Players")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local yo = Players.LocalPlayer
 
-					end
-				end
-			end)
-			task.wait()
-		end
-	end
- 
-	local function transformarse(array)
-		for _, v in pairs(transformaciones[array]) do
-			if strength() >= v.fuerza then
-				local success, err = pcall(function()
-					equipRemote:InvokeServer(v.name)
-				end)
-				if not success then
-					print("Failed to equip transformation:", err)
-				end
-				if equipRemote:InvokeServer(v.name) then
-					break 
-				end
-			end
-		end
-		ejecutarForma()
-	end
- 
-	-- Continuously check stats and apply transformation (Faster checks)
-	while true do
-		transformarse("fases")
-		task.wait(1.2) -- Check every 1 second
-	end
+    -- 1. IDENTIFICAZIONE DATI (Proviamo entrambi i modi)
+    local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
+    
+    if not folderData then
+        warn("IL SOMMO dice: Cartella dati non trovata per l'ID " .. yo.UserId)
+        return
+    end
+
+    local equipRemote = ReplicatedStorage.Package.Events.equipskill
+    local transformRemote = ReplicatedStorage.Package.Events.Hehehe
+
+    local transformaciones = {
+        {name = "Evil Saiyan", forza = 5000000000},
+        {name = "Angelic Saiyan", forza = 5000000000},
+        {name = "Ego Instinct", forza = 4500000000},
+        {name = "True Jui", forza = 750000000},
+        {name = "Time Breaker", forza = 630000000},
+        {name = "Corrupt Astral", forza = 250000000},
+        {name = "Beast", forza = 120000000},
+        {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000},
+        {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000},
+        {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000},
+        {name = "God of Destruction", forza = 30000000},
+        {name = "Jiren Ultra Instinct", forza = 14000000},
+        {name = "Mastered Ultra Instinct", forza = 14000000},
+        {name = "Godly SSJ2", forza = 8000000},
+        {name = "Ultra Instinct Omen", forza = 5000000},
+        {name = "Super Broly", forza = 4000000},
+        {name = "Evil SSJ", forza = 4000000},
+        {name = "Blue Evolution", forza = 3500000},
+        {name = "Dark Rose", forza = 3500000},
+        {name = "LSSJG", forza = 3000000},
+        {name = "SSJ Berseker", forza = 3000000},
+        {name = "Kefla SSJ2", forza = 3000000},
+        {name = "True Rose", forza = 2400000},
+        {name = "SSJ Blue Kaioken", forza = 2200000},
+        {name = "SSJ Rose", forza = 1400000},
+        {name = "SSJ Blue", forza = 1200000},
+        {name = "SSJG4", forza = 1000000},
+        {name = "LSSJ3", forza = 800000},
+        {name = "Corrupt SSJ", forza = 700000},
+        {name = "SSJ Rage", forza = 700000},
+        {name = "SSJ5", forza = 550000},
+        {name = "SSJ4", forza = 300000},
+        {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000},
+        {name = "LSSJ Kaioken", forza = 160000},
+        {name = "LSSJ", forza = 140000},
+        {name = "SSJ3", forza = 95000},
+        {name = "SSJ2 Majin", forza = 65000},
+        {name = "Spirit SSJ", forza = 65000},
+        {name = "SSJ2 Kaioken", forza = 50000},
+        {name = "SSJ Kaioken", forza = 16000},
+    }
+
+    -- Funzione per trovare la cartella Status ovunque sia
+    local function getStatusFolder()
+        return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
+    end
+
+    print("IL SOMMO: Script Avviato con successo!")
+
+    while true do
+        pcall(function()
+            local strength = folderData.Strength.Value
+            local status = getStatusFolder()
+            
+            if status then
+                local selected = status:FindFirstChild("SelectedTransformation")
+                local actual = status:FindFirstChild("Transformation")
+
+                for _, v in ipairs(transformaciones) do
+                    if strength >= v.forza then
+                        -- Se non è già quella selezionata, proviamo a equipparla
+                        if selected.Value ~= v.name then
+                            equipRemote:InvokeServer(v.name)
+                            task.wait(0.3) -- Tempo per il server di rispondere
+                        end
+
+                        -- Se l'equip ha funzionato (o era già giusto)
+                        if selected.Value == v.name then
+                            -- Se non siamo trasformati, trasformiamoci!
+                            if actual.Value ~= selected.Value then
+                                -- Controllo Ki (opzionale, rimosso per massima velocità)
+                                transformRemote:InvokeServer()
+                            end
+                            break -- Esci dal ciclo, abbiamo la forma migliore
+                        end
+                    end
+                end
+            else
+                warn("IL SOMMO: Cartella 'Status' non trovata né nel Player né nel Character!")
+            end
+        end)
+        task.wait(1.5)
+    end
 end)
- 
+
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
  
