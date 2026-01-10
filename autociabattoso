@@ -1,3 +1,4 @@
+
 if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
@@ -1356,236 +1357,240 @@ local AllBosses = {
 -- Variabili globali per il personaggio che verranno aggiornate al respawn
 local character, humanoid, humanoidRootPart
 
+ 
 -- ==============================================================================
--- NUOVA SEZIONE DI COMBATTIMENTO CON "PANIC CHECK" PER REBIRTH
+-- NUOVA SEZIONE DI COMBATTIMENTO (ANTI RACE-CONDITION V2 - "PARANOID MODE")
 -- ==============================================================================
-
--- Funzione helper per ottenere la forza attuale in tempo reale
-local function GetCurrentStrength()
-    local p = game.Players.LocalPlayer
-    local d = game:GetService("ReplicatedStorage"):FindFirstChild("Datas")
-    if d and d:FindFirstChild(tostring(p.UserId)) then
-        return d[tostring(p.UserId)].Strength.Value
-    end
-    return 0
-end
-
 local function TeleportAndFight(bossData)
-    local function getValidBoss()
-        if not (humanoid and humanoid.Health > 0) then return nil end
-        local bossModel = bossData.FightLocation:FindFirstChild(bossData.Name)
-        if not (bossModel and bossModel.Parent) then return nil end
-        local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
-        local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
-        if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
-            return bossModel
-        end
-        return nil
-    end
+	-- Questa funzione di combattimento è progettata per essere estremamente sicura.
+	-- Invece di fare affidamento su un riferimento iniziale al boss,
+	-- lo cercherà attivamente ad ogni ciclo per evitare di lavorare su un oggetto "fantasma".
 
-    while true do
-        -- 1. CONTROLLO REBIRTH ISTANTANEO
-        -- Se la tua forza è inferiore al minimo del boss, smetti subito di combattere!
-        if GetCurrentStrength() < bossData.MinStats then
-            print("📉 REBIRTH RILEVATO! Interrompo il combattimento con " .. bossData.Name)
-            break
-        end
+	local function getValidBoss()
+		-- Se il giocatore è morto, non c'è bisogno di cercare un boss.
+		if not (humanoid and humanoid.Health > 0) then return nil end
 
-        local currentBoss = getValidBoss()
-        if not currentBoss then break end
+		local bossModel = bossData.FightLocation:FindFirstChild(bossData.Name)
+		if not (bossModel and bossModel.Parent) then return nil end
 
-        local bossHRP = currentBoss.HumanoidRootPart
+		local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
+		local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
 
-        pcall(function()
-            camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
-            local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
-            local behindPosition = bossHRP.Position + behindOffset
-            humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
-        end)
+		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+			return bossModel -- Ritorna il modello del boss solo se è completamente valido
+		end
+		return nil
+	end
 
-        pcall(function()
-            local myName = game.Players.LocalPlayer.Name -- Fix dinamico del nome
-            local RS = game:GetService("ReplicatedStorage")
-            local Package = RS:WaitForChild("Package")
-            local Events = Package:WaitForChild("Events")
-            
-            Events.p:FireServer(myName, 1)
+	-- Ciclo di combattimento principale
+	while true do
+		local currentBoss = getValidBoss()
 
-            if game.PlaceId == 3311165597 then
-                local remote = Events:WaitForChild("letsplayagame")
-                coroutine.wrap(function() remote:InvokeServer("Meteor Crash", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Wolf Fang Fist", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Mach Kick", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Spirit Barrage", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Super Dragon Fist", myName) end)()
-            elseif game.PlaceId == 5151400895 then
-                local remote = Events:WaitForChild("Haha")
-                coroutine.wrap(function() remote:InvokeServer("Meteor Crash", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Wolf Fang Fist", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Mach Kick", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Spirit Barrage", myName) end)()
-                coroutine.wrap(function() remote:InvokeServer("Super Dragon Fist", myName) end)()    
-            end
-        end)
-        task.wait()
-    end
+		-- Se in qualsiasi momento il boss non è più valido (sconfitto, despawnato)
+		-- o il giocatore muore, esci dal ciclo di combattimento.
+		if not currentBoss then
+			break
+		end
 
-    pcall(function()
-        camera.CameraType = Enum.CameraType.Custom
-        camera.CameraSubject = humanoid
-    end)
+		local bossHRP = currentBoss.HumanoidRootPart -- Ora è sicuro accedervi
+
+		-- Aggiorna la telecamera e la posizione
+		pcall(function()
+			camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+			local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
+			local behindPosition = bossHRP.Position + behindOffset
+			humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
+		end)
+
+		-- Esegui gli attacchi
+		pcall(function()
+			if game.PlaceId == 3311165597 then
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
+				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+			elseif game.PlaceId == 5151400895 then
+				local ReplicatedStorage = game:GetService("ReplicatedStorage")
+				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
+						
+				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+
+				coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+				coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
+			end
+		end)
+
+		task.wait() -- Attendi il prossimo frame prima di ricontrollare
+	end
+
+	print(bossData.Name .. " non più valido. Fine del combattimento.")
+	-- Ripristina la telecamera
+	pcall(function()
+		camera.CameraType = Enum.CameraType.Custom
+		camera.CameraSubject = humanoid
+	end)
 end
  
 local function WaitForBossToSpawn(bossData, timeLimit)
-    local startTime = os.time()
-    local bossReady = false
+	local startTime = os.time()
+	local bossReady = false
  
-    repeat
-        -- CONTROLLO REBIRTH: Se stats basse, esci dal loop di attesa
-        if GetCurrentStrength() < bossData.MinStats then return end
+	repeat
+        -- Se il giocatore muore mentre aspetta, interrompe la funzione
         if not (humanoid and humanoid.Health > 0) then return end
-        
-        task.wait() 
-        local boss = SafeWaitForChild(bossData.FightLocation, bossData.Name)
-        bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid")
-    until bossReady or os.time() - startTime > timeLimit 
+		task.wait() 
+		local boss = SafeWaitForChild(bossData.FightLocation, bossData.Name)
+		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid")
+	until bossReady or os.time() - startTime > timeLimit 
  
-    if bossReady then
-        -- Doppio controllo prima di iniziare a combattere
-        if GetCurrentStrength() >= bossData.MinStats then
-            print("Boss " .. bossData.Name .. " è apparso!")
-            task.wait()
-            TeleportAndFight(bossData)
-        end
-    else
-        print("Impossibile trovare " .. bossData.Name .. " (Timeout).")
-    end
+	if bossReady then
+		print("Boss " .. bossData.Name .. " è apparso!")
+        
+        task.wait()
+        
+		TeleportAndFight(bossData)
+	else
+		print("Impossibile trovare " .. bossData.Name .. " entro il tempo limite. Passo al boss successivo.")
+	end
 end
  
 local function CheckAndFightBoss(bossData)
     if not bossData then return end
-    
-    -- CONTROLLO PRELIMINARE
-    if GetCurrentStrength() < bossData.MinStats then return end
+	
+	local questStarted = false
+	print("Inizio la missione per " .. bossData.Name)
 
-    local questStarted = false
-    -- print("Inizio la missione per " .. bossData.Name) -- Commentato per ridurre spam
+	if bossData.Request then 
+		bossData.Request() 
+	end
 
-    if bossData.Request then 
-        bossData.Request() 
-    end
+	local startTime = os.time()
+	local questTimeout = 30 
 
-    local startTime = os.time()
-    local questTimeout = 30 
-    local myName = game.Players.LocalPlayer.Name
-
-    while not questStarted do
-        -- 2. CONTROLLO REBIRTH MENTRE PRENDI LA QUEST
-        if GetCurrentStrength() < bossData.MinStats then
-            print("📉 Rebirth rilevato durante la quest di " .. bossData.Name .. ". Abort.")
-            return 
-        end
-
-        if os.time() - startTime > questTimeout then
-            humanoid.Health = 0 -- Reset se buggato
-            return 
-        end
+	while not questStarted do
+		if os.time() - startTime > questTimeout then
+			print("TIMEOUT MISSIONE: Impossibile ottenere la quest per " .. bossData.Name .. " in 30 secondi. Resetto il personaggio per sbloccare la situazione.")
+			humanoid.Health = 0
+			return -- Esce dalla funzione, il loop Main gestirà il respawn
+		end
+        -- Se il giocatore muore, esce dalla funzione
         if not (humanoid and humanoid.Health > 0) then return end
 
-        local bossNpc = SafeWaitForChild(bossData.QuestLocation, bossData.Name)
-        if bossNpc then
-            -- Ottieni i dati quest dinamicamente per evitare errori
-            local pData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(game.Players.LocalPlayer.UserId))
-            local currentQuest = pData and pData:FindFirstChild("Quest")
-            
-            if currentQuest then
-                while currentQuest.Value ~= bossData.Name do
-                    -- CONTROLLO REBIRTH NEL LOOP QUEST
-                    if GetCurrentStrength() < bossData.MinStats then return end
-                    
-                    if os.time() - startTime > questTimeout then break end
-                    if not (humanoid and humanoid.Health > 0) then return end
-                    
-                    humanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-                    Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
-                    task.wait() 
-                end
+		local bossNpc = SafeWaitForChild(bossData.QuestLocation, bossData.Name)
+		if bossNpc then
+			while playerData:WaitForChild("Quest").Value ~= bossData.Name do
+				if os.time() - startTime > questTimeout then break end
+                -- Se il giocatore muore, esce dal loop
+                if not (humanoid and humanoid.Health > 0) then return end
+				humanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+				Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+                task.wait() 
+			end
 
-                if currentQuest.Value == bossData.Name then
-                    questStarted = true
-                end
-            end
-        else
-            task.wait() 
-        end
-    end
+			if playerData:WaitForChild("Quest").Value == bossData.Name then
+				print("Azione missione invocata e confermata per " .. bossData.Name) 
+				questStarted = true
+			end
+		else
+			task.wait() 
+		end
+	end
 
-    if questStarted then
-        WaitForBossToSpawn(bossData, 60)
-    end
+	if questStarted then
+		WaitForBossToSpawn(bossData, 60)
+	end
 end
  
 -- ==============================================================================
--- GESTIONE RESPAWN
+-- NUOVA SEZIONE CENTRALE PER LA GESTIONE DEL RESPAWN (AFFIDABILE)
 -- ==============================================================================
 local function onCharacterAdded(newCharacter)
-    character = newCharacter
-    humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-    humanoid = character:WaitForChild("Humanoid")
+    print("Nuovo personaggio rilevato. Aggiornamento variabili globali...")
+	character = newCharacter
+	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+	humanoid = character:WaitForChild("Humanoid")
+ 
+	humanoid.Died:Connect(function()
+		print("EVENTO DIED RILEVATO! In attesa di respawn...")
+	end)
 end
  
 player.CharacterAdded:Connect(onCharacterAdded)
+ 
+-- Gestisce il caso in cui lo script viene eseguito dopo che il personaggio è già caricato
 if player.Character then
-    onCharacterAdded(player.Character)
+	onCharacterAdded(player.Character)
 else
+    -- Se il personaggio non è ancora pronto, attende la prima volta
+    print("In attesa del caricamento iniziale del personaggio...")
     onCharacterAdded(player.CharacterAdded:Wait())
 end
+-- ==============================================================================
 
+
+-- Funzione di supporto per trovare i dati di un boss per nome
 local function findBossData(bossName)
     for _, data in ipairs(AllBosses) do
-        if data.Name == bossName then return data end
+        if data.Name == bossName then
+            return data
+        end
     end
-    return nil
+    return nil -- Ritorna nil se non trovato
 end
 
 -- ==============================================================================
--- MAIN LOOP (Ottimizzato per Rebirth)
+-- FUNZIONE PRINCIPALE DI CONTROLLO (Main) CON LOGICA DI RITARDO
 -- ==============================================================================
 
-local villsPlanetReady = false 
-local toggleKakataBroccoli = true 
+local villsPlanetReady = false -- Flag per gestire il ritardo iniziale sul pianeta di Vills
+local toggleKakataBroccoli = true -- Flag per alternare tra Kakata e Broccoli (True = Kakata, False = Broccoli)
 
 local function Main()
+    -- Definisci le soglie di statistiche per i diversi stadi di farming
     local kakataThreshold = findBossData("SSJG Kakata").MinStats
     local nohagThreshold = findBossData("Nohag (Beast)").MinStats
 
     while true do
-        task.wait(0.5) -- Ridotto wait per reagire più velocemente
+        task.wait(1) -- Attesa di base per ogni ciclo
         
         if not (humanoid and humanoid.Health > 0) then
+            print("Il giocatore è morto o non valido. In attesa del respawn...")
             task.wait(1) 
             continue 
         end
 
-        -- Usiamo la funzione sicura per le stats
-        local currentStats = GetCurrentStrength()
+        local currentStats = statsz.Value
         local currentPlaceId = game.PlaceId
 
         --======================================================================
-        -- LOGICA PIANETA VILLS
+        -- LOGICA PER IL PIANETA DI VILLS (CON RITARDO INIZIALE)
         --======================================================================
         if currentPlaceId == 5151400895 then
+            -- Se questa è la prima volta che eseguiamo il ciclo su questo pianeta, attiva il ritardo
             if not villsPlanetReady then
-                print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi...")
+                print("Rilevato ingresso nel pianeta di Vills. Attendo 7 secondi per la stabilizzazione...")
                 task.wait(7)
                 villsPlanetReady = true
-                continue 
+                print("Stabilizzazione completata. Avvio del farm.")
+                continue -- Riavvia il ciclo per iniziare subito a farmare
             end
 
+            -- -- -- La logica di farming vera e propria parte solo dopo il ritardo -- -- --
             if currentStats >= nohagThreshold then
+                print("STATO FARMING [PIANETA DI VILLS]: Nohag")
                 local nohagData = findBossData("Nohag (Beast)")
                 if nohagData then CheckAndFightBoss(nohagData) end
             else
+                print("STATO PROGRESSIONE [PIANETA DI VILLS]")
                 local foughtBoss = false
                 for _, bossData in ipairs(AllBosses) do
                     if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
@@ -1594,45 +1599,55 @@ local function Main()
                         break
                     end
                 end
-                if not foughtBoss then task.wait(1) end
+                if not foughtBoss then
+                    print("Nessun boss adatto trovato sul pianeta di Vills per le statistiche attuali. Attendo...")
+                    task.wait(5)
+                end
             end
 
         --======================================================================
-        -- LOGICA PIANETA TERRA
+        -- LOGICA PER IL PIANETA TERRA (E RESET DEL FLAG)
         --======================================================================
         elseif currentPlaceId == 3311165597 then
-            villsPlanetReady = false 
+            villsPlanetReady = false -- Resetta il flag quando siamo sulla Terra
 
+            -- MODIFICA QUI: Se hai le stats per Kakata, alterna tra Kakata e Broccoli
             if currentStats >= kakataThreshold then
                 if toggleKakataBroccoli then
-                    print(">>> Loop: SSJG Kakata")
+                    print("STATO FARMING [TERRA]: Ciclo Loop -> SSJG Kakata")
                     local kakataData = findBossData("SSJG Kakata")
                     if kakataData then CheckAndFightBoss(kakataData) end
                 else
-                    print(">>> Loop: Broccoli")
+                    print("STATO FARMING [TERRA]: Ciclo Loop -> Broccoli")
                     local broccoliData = findBossData("Broccoli")
                     if broccoliData then CheckAndFightBoss(broccoliData) end
                 end
+                
+                -- Inverte la scelta per il prossimo giro (Se era vero diventa falso, e viceversa)
                 toggleKakataBroccoli = not toggleKakataBroccoli 
             else
-                -- Qui entra in gioco se fai Rebirth
+                -- Logica normale di progressione se NON hai ancora le stats per Kakata
+                print("STATO PROGRESSIONE [TERRA]")
                 local foughtBoss = false
                 for _, bossData in ipairs(AllBosses) do
-                    -- Controlla rigorosamente min e max
                     if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                        print("Target trovato post-rebirth/login: " .. bossData.Name)
                         CheckAndFightBoss(bossData)
                         foughtBoss = true
                         break 
                     end
                 end
                 if not foughtBoss then
-                    task.wait(1)
+                    print("Nessun boss adatto trovato sulla Terra per le statistiche attuali. Attendo...")
+                    task.wait(5)
                 end
             end
+        
+        --======================================================================
+        -- LOGICA PER ALTRI LUOGHI (E RESET DEL FLAG)
+        --======================================================================
         else
-            villsPlanetReady = false 
-            task.wait(1) 
+			villsPlanetReady = false -- Resetta il flag anche se siamo in un luogo sconosciuto
+			task.wait(1) 
         end
     end
 end
