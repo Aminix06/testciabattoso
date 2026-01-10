@@ -1,47 +1,103 @@
--- ==============================================================================
--- CONTROLLO DI ESECUZIONE UNICA (SINGLETON PATTERN)
--- ==============================================================================
--- Controlla se lo script è già in esecuzione per evitare duplicati.
-if game:GetService("CoreGui"):FindFirstChild("__MAIN_SCRIPT_RUNNING__") then
-    print("Avviso: Un'istanza dello script principale è già in esecuzione. La nuova esecuzione è stata bloccata.")
-    return -- Interrompe l'esecuzione di questo script.
+if getgenv().ScriptAlreadyRunning then
+	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
+	return
 end
 
--- Se non è in esecuzione, crea un "flag" per segnalare che ora lo è.
-local executionFlag = Instance.new("ScreenGui")
-executionFlag.Name = "__MAIN_SCRIPT_RUNNING__"
-executionFlag.Parent = game:GetService("CoreGui")
-
--- ==============================================================================
--- INIZIO DEL TUO SCRIPT ORIGINALE
--- ==============================================================================
-
+getgenv().ScriptAlreadyRunning = true
 
 --==============================================================================
 -- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
 --==============================================================================
-local Players = game:GetService("Players")
-local localPlayer = Players.LocalPlayer
-
--- 1. Controllo Immediato: Eseguito una sola volta all'avvio dello script.
-if #Players:GetPlayers() > 1 then
-    localPlayer:Kick("Kick: Il server non è vuoto. Lo script non può essere eseguito.")
-    return -- Interrompe l'esecuzione di tutto lo script se il server non è vuoto.
-end
-
--- 2. Controllo Continuo: Inizia a monitorare in background.
 task.spawn(function()
-    while task.wait() do -- task.wait() controlla ogni frame, il ritardo più basso possibile.
-        if #Players:GetPlayers() > 1 then
-            localPlayer:Kick("Kick: Un altro giocatore è entrato nel server.")
-            break -- Esce dal loop dopo il kick.
-        end
-    end
+	repeat task.wait() until game:IsLoaded()
+	
+	local HttpService = game:GetService("HttpService")
+	local TeleportService = game:GetService("TeleportService")
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	
+	-- Verifica API per vedere se il server è Pubblico (metodo sicuro per Executor)
+	local function IsPublicServer()
+		local jobId = game.JobId
+		local placeId = game.PlaceId
+		local cursor = ""
+		local isPublic = false
+		
+		-- Loop attraverso la lista dei server pubblici
+		while true do
+			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+			
+			if not requestFunc then
+				warn("Executor non supporta request. Impossibile verificare server pubblico.")
+				return true -- Nel dubbio assumiamo pubblico per sicurezza
+			end
+
+			local success, response = pcall(function()
+				return requestFunc({Url = url, Method = "GET"})
+			end)
+
+			if not success or not response or response.StatusCode ~= 200 then
+				task.wait(1) -- Riprova se fallisce
+			else
+				local data = HttpService:JSONDecode(response.Body)
+				for _, server in ipairs(data.data) do
+					if server.id == jobId then
+						return true -- Trovato nella lista pubblica!
+					end
+				end
+				cursor = data.nextPageCursor
+				if not cursor then break end
+			end
+			task.wait(0.1)
+		end
+		return false -- Non trovato nella lista pubblica -> È PRIVATO
+	end
+
+	print("🔍 Analisi tipo di server in corso...")
+	local publico = IsPublicServer()
+
+	if publico then
+		-- CASO 1: SEI IN PUBBLICA -> KICK
+		LocalPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+	else
+		-- CASO 2: SEI IN PRIVATA
+		print("🔒 Server Privato confermato.")
+		
+		-- Controlliamo se ci sono intrusi
+		local function CheckIntruders()
+			if #Players:GetPlayers() > 1 then
+				warn("⚠️ Intruso rilevato nel server privato! Cambio mondo...")
+				
+				-- Funzione Queue per ricaricare lo script dopo il TP
+				local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+				if queue_on_teleport then
+					queue_on_teleport([[
+						repeat task.wait() until game:IsLoaded()
+						loadstring(game:HttpGet("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/autoKakataEgo"))()
+					]])
+				end
+
+				-- Logica TP Vills <-> Terra
+				local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+				if game.PlaceId == 3311165597 then -- Terra
+					TPEvent:InvokeServer("Vills Planet")
+				elseif game.PlaceId == 5151400895 then -- Vills
+					TPEvent:InvokeServer("Earth")
+				end
+			end
+		end
+
+		-- Controllo iniziale
+		CheckIntruders()
+
+		-- Controllo continuo (se entra qualcuno dopo)
+		Players.PlayerAdded:Connect(function()
+			CheckIntruders()
+		end)
+	end
 end)
-
--- Il resto dello script verrà eseguito solo se il controllo iniziale ha successo.
---==============================================================================
-
 
 local function CheckToGo()
 	local player = game.Players.LocalPlayer
@@ -1854,7 +1910,7 @@ local function CreateTopTimerGUI()
     TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
     TimerTextLabel.BackgroundTransparency = 1
     TimerTextLabel.Font = Enum.Font.FredokaOne
-    TimerTextLabel.Text = "T.O.P in: 300"
+    TimerTextLabel.Text = "T.O.P in: 1000"
     TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TimerTextLabel.TextScaled = true
     TimerTextLabel.TextSize = 14
@@ -1885,16 +1941,16 @@ local function EarthToTopTimer()
             if timerEndTime == nil then
                 timerEndTime = os.time() + TIMER_DURATION
                 TopTimerGui.Enabled = true
-                print("TIMER T.O.P ATTIVATO: Destinazione T.O.P tra 5 minuti.")
+                print("TIMER Vills ATTIVATO: Destinazione T.O.P tra 5 minuti.")
             end
 
             local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TopTimerLabel.Text = "Go to T.O.P in: " .. timeLeft
+            TopTimerLabel.Text = "Go to Vills in: " .. timeLeft
 
             -- SE IL TIMER SCADE: SPAM TELETRASPORTO
             if timeLeft <= 0 then
                 TopTimerLabel.Text = "TELEPORTING..."
-                print("TIMER T.O.P SCADUTO: Inizio SPAM del teletrasporto...")
+                print("TIMER Vills SCADUTO: Inizio SPAM del teletrasporto...")
                 
                 local args = {[1] = "Vills Planet"}
                 
@@ -1911,7 +1967,7 @@ local function EarthToTopTimer()
         else
             -- Resetta se non sei sulla terra
             if timerEndTime ~= nil then
-                print("TIMER T.O.P RESETTATO: Non sei più sulla Terra.")
+                print("TIMER Vills RESETTATO: Non sei più sulla Terra.")
                 timerEndTime = nil
                 TopTimerGui.Enabled = false
             end
@@ -1920,3 +1976,14 @@ local function EarthToTopTimer()
 end
 
 task.spawn(EarthToTopTimer)
+
+task.spawn(function()
+    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+
+    if queue_on_teleport then
+        queue_on_teleport([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/autociabattoso"))()
+        ]])
+    end
+end)
