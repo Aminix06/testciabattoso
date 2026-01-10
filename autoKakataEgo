@@ -1,4 +1,4 @@
---[[if getgenv().ScriptAlreadyRunning then
+if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
 end
@@ -72,7 +72,7 @@ task.spawn(function()
 		
 		-- Controlliamo se ci sono intrusi
 		local function CheckIntruders()
-			if #Players:GetPlayers() > 2 then
+			if #Players:GetPlayers() > 1 then
 				warn("⚠️ Intruso rilevato nel server privato! Cambio mondo...")
 				
 				-- Funzione Queue per ricaricare lo script dopo il TP
@@ -1363,4 +1363,3 @@ task.spawn(function()
         ]])
     end
 end)
-]]
