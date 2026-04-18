@@ -55,7 +55,7 @@ local function CreateToggleButton()
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0, 220, 0, 55)
-    frame.Position = UDim2.new(0.5, -110, 0, 100) -- Spostato più in basso per non coprire Vita/Energy
+    frame.Position = UDim2.new(0.5, -110, 0, 100)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.Active = true
     frame.Parent = sg
@@ -78,7 +78,6 @@ local function CreateToggleButton()
     btn.TextScaled = true
     btn.Parent = frame
 
-    -- Sistema di Dragging Custom funzionante al 100%
     local dragging, dragInput, mousePos, framePos
     frame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -104,10 +103,8 @@ local function CreateToggleButton()
         end
     end)
 
-    -- Logica Click + Annullamento Switch
     btn.MouseButton1Click:Connect(function()
         if getgenv().IsSwitching then
-            -- Se sta già switchando, ANNULLA
             getgenv().CancelSwitch = true
             return
         end
@@ -120,7 +117,6 @@ local function CreateToggleButton()
         task.spawn(function()
             for i = 20, 1, -1 do
                 if getgenv().CancelSwitch then
-                    -- Switch Annullato dall'utente
                     getgenv().IsSwitching = false
                     btn.Text = "MODE: FARM " .. getgenv().FarmTarget
                     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -131,7 +127,6 @@ local function CreateToggleButton()
                 task.wait(1)
             end
             
-            -- Se il timer finisce ed è ancora valido, esegui il TP
             if not getgenv().CancelSwitch then
                 getgenv().FarmTarget = nextTarget
                 SaveConfig()
@@ -156,7 +151,7 @@ end
 CreateToggleButton()
 
 -- ==============================================================================
--- QUEUE ON TELEPORT (LINK UNICO TURBOAUTO)
+-- QUEUE ON TELEPORT
 -- ==============================================================================
 task.spawn(function()
     local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
@@ -169,7 +164,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (Kick Pubblica / TP Privata / Auto-Routing)
+-- NUOVO SISTEMA INTELLIGENTE
 -- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -198,26 +193,20 @@ task.spawn(function()
 		return false
 	end
 
-	local publico = IsPublicServer()
-
-	if publico then
+	if IsPublicServer() then
 		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
 		print("🔒 Server Privato confermato.")
-		
         local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
 		
         if not getgenv().IsSwitching then
             local pId = game.PlaceId
             if getgenv().FarmTarget == "EARTH" and pId ~= 3311165597 then
-                print("Routing: Devo essere su Terra, mi ci teletrasporto.")
                 TPEvent:InvokeServer("Earth")
             elseif getgenv().FarmTarget == "TOP" and pId ~= 114014249462644 then
                 if pId == 5151400895 then
-                    print("Routing: Da Vills vado alla Terra per poi andare su TOP.")
                     TPEvent:InvokeServer("Earth")
                 else
-                    print("Routing: Devo essere su TOP, mi ci teletrasporto.")
                     TPEvent:InvokeServer("T.O.P")
                 end
             end
@@ -225,7 +214,6 @@ task.spawn(function()
 
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
-				warn("⚠️ Intruso rilevato! Cambio mondo per fuggire...")
 				if game.PlaceId == 114014249462644 then 
 					TPEvent:InvokeServer("Earth")
 				else 
@@ -298,7 +286,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- SISTEMA DI SICUREZZA ORARIA (CRASH 07:00 - 08:59)
+-- CRASH ORARIO (07:00 - 08:59)
 -- ==============================================================================
 task.spawn(function()
     local TARGET_ID = 1970233075
@@ -327,7 +315,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- GUI SETUP (STATS & HEALTH/ENERGY RIMOSSE ORIGINALI)
+-- GUI SETUP (STATS & HEALTH/ENERGY)
 -- ==============================================================================
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
@@ -869,17 +857,19 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC (ADATTIVO EARTH/TOP)
+-- AUTO TRANSFORMATION LOGIC (CORRETTA)
 -- ==============================================================================
 task.spawn(function()
-    local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
-    if not folderData then return end
-    local equipRemote = ReplicatedStorage.Package.Events.equipskill
-    
-    local earthTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Fa")
-    local topTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Hehehe")
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local equipRemote = Events:WaitForChild("equipskill")
 
     local transformaciones = {
+        {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000},
+        {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000},
+        {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000},
         {name = "God of Destruction", forza = 30000000},
         {name = "Jiren Ultra Instinct", forza = 14000000},
         {name = "Mastered Ultra Instinct", forza = 14000000},
@@ -920,25 +910,34 @@ task.spawn(function()
     while true do
         if not getgenv().IsSwitching then
             pcall(function()
-                local strength = folderData.Strength.Value
-                local status = getStatusFolder()
-                if status then
-                    local selected = status:FindFirstChild("SelectedTransformation")
-                    local actual = status:FindFirstChild("Transformation")
-                    for _, v in ipairs(transformaciones) do
-                        if strength >= v.forza then
-                            if selected.Value ~= v.name then
-                                equipRemote:InvokeServer(v.name)
-                                task.wait(0.3)
-                            end
-                            if selected.Value == v.name and actual.Value ~= selected.Value then
-                                if game.PlaceId == 114014249462644 and topTransformRemote then
-                                    topTransformRemote:InvokeServer()
-                                elseif game.PlaceId == 3311165597 and earthTransformRemote then
-                                    earthTransformRemote:InvokeServer()
+                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                
+                if folderData then
+                    local strength = folderData.Strength.Value
+                    local status = getStatusFolder()
+                    
+                    if status then
+                        local selected = status:FindFirstChild("SelectedTransformation")
+                        local actual = status:FindFirstChild("Transformation")
+
+                        for _, v in ipairs(transformaciones) do
+                            if strength >= v.forza then
+                                if selected.Value ~= v.name then
+                                    equipRemote:InvokeServer(v.name)
+                                    task.wait(0.3)
+                                end
+
+                                if selected.Value == v.name then
+                                    if actual.Value ~= selected.Value then
+                                        if game.PlaceId == 114014249462644 then
+                                            Events.Hehehe:InvokeServer()
+                                        elseif game.PlaceId == 3311165597 then
+                                            Events.Fa:InvokeServer()
+                                        end
+                                    end
+                                    break 
                                 end
                             end
-                            break 
                         end
                     end
                 end
