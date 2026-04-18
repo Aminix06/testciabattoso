@@ -97,14 +97,31 @@ task.spawn(function()
 		-- Controllo iniziale
 		CheckIntruders()
 
-		-- AUTO-START DEL GIOCO (Bypass Menù sulla Terra se il server è sicuro)
+		-- AUTO-START DEL GIOCO ROBUSTO (Bypass Menù sulla Terra se il server è sicuro)
 		if #Players:GetPlayers() == 1 and game.PlaceId == 3311165597 then
 			task.spawn(function()
-				task.wait(1) -- Piccolo ritardo per assicurarci che i Remote siano caricati
-				pcall(function()
-					print("▶️ Nessun intruso! Avvio automatico del gioco (Invoke Start)...")
-					ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start"):InvokeServer()
-				end)
+				print("▶️ Nessun intruso! Avvio automatico del gioco in corso...")
+				local playerGui = LocalPlayer:WaitForChild("PlayerGui", 10)
+				if playerGui then
+					local mainGui = playerGui:WaitForChild("Main", 10)
+					if mainGui then
+						task.wait()
+						ReplicatedStorage.Package.Events.Start:InvokeServer()
+						task.wait()
+						ReplicatedStorage.Package.Events.Start:InvokeServer()
+						task.wait()
+
+						local bruhButton = mainGui:FindFirstChild("bruh")
+						if bruhButton then
+							bruhButton.Disabled = true
+							bruhButton.Disabled = false
+						end
+
+						task.wait()
+						ReplicatedStorage.Package.Events.Start:InvokeServer()
+						print("✅ Start premuto con successo!")
+					end
+				end
 			end)
 		end
 
@@ -760,7 +777,7 @@ local function createGUI()
 	Converted["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
 	Converted["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
 	Converted["_Sped"].Name = "Sped"
-	Converted["_Sped"].Parent = Converted["_Fortnait"]
+	Converted["_Fortnait"]
 
 	Converted["_UIStroke4"].Parent = Converted["_Sped"]
 
