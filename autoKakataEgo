@@ -147,6 +147,11 @@ wait(.5)
 -- ==============================================================================
 
 task.spawn(function()
+
+	if game.PlaceId ~= 3311165597 then
+		return
+	end
+
 	local HttpService = game:GetService("HttpService")
 	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
 
