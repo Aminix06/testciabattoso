@@ -11,6 +11,7 @@ local localPlayer = Players.LocalPlayer
 local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 
 -- ==============================================================================
 -- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON)
@@ -39,10 +40,11 @@ local function SaveConfig()
     end
 end
 
-getgenv().IsSwitching = false -- Variabile per stoppare azioni durante il cooldown di switch
+getgenv().IsSwitching = false 
+getgenv().CancelSwitch = false
 
 -- ==============================================================================
--- 🔘 GUI BOTTONE SWITCH (TRAScinabile)
+-- 🔘 GUI BOTTONE SWITCH (Draggable Custom + Cooldown Annullabile)
 -- ==============================================================================
 local function CreateToggleButton()
     local sg = Instance.new("ScreenGui")
@@ -52,11 +54,10 @@ local function CreateToggleButton()
     sg.DisplayOrder = 1000
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 200, 0, 50)
-    frame.Position = UDim2.new(0.5, -100, 0, 20)
+    frame.Size = UDim2.new(0, 220, 0, 55)
+    frame.Position = UDim2.new(0.5, -110, 0, 100) -- Spostato più in basso per non coprire Vita/Energy
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.Active = true
-    frame.Draggable = true
     frame.Parent = sg
 
     local corner = Instance.new("UICorner")
@@ -77,39 +78,77 @@ local function CreateToggleButton()
     btn.TextScaled = true
     btn.Parent = frame
 
-    btn.MouseButton1Click:Connect(function()
-        if getgenv().IsSwitching then return end
-        getgenv().IsSwitching = true
-
-        -- Inverti bersaglio
-        if getgenv().FarmTarget == "EARTH" then
-            getgenv().FarmTarget = "TOP"
-        else
-            getgenv().FarmTarget = "EARTH"
+    -- Sistema di Dragging Custom funzionante al 100%
+    local dragging, dragInput, mousePos, framePos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            mousePos = input.Position
+            framePos = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
         end
-        SaveConfig()
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
 
-        -- Cooldown di 20 secondi
+    -- Logica Click + Annullamento Switch
+    btn.MouseButton1Click:Connect(function()
+        if getgenv().IsSwitching then
+            -- Se sta già switchando, ANNULLA
+            getgenv().CancelSwitch = true
+            return
+        end
+
+        getgenv().IsSwitching = true
+        getgenv().CancelSwitch = false
+
+        local nextTarget = (getgenv().FarmTarget == "EARTH") and "TOP" or "EARTH"
+
         task.spawn(function()
             for i = 20, 1, -1 do
-                btn.Text = "SWITCH A " .. getgenv().FarmTarget .. " IN " .. i .. "s"
+                if getgenv().CancelSwitch then
+                    -- Switch Annullato dall'utente
+                    getgenv().IsSwitching = false
+                    btn.Text = "MODE: FARM " .. getgenv().FarmTarget
+                    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    return
+                end
+                btn.Text = "SWITCH A " .. nextTarget .. " IN " .. i .. "s\n(CLICCA PER ANNULLARE)"
                 btn.TextColor3 = Color3.fromRGB(255, 100, 100)
                 task.wait(1)
             end
             
-            btn.Text = "TELETRASPORTO..."
-            local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-            local PlaceId = game.PlaceId
+            -- Se il timer finisce ed è ancora valido, esegui il TP
+            if not getgenv().CancelSwitch then
+                getgenv().FarmTarget = nextTarget
+                SaveConfig()
+                btn.Text = "TELETRASPORTO..."
+                
+                local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+                local PlaceId = game.PlaceId
 
-            -- Logica TP Sicura
-            if getgenv().FarmTarget == "TOP" then
-                if PlaceId == 5151400895 then -- Da Vills devi passare per la Terra
+                if getgenv().FarmTarget == "TOP" then
+                    if PlaceId == 5151400895 then
+                        TPEvent:InvokeServer("Earth")
+                    else
+                        TPEvent:InvokeServer("T.O.P")
+                    end
+                elseif getgenv().FarmTarget == "EARTH" then
                     TPEvent:InvokeServer("Earth")
-                else
-                    TPEvent:InvokeServer("T.O.P")
                 end
-            elseif getgenv().FarmTarget == "EARTH" then
-                TPEvent:InvokeServer("Earth")
             end
         end)
     end)
@@ -168,14 +207,13 @@ task.spawn(function()
 		
         local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
 		
-        -- Controllo Routing Iniziale (Se sei nella mappa sbagliata rispetto al salvataggio)
         if not getgenv().IsSwitching then
             local pId = game.PlaceId
             if getgenv().FarmTarget == "EARTH" and pId ~= 3311165597 then
                 print("Routing: Devo essere su Terra, mi ci teletrasporto.")
                 TPEvent:InvokeServer("Earth")
             elseif getgenv().FarmTarget == "TOP" and pId ~= 114014249462644 then
-                if pId == 5151400895 then -- Se Vills, va alla terra e poi TOP al riavvio
+                if pId == 5151400895 then
                     print("Routing: Da Vills vado alla Terra per poi andare su TOP.")
                     TPEvent:InvokeServer("Earth")
                 else
@@ -185,13 +223,12 @@ task.spawn(function()
             end
         end
 
-		-- Sistema Anti-Intruso (Fuga T.O.P <-> Earth)
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
 				warn("⚠️ Intruso rilevato! Cambio mondo per fuggire...")
-				if game.PlaceId == 114014249462644 then -- Su TOP -> Scappa su Terra
+				if game.PlaceId == 114014249462644 then 
 					TPEvent:InvokeServer("Earth")
-				else -- Su Terra o Vills -> Scappa su TOP
+				else 
 					TPEvent:InvokeServer("T.O.P")
 				end
 			end
@@ -230,7 +267,6 @@ wait(.5)
 -- WEBHOOK
 -- ==============================================================================
 task.spawn(function()
-    -- Modificato per mandare webhook specificando la modalità attuale
 	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
 	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
 	if not playerStats then return end
@@ -293,7 +329,6 @@ end)
 -- ==============================================================================
 -- GUI SETUP (STATS & HEALTH/ENERGY RIMOSSE ORIGINALI)
 -- ==============================================================================
--- (La tua lunghissima GUI per le stats rimane intatta qui)
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
 	["_Frame"] = Instance.new("Frame");
@@ -530,10 +565,247 @@ RunService.RenderStepped:Connect(function()
 	Converted["_Uigraddd"].Rotation += 2
 end)
 
--- (GUI STATS LATERALE)
+-- ==============================================================================
+-- GUI MENU STATISTICHE LATERALI
+-- ==============================================================================
 local function createGUI()
-    -- *Ometto la definizione ripetitiva della GUI stat laterale di Fortnite per brevità, 
-    --  presumo che tu abbia quella parte intatta, se serve rimettila qui*
+	local ConvertedStats = {
+		["_AUTOFARM"] = Instance.new("ScreenGui");
+		["_Frame"] = Instance.new("Frame");
+		["_UICorner"] = Instance.new("UICorner");
+		["_UIStroke"] = Instance.new("UIStroke");
+		["_UIGradient"] = Instance.new("UIGradient");
+		["_UIGradient1"] = Instance.new("UIGradient");
+		["_ImageLabel"] = Instance.new("ImageLabel");
+		["_UICorner1"] = Instance.new("UICorner");
+		["_TextLabel"] = Instance.new("TextLabel");
+		["_UIStroke1"] = Instance.new("UIStroke");
+		["_Fortnait"] = Instance.new("ImageLabel");
+		["_Stren"] = Instance.new("TextLabel");
+		["_UIStroke2"] = Instance.new("UIStroke");
+		["_STRENGTHNUMBER"] = Instance.new("TextLabel");
+		["_UIStroke3"] = Instance.new("UIStroke");
+		["_Sped"] = Instance.new("TextLabel");
+		["_UIStroke4"] = Instance.new("UIStroke");
+		["_SPEEDNUMBER"] = Instance.new("TextLabel");
+		["_UIStroke5"] = Instance.new("UIStroke");
+		["_DEF"] = Instance.new("TextLabel");
+		["_UIStroke6"] = Instance.new("UIStroke");
+		["_DEFENSENUMBER"] = Instance.new("TextLabel");
+		["_UIStroke7"] = Instance.new("UIStroke");
+		["_ENERGY"] = Instance.new("TextLabel");
+		["_UIStroke8"] = Instance.new("UIStroke");
+		["_ENERGYNUMBER"] = Instance.new("TextLabel");
+		["_UIStroke9"] = Instance.new("UIStroke");
+		["_sup"] = Instance.new("ImageLabel");
+		["_UICorner2"] = Instance.new("UICorner");
+		["_DEF1"] = Instance.new("TextLabel");
+		["_UIStroke10"] = Instance.new("UIStroke");
+		["_REBS"] = Instance.new("TextLabel");
+		["_UIStroke11"] = Instance.new("UIStroke");
+		["_REBSNUMBER"] = Instance.new("TextLabel");
+		["_UIStroke12"] = Instance.new("UIStroke");
+	}
+
+	ConvertedStats["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ConvertedStats["_AUTOFARM"].Name = "AUTOFARM"
+	ConvertedStats["_AUTOFARM"].Parent = game:GetService("CoreGui")
+
+	ConvertedStats["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+	ConvertedStats["_Frame"].BorderSizePixel = 0
+	ConvertedStats["_Frame"].Position = UDim2.new(0.0210622549, 0, 0.260050237, 0)
+	ConvertedStats["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
+	ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
+
+	ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_UIStroke"].Thickness = 4
+	ConvertedStats["_UIStroke"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_UIGradient"].Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+	}
+	ConvertedStats["_UIGradient"].Parent = ConvertedStats["_UIStroke"]
+
+	ConvertedStats["_UIGradient1"].Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 153, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 247))
+	}
+	ConvertedStats["_UIGradient1"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(0, 123, 255)
+	ConvertedStats["_ImageLabel"].Position = UDim2.new(0.0438596494, 0, 0.020833334, 0)
+	ConvertedStats["_ImageLabel"].Size = UDim2.new(0.912280679, 0, 0.125628158, 0)
+	ConvertedStats["_ImageLabel"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_UICorner1"].Parent = ConvertedStats["_ImageLabel"]
+
+	ConvertedStats["_TextLabel"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_TextLabel"].Text = "By Ciab"
+	ConvertedStats["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_TextLabel"].TextScaled = true
+	ConvertedStats["_TextLabel"].BackgroundTransparency = 1
+	ConvertedStats["_TextLabel"].Position = UDim2.new(1.46719131e-07, 0, 0.118450202, 0)
+	ConvertedStats["_TextLabel"].Size = UDim2.new(0.999999881, 0, 0.749835074, 0)
+	ConvertedStats["_TextLabel"].Parent = ConvertedStats["_ImageLabel"]
+	ConvertedStats["_UIStroke1"].Parent = ConvertedStats["_TextLabel"]
+
+	ConvertedStats["_Fortnait"].Image = "rbxassetid://17207994014"
+	ConvertedStats["_Fortnait"].Position = UDim2.new(0.0438596494, 0, 0.196428567, 0)
+	ConvertedStats["_Fortnait"].Size = UDim2.new(0.912280679, 0, 0.774437666, 0)
+	ConvertedStats["_Fortnait"].BackgroundTransparency = 1
+	ConvertedStats["_Fortnait"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_Stren"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_Stren"].Text = "STRENGTH:"
+	ConvertedStats["_Stren"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Stren"].TextScaled = true
+	ConvertedStats["_Stren"].BackgroundTransparency = 1
+	ConvertedStats["_Stren"].Position = UDim2.new(0.0257487558, 0, 0.0420393385, 0)
+	ConvertedStats["_Stren"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_Stren"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke2"].Parent = ConvertedStats["_Stren"]
+
+	ConvertedStats["_STRENGTHNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_STRENGTHNUMBER"].Text = "nil"
+	ConvertedStats["_STRENGTHNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_STRENGTHNUMBER"].TextScaled = true
+	ConvertedStats["_STRENGTHNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_STRENGTHNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_STRENGTHNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_STRENGTHNUMBER"].Parent = ConvertedStats["_Stren"]
+	ConvertedStats["_UIStroke3"].Parent = ConvertedStats["_STRENGTHNUMBER"]
+
+	ConvertedStats["_Sped"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_Sped"].Text = "SPEED:"
+	ConvertedStats["_Sped"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Sped"].TextScaled = true
+	ConvertedStats["_Sped"].BackgroundTransparency = 1
+	ConvertedStats["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
+	ConvertedStats["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_Sped"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke4"].Parent = ConvertedStats["_Sped"]
+
+	ConvertedStats["_SPEEDNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_SPEEDNUMBER"].Text = "nil"
+	ConvertedStats["_SPEEDNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_SPEEDNUMBER"].TextScaled = true
+	ConvertedStats["_SPEEDNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_SPEEDNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_SPEEDNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_SPEEDNUMBER"].Parent = ConvertedStats["_Sped"]
+	ConvertedStats["_UIStroke5"].Parent = ConvertedStats["_SPEEDNUMBER"]
+
+	ConvertedStats["_DEF"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEF"].Text = "DEFENSE:"
+	ConvertedStats["_DEF"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEF"].TextScaled = true
+	ConvertedStats["_DEF"].BackgroundTransparency = 1
+	ConvertedStats["_DEF"].Position = UDim2.new(0.0257487558, 0, 0.38976115, 0)
+	ConvertedStats["_DEF"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_DEF"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke6"].Parent = ConvertedStats["_DEF"]
+
+	ConvertedStats["_DEFENSENUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEFENSENUMBER"].Text = "nil"
+	ConvertedStats["_DEFENSENUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEFENSENUMBER"].TextScaled = true
+	ConvertedStats["_DEFENSENUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_DEFENSENUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_DEFENSENUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_DEFENSENUMBER"].Parent = ConvertedStats["_DEF"]
+	ConvertedStats["_UIStroke7"].Parent = ConvertedStats["_DEFENSENUMBER"]
+
+	ConvertedStats["_ENERGY"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_ENERGY"].Text = "ENERGY:"
+	ConvertedStats["_ENERGY"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_ENERGY"].TextScaled = true
+	ConvertedStats["_ENERGY"].BackgroundTransparency = 1
+	ConvertedStats["_ENERGY"].Position = UDim2.new(0.0257487558, 0, 0.552013576, 0)
+	ConvertedStats["_ENERGY"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_ENERGY"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke8"].Parent = ConvertedStats["_ENERGY"]
+
+	ConvertedStats["_ENERGYNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_ENERGYNUMBER"].Text = "nil"
+	ConvertedStats["_ENERGYNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_ENERGYNUMBER"].TextScaled = true
+	ConvertedStats["_ENERGYNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_ENERGYNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_ENERGYNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_ENERGYNUMBER"].Parent = ConvertedStats["_ENERGY"]
+	ConvertedStats["_UIStroke9"].Parent = ConvertedStats["_ENERGYNUMBER"]
+
+	ConvertedStats["_sup"].BackgroundColor3 = Color3.fromRGB(0, 255, 204)
+	ConvertedStats["_sup"].Position = UDim2.new(-0.0260067098, 0, 0.872107267, 0)
+	ConvertedStats["_sup"].Size = UDim2.new(1.05175519, 0, 0.127892867, 0)
+	ConvertedStats["_sup"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UICorner2"].Parent = ConvertedStats["_sup"]
+
+	ConvertedStats["_DEF1"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEF1"].Text = "sup " .. localPlayer.DisplayName
+	ConvertedStats["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEF1"].TextScaled = true
+	ConvertedStats["_DEF1"].BackgroundTransparency = 1
+	ConvertedStats["_DEF1"].Position = UDim2.new(0, 0, 0.105724856, 0)
+	ConvertedStats["_DEF1"].Size = UDim2.new(1, 0, 0.742611945, 0)
+	ConvertedStats["_DEF1"].Parent = ConvertedStats["_sup"]
+	ConvertedStats["_UIStroke10"].Parent = ConvertedStats["_DEF1"]
+
+	ConvertedStats["_REBS"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_REBS"].Text = "REBIRTHS"
+	ConvertedStats["_REBS"].TextColor3 = Color3.fromRGB(255, 234, 0)
+	ConvertedStats["_REBS"].TextScaled = true
+	ConvertedStats["_REBS"].BackgroundTransparency = 1
+	ConvertedStats["_REBS"].Position = UDim2.new(0.0257487558, 0, 0.706855357, 0)
+	ConvertedStats["_REBS"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_REBS"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke11"].Parent = ConvertedStats["_REBS"]
+
+	ConvertedStats["_REBSNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_REBSNUMBER"].Text = "nil"
+	ConvertedStats["_REBSNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_REBSNUMBER"].TextScaled = true
+	ConvertedStats["_REBSNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_REBSNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_REBSNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_REBSNUMBER"].Parent = ConvertedStats["_REBS"]
+	ConvertedStats["_UIStroke12"].Parent = ConvertedStats["_REBSNUMBER"]
+
+	local playerid = localPlayer.UserId
+	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(playerid))
+
+	local function formatNumberForTheStats(number)
+		if number >= 1_000_000_000_000_000 then return string.format("%.2fQd", number / 1_000_000_000_000_000) 
+		elseif number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000) 
+		elseif number >= 1_000_000_000 then return string.format("%.2fB", number / 1_000_000_000)
+		elseif number >= 1_000_000 then return string.format("%.2fM", number / 1_000_000)
+		elseif number >= 1_000 then return string.format("%.2fK", number / 1_000)
+		else return tostring(number) end
+	end
+
+	local function updateStats()
+		ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
+		ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
+		ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
+		ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
+		ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
+	end
+	updateStats()
+
+	playerStats.Strength.Changed:Connect(updateStats)
+	playerStats.Defense.Changed:Connect(updateStats)
+	playerStats.Energy.Changed:Connect(updateStats)
+	playerStats.Speed.Changed:Connect(updateStats)
+
+	RunService.RenderStepped:Connect(function()
+		ConvertedStats["_UIGradient"].Rotation += 2
+		ConvertedStats["_UIGradient1"].Rotation += 2
+	end)
 end
 createGUI()
 localPlayer.CharacterAdded:Connect(createGUI)
@@ -597,7 +869,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION & ATTACK LOGIC (ADATTIVO EARTH/TOP)
+-- AUTO TRANSFORMATION LOGIC (ADATTIVO EARTH/TOP)
 -- ==============================================================================
 task.spawn(function()
     local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
@@ -608,11 +880,6 @@ task.spawn(function()
     local topTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Hehehe")
 
     local transformaciones = {
-        {name = "LBSSJ4", forza = 100000000},
-        {name = "SSJB4", forza = 50000000},
-        {name = "SSJR3", forza = 50000000},
-        {name = "True God of Creation", forza = 30000000},
-        {name = "True God of Destruction", forza = 30000000},
         {name = "God of Creation", forza = 30000000},
         {name = "God of Destruction", forza = 30000000},
         {name = "Jiren Ultra Instinct", forza = 14000000},
@@ -699,7 +966,6 @@ task.spawn(function ()
         local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
         local camera = workspace.CurrentCamera
         
-        -- Sceglie il remote d'attacco in base al PlaceId
         local attackRemote
         if game.PlaceId == 114014249462644 then
             attackRemote = Events:WaitForChild("letsplayagame")
@@ -708,7 +974,7 @@ task.spawn(function ()
         end
 
         while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
-            if getgenv().IsSwitching then break end -- Ferma il farm se sta switchando server
+            if getgenv().IsSwitching then break end 
             if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then break end
 
             pcall(function()
@@ -722,7 +988,6 @@ task.spawn(function ()
                     coroutine.wrap(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                    -- Sostituito Spirit Barrage con Timeskip Domain anche su TOP!
                     coroutine.wrap(function() attackRemote:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
                 end)
@@ -785,12 +1050,11 @@ task.spawn(function()
     TimerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
     TimerLabel.TextScaled = true
 
-    -- Solo se si trova nella mappa corretta per il farm avvia il timer
 	if (getgenv().FarmTarget == "EARTH" and PlaceId == 3311165597) or (getgenv().FarmTarget == "TOP" and PlaceId == 114014249462644) then
 		local timeLeft = 6000
 
 		while timeLeft > 0 do
-            if getgenv().IsSwitching then TimerScreenGui:Destroy() return end -- Annulla timer se switchi a mano
+            if getgenv().IsSwitching then TimerScreenGui:Destroy() return end
 			TimerLabel.Text = "Farm " .. getgenv().FarmTarget .. ". TP Refresh in: " .. timeLeft .. "s"
 			timeLeft = timeLeft - 1
 			task.wait(1)
@@ -798,7 +1062,6 @@ task.spawn(function()
 
 		TimerLabel.Text = "Refresh Server in corso..."
         
-        -- TP Invertito per refreshare il server
         if getgenv().FarmTarget == "EARTH" then
             TPEvent:InvokeServer("T.O.P") 
         else
