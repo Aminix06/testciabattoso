@@ -1,1 +1,808 @@
+--- START OF FILE Paste ---
 
+if getgenv().ScriptAlreadyRunning then
+	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
+	return
+end
+getgenv().ScriptAlreadyRunning = true
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+
+-- ==============================================================================
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON)
+-- ==============================================================================
+local ConfigName = "CiabTurboConfig.json"
+
+if isfile and isfile(ConfigName) then
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(ConfigName))
+    end)
+    if success and data and data.FarmTarget then
+        getgenv().FarmTarget = data.FarmTarget
+    else
+        getgenv().FarmTarget = "EARTH" -- Default se corrotto
+    end
+else
+    getgenv().FarmTarget = "EARTH" -- Default primo avvio
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({FarmTarget = "EARTH"}))
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({FarmTarget = getgenv().FarmTarget}))
+    end
+end
+
+getgenv().IsSwitching = false -- Variabile per stoppare azioni durante il cooldown di switch
+
+-- ==============================================================================
+-- 🔘 GUI BOTTONE SWITCH (TRAScinabile)
+-- ==============================================================================
+local function CreateToggleButton()
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "ToggleFarmGUI"
+    sg.Parent = game:GetService("CoreGui")
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 1000
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 200, 0, 50)
+    frame.Position = UDim2.new(0.5, -100, 0, 20)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = sg
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = Color3.fromRGB(0, 255, 204)
+    stroke.Thickness = 2
+    stroke.Parent = frame
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 1, 0)
+    btn.BackgroundTransparency = 1
+    btn.Font = Enum.Font.FredokaOne
+    btn.Text = "MODE: FARM " .. getgenv().FarmTarget
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextScaled = true
+    btn.Parent = frame
+
+    btn.MouseButton1Click:Connect(function()
+        if getgenv().IsSwitching then return end
+        getgenv().IsSwitching = true
+
+        -- Inverti bersaglio
+        if getgenv().FarmTarget == "EARTH" then
+            getgenv().FarmTarget = "TOP"
+        else
+            getgenv().FarmTarget = "EARTH"
+        end
+        SaveConfig()
+
+        -- Cooldown di 20 secondi
+        task.spawn(function()
+            for i = 20, 1, -1 do
+                btn.Text = "SWITCH A " .. getgenv().FarmTarget .. " IN " .. i .. "s"
+                btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+                task.wait(1)
+            end
+            
+            btn.Text = "TELETRASPORTO..."
+            local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+            local PlaceId = game.PlaceId
+
+            -- Logica TP Sicura
+            if getgenv().FarmTarget == "TOP" then
+                if PlaceId == 5151400895 then -- Da Vills devi passare per la Terra
+                    TPEvent:InvokeServer("Earth")
+                else
+                    TPEvent:InvokeServer("T.O.P")
+                end
+            elseif getgenv().FarmTarget == "EARTH" then
+                TPEvent:InvokeServer("Earth")
+            end
+        end)
+    end)
+end
+CreateToggleButton()
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT (LINK UNICO TURBOAUTO)
+-- ==============================================================================
+task.spawn(function()
+    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+    if queue_on_teleport then
+        queue_on_teleport([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
+        ]])
+    end
+end)
+
+-- ==============================================================================
+-- NUOVO SISTEMA INTELLIGENTE (Kick Pubblica / TP Privata / Auto-Routing)
+-- ==============================================================================
+task.spawn(function()
+	repeat task.wait() until game:IsLoaded()
+	
+	local function IsPublicServer()
+		local jobId = game.JobId
+		local placeId = game.PlaceId
+		local cursor = ""
+		while true do
+			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+			if not requestFunc then return true end
+			local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+			if not success or not response or response.StatusCode ~= 200 then
+				task.wait(1)
+			else
+				local data = HttpService:JSONDecode(response.Body)
+				for _, server in ipairs(data.data) do
+					if server.id == jobId then return true end
+				end
+				cursor = data.nextPageCursor
+				if not cursor then break end
+			end
+			task.wait(0.1)
+		end
+		return false
+	end
+
+	local publico = IsPublicServer()
+
+	if publico then
+		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+	else
+		print("🔒 Server Privato confermato.")
+		
+        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+		
+        -- Controllo Routing Iniziale (Se sei nella mappa sbagliata rispetto al salvataggio)
+        if not getgenv().IsSwitching then
+            local pId = game.PlaceId
+            if getgenv().FarmTarget == "EARTH" and pId ~= 3311165597 then
+                print("Routing: Devo essere su Terra, mi ci teletrasporto.")
+                TPEvent:InvokeServer("Earth")
+            elseif getgenv().FarmTarget == "TOP" and pId ~= 114014249462644 then
+                if pId == 5151400895 then -- Se Vills, va alla terra e poi TOP al riavvio
+                    print("Routing: Da Vills vado alla Terra per poi andare su TOP.")
+                    TPEvent:InvokeServer("Earth")
+                else
+                    print("Routing: Devo essere su TOP, mi ci teletrasporto.")
+                    TPEvent:InvokeServer("T.O.P")
+                end
+            end
+        end
+
+		-- Sistema Anti-Intruso (Fuga T.O.P <-> Earth)
+		local function CheckIntruders()
+			if #Players:GetPlayers() > 1 then
+				warn("⚠️ Intruso rilevato! Cambio mondo per fuggire...")
+				if game.PlaceId == 114014249462644 then -- Su TOP -> Scappa su Terra
+					TPEvent:InvokeServer("Earth")
+				else -- Su Terra o Vills -> Scappa su TOP
+					TPEvent:InvokeServer("T.O.P")
+				end
+			end
+		end
+
+		CheckIntruders()
+		Players.PlayerAdded:Connect(CheckIntruders)
+	end
+end)
+
+-- ==============================================================================
+-- START THE GAME
+-- ==============================================================================
+local function StartTheGame()
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
+    local mainGui = playerGui:WaitForChild("Main", 10)
+    if not mainGui then return end
+    task.wait()
+    local Event = ReplicatedStorage.Package.Events.Start
+    Event:InvokeServer()
+    task.wait()
+    Event:InvokeServer()
+    task.wait()
+    local bruhButton = mainGui:FindFirstChild("bruh")
+    if bruhButton then
+        bruhButton.Disabled = true
+        bruhButton.Disabled = false
+    end
+    task.wait()
+    Event:InvokeServer()
+end
+StartTheGame()
+wait(.5)
+
+-- ==============================================================================
+-- WEBHOOK
+-- ==============================================================================
+task.spawn(function()
+    -- Modificato per mandare webhook specificando la modalità attuale
+	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
+	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
+	if not playerStats then return end
+
+	local statz = tostring(playerStats.Defense.Value)
+	local rebs = tostring(playerStats.Rebirth.Value)
+	local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+
+	if requestFunc then
+		requestFunc({
+			Url = Webhook_URL,
+			Method = 'POST',
+			Headers = { ['Content-Type'] = 'application/json' },
+			Body = HttpService:JSONEncode({
+				["content"] = "",
+				["embeds"] = {{
+					["title"] = "Script eseguito! (Farming in " .. getgenv().FarmTarget .. ")",
+					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
+					["type"] = "rich",
+					["color"] = 16777215, 
+					["fields"] = {
+						{ ["name"] = "Rebirths", ["value"] = rebs, ["inline"] = true },
+						{ ["name"] = "Defense", ["value"] = statz, ["inline"] = true }
+					}
+				}}
+			})
+		})
+	end
+end)
+
+-- ==============================================================================
+-- SISTEMA DI SICUREZZA ORARIA (CRASH 07:00 - 08:59)
+-- ==============================================================================
+task.spawn(function()
+    local TARGET_ID = 1970233075
+    if localPlayer.UserId == TARGET_ID then
+        while true do
+            local date = os.date("!*t")
+            local isDST = (date.month > 3 and date.month < 10) or (date.month == 3 and date.day >= 25) or (date.month == 10 and date.day < 25)
+            local offset = isDST and 2 or 1
+            local hourItaly = (date.hour + offset) % 24
+            
+            if hourItaly == 7 or hourItaly == 8 then
+                local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or localPlayer:WaitForChild("PlayerGui"))
+                sg.IgnoreGuiInset = true
+                sg.DisplayOrder = 2147483647
+                local f = Instance.new("Frame", sg)
+                f.Size = UDim2.new(1, 0, 1, 0)
+                f.BackgroundColor3 = Color3.new(0, 0, 0)
+                f.BorderSizePixel = 0
+                game:GetService("SoundService").Volume = 0
+                task.wait(0.2)
+                while true do print("ERR_RECOVERY_FAILED_" .. math.random(100000, 999999)) end
+            end
+            task.wait(10)
+        end
+    end
+end)
+
+-- ==============================================================================
+-- GUI SETUP (STATS & HEALTH/ENERGY RIMOSSE ORIGINALI)
+-- ==============================================================================
+-- (La tua lunghissima GUI per le stats rimane intatta qui)
+local Converted = {
+	["_HealthAndEnergy"] = Instance.new("ScreenGui");
+	["_Frame"] = Instance.new("Frame");
+	["_UICorner"] = Instance.new("UICorner");
+	["_UIStroke"] = Instance.new("UIStroke");
+	["_UIGradient"] = Instance.new("UIGradient");
+	["_TextLabel"] = Instance.new("TextLabel");
+	["_UIStroke1"] = Instance.new("UIStroke");
+	["_UIGradient1"] = Instance.new("UIGradient");
+	["_health"] = Instance.new("TextLabel");
+	["_UIStroke2"] = Instance.new("UIStroke");
+	["_/"] = Instance.new("TextLabel");
+	["_UIStroke3"] = Instance.new("UIStroke");
+	["_maxhealth"] = Instance.new("TextLabel");
+	["_UIStroke4"] = Instance.new("UIStroke");
+	["_freim"] = Instance.new("Frame");
+	["_UICorner1"] = Instance.new("UICorner");
+	["_UIStroke5"] = Instance.new("UIStroke");
+	["_Uigraddd"] = Instance.new("UIGradient");
+	["_TextLabel1"] = Instance.new("TextLabel");
+	["_UIStroke6"] = Instance.new("UIStroke");
+	["_Uigrad"] = Instance.new("UIGradient");
+	["_energy"] = Instance.new("TextLabel");
+	["_UIStroke7"] = Instance.new("UIStroke");
+	["_/1"] = Instance.new("TextLabel");
+	["_UIStroke8"] = Instance.new("UIStroke");
+	["_maxenergy"] = Instance.new("TextLabel");
+	["_UIStroke9"] = Instance.new("UIStroke");
+}
+
+Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
+Converted["_HealthAndEnergy"].Parent = game:GetService("CoreGui")
+
+Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame"].BorderSizePixel = 0
+Converted["_Frame"].Position = UDim2.new(0.316506416, 0, 0.00999999978, 0)
+Converted["_Frame"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
+Converted["_Frame"].Parent = Converted["_HealthAndEnergy"]
+
+Converted["_UICorner"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner"].Parent = Converted["_Frame"]
+Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke"].Thickness = 4
+Converted["_UIStroke"].Parent = Converted["_Frame"]
+
+Converted["_UIGradient"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+	ColorSequenceKeypoint.new(0.5013927817344666, Color3.fromRGB(0, 252.869074344635, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+}
+Converted["_UIGradient"].Parent = Converted["_UIStroke"]
+
+Converted["_TextLabel"].Font = Enum.Font.FredokaOne
+Converted["_TextLabel"].Text = "HEALTH:"
+Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel"].TextScaled = true
+Converted["_TextLabel"].BackgroundTransparency = 1
+Converted["_TextLabel"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
+Converted["_TextLabel"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
+Converted["_TextLabel"].Parent = Converted["_Frame"]
+Converted["_UIStroke1"].Parent = Converted["_TextLabel"]
+
+Converted["_UIGradient1"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 255, 0)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 76, 0))
+}
+Converted["_UIGradient1"].Offset = Vector2.new(0.1, 0.1)
+Converted["_UIGradient1"].Rotation = 90
+Converted["_UIGradient1"].Parent = Converted["_Frame"]
+
+Converted["_health"].Font = Enum.Font.FredokaOne
+Converted["_health"].Text = "nil"
+Converted["_health"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_health"].TextScaled = true
+Converted["_health"].BackgroundTransparency = 1
+Converted["_health"].Position = UDim2.new(0.234679773, 0, -0.0192308649, 0)
+Converted["_health"].Size = UDim2.new(0.303816825, 0, 1.00000012, 0)
+Converted["_health"].Parent = Converted["_Frame"]
+Converted["_UIStroke2"].Parent = Converted["_health"]
+
+Converted["_/"].Font = Enum.Font.FredokaOne
+Converted["_/"].Text = "/"
+Converted["_/"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_/"].TextScaled = true
+Converted["_/"].BackgroundTransparency = 1
+Converted["_/"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/"].Size = UDim2.new(0.188958243, 0, 1, 0)
+Converted["_/"].Parent = Converted["_Frame"]
+Converted["_UIStroke3"].Parent = Converted["_/"]
+
+Converted["_maxhealth"].Font = Enum.Font.FredokaOne
+Converted["_maxhealth"].Text = "nil"
+Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxhealth"].TextScaled = true
+Converted["_maxhealth"].BackgroundTransparency = 1
+Converted["_maxhealth"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxhealth"].Size = UDim2.new(0.387182951, 0, 1, 0)
+Converted["_maxhealth"].Parent = Converted["_Frame"]
+Converted["_UIStroke4"].Parent = Converted["_maxhealth"]
+
+Converted["_freim"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_freim"].Position = UDim2.new(0.316506416, 0, 0.075, 0)
+Converted["_freim"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
+Converted["_freim"].Parent = Converted["_HealthAndEnergy"]
+
+Converted["_UICorner1"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner1"].Parent = Converted["_freim"]
+Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke5"].Thickness = 4
+Converted["_UIStroke5"].Parent = Converted["_freim"]
+
+Converted["_Uigraddd"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+}
+Converted["_Uigraddd"].Parent = Converted["_UIStroke5"]
+
+Converted["_TextLabel1"].Font = Enum.Font.FredokaOne
+Converted["_TextLabel1"].Text = "ENERGY:"
+Converted["_TextLabel1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel1"].TextScaled = true
+Converted["_TextLabel1"].BackgroundTransparency = 1
+Converted["_TextLabel1"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
+Converted["_TextLabel1"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
+Converted["_TextLabel1"].Parent = Converted["_freim"]
+Converted["_UIStroke6"].Parent = Converted["_TextLabel1"]
+
+Converted["_Uigrad"].Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 221, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 67, 57))
+}
+Converted["_Uigrad"].Offset = Vector2.new(0.1, 0.1)
+Converted["_Uigrad"].Rotation = 90
+Converted["_Uigrad"].Parent = Converted["_freim"]
+
+Converted["_energy"].Font = Enum.Font.FredokaOne
+Converted["_energy"].Text = "nil"
+Converted["_energy"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_energy"].TextScaled = true
+Converted["_energy"].BackgroundTransparency = 1
+Converted["_energy"].Position = UDim2.new(0.234679773, 0, -0.0192310419, 0)
+Converted["_energy"].Size = UDim2.new(0.303816825, 0, 1.00000036, 0)
+Converted["_energy"].Parent = Converted["_freim"]
+Converted["_UIStroke7"].Parent = Converted["_energy"]
+
+Converted["_/1"].Font = Enum.Font.FredokaOne
+Converted["_/1"].Text = "/"
+Converted["_/1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_/1"].TextScaled = true
+Converted["_/1"].BackgroundTransparency = 1
+Converted["_/1"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1, 0)
+Converted["_/1"].Parent = Converted["_freim"]
+Converted["_UIStroke8"].Parent = Converted["_/1"]
+
+Converted["_maxenergy"].Font = Enum.Font.FredokaOne
+Converted["_maxenergy"].Text = "nil"
+Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxenergy"].TextScaled = true
+Converted["_maxenergy"].BackgroundTransparency = 1
+Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxenergy"].Size = UDim2.new(0.387182951, 0, 1, 0)
+Converted["_maxenergy"].Parent = Converted["_freim"]
+Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
+
+task.spawn(function()
+    RunService.RenderStepped:Connect(function()
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local mainGui = playerGui:FindFirstChild("Main")
+            if mainGui then
+                local mainFrame = mainGui:FindFirstChild("MainFrame")
+                if mainFrame then
+                    local bars = mainFrame:FindFirstChild("Bars")
+                    if bars then bars.Visible = false end
+                end
+            end
+        end
+    end)
+end)
+
+local running = true
+local function formatNumber(number)
+	if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
+	elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
+	elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
+	elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
+	elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
+	else return tostring(number) end
+end
+
+local function CambiareVitaNormal()
+	while running do
+		local character = localPlayer.Character
+		if character and character:FindFirstChild("Humanoid") then
+			local humanoid = character.Humanoid
+			Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
+			Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+		end
+		task.wait(0.1)
+	end
+end
+
+local function CambiareEnergyaNormale()
+	while running do
+		local character = game.Workspace.Living:FindFirstChild(localPlayer.Name)
+		if character and character:FindFirstChild("Stats") and character.Stats:FindFirstChild("Ki") then
+			local ki = character.Stats.Ki
+			Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
+			Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+		end
+		task.wait(0.1)
+	end
+end
+
+local function setupCharacter(character)
+	running = false
+	task.wait(0.1)
+	running = true 
+	task.spawn(CambiareVitaNormal)
+	task.spawn(CambiareEnergyaNormale)
+end
+
+localPlayer.CharacterAdded:Connect(setupCharacter)
+if localPlayer.Character then setupCharacter(localPlayer.Character) end
+
+RunService.RenderStepped:Connect(function()
+	Converted["_UIGradient1"].Rotation += 2
+	Converted["_UIGradient"].Rotation += 2
+	Converted["_Uigrad"].Rotation += 2
+	Converted["_Uigraddd"].Rotation += 2
+end)
+
+-- (GUI STATS LATERALE)
+local function createGUI()
+    -- *Ometto la definizione ripetitiva della GUI stat laterale di Fortnite per brevità, 
+    --  presumo che tu abbia quella parte intatta, se serve rimettila qui*
+end
+createGUI()
+localPlayer.CharacterAdded:Connect(createGUI)
+
+-- ==============================================================================
+-- ANTIAFK & UNIVERSAL COMBAT FEATURES
+-- ==============================================================================
+local function ANTIAFK()
+	local vu = game:GetService("VirtualUser")
+	localPlayer.Idled:connect(function()
+		vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+	end)
+end
+coroutine.wrap(ANTIAFK)()
+
+local function ApplyFloat(char)
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        for _, child in pairs(root:GetChildren()) do
+            if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then child:Destroy() end
+        end
+        local att = Instance.new("Attachment", root)
+        att.Name = "FloatAttachment"
+        local lv = Instance.new("LinearVelocity", root)
+        lv.Name = "FloatVelocity"
+        lv.Attachment0 = att
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.new(0, 0, 0)
+        lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+        lv.MaxAxesForce = Vector3.new(0, math.huge, 0) 
+    end
+end
+localPlayer.CharacterAdded:Connect(ApplyFloat)
+if localPlayer.Character then ApplyFloat(localPlayer.Character) end
+
+task.spawn(function()
+    while true do
+        if not getgenv().IsSwitching then
+            ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(true)
+        end
+        task.wait(0.1)
+    end
+end)
+
+task.spawn(function()
+    while true and task.wait() do
+        pcall(function() localPlayer.Status.Blocking.Value = true end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        if not getgenv().IsSwitching then
+            ReplicatedStorage.Package.Events.cha:InvokeServer("Blacknwhite27")
+        end
+        task.wait(0.1)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO TRANSFORMATION & ATTACK LOGIC (ADATTIVO EARTH/TOP)
+-- ==============================================================================
+task.spawn(function()
+    local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
+    if not folderData then return end
+    local equipRemote = ReplicatedStorage.Package.Events.equipskill
+    
+    local earthTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Fa")
+    local topTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Hehehe")
+
+    local transformaciones = {
+        {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000},
+        {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000},
+        {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000},
+        {name = "God of Destruction", forza = 30000000},
+        {name = "Jiren Ultra Instinct", forza = 14000000},
+        {name = "Mastered Ultra Instinct", forza = 14000000},
+        {name = "Godly SSJ2", forza = 8000000},
+        {name = "Ultra Instinct Omen", forza = 5000000},
+        {name = "Super Broly", forza = 4000000},
+        {name = "Evil SSJ", forza = 4000000},
+        {name = "Blue Evolution", forza = 3500000},
+        {name = "Dark Rose", forza = 3500000},
+        {name = "LSSJG", forza = 3000000},
+        {name = "SSJ Berseker", forza = 3000000},
+        {name = "Kefla SSJ2", forza = 3000000},
+        {name = "True Rose", forza = 2400000},
+        {name = "SSJ Blue Kaioken", forza = 2200000},
+        {name = "SSJ Rose", forza = 1400000},
+        {name = "SSJ Blue", forza = 1200000},
+        {name = "SSJG4", forza = 1000000},
+        {name = "LSSJ3", forza = 800000},
+        {name = "Corrupt SSJ", forza = 700000},
+        {name = "SSJ Rage", forza = 700000},
+        {name = "SSJ5", forza = 550000},
+        {name = "SSJ4", forza = 300000},
+        {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000},
+        {name = "LSSJ Kaioken", forza = 160000},
+        {name = "LSSJ", forza = 140000},
+        {name = "SSJ3", forza = 95000},
+        {name = "SSJ2 Majin", forza = 65000},
+        {name = "Spirit SSJ", forza = 65000},
+        {name = "SSJ2 Kaioken", forza = 50000},
+        {name = "SSJ Kaioken", forza = 16000},
+    }
+
+    local function getStatusFolder()
+        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
+    end
+
+    while true do
+        if not getgenv().IsSwitching then
+            pcall(function()
+                local strength = folderData.Strength.Value
+                local status = getStatusFolder()
+                if status then
+                    local selected = status:FindFirstChild("SelectedTransformation")
+                    local actual = status:FindFirstChild("Transformation")
+                    for _, v in ipairs(transformaciones) do
+                        if strength >= v.forza then
+                            if selected.Value ~= v.name then
+                                equipRemote:InvokeServer(v.name)
+                                task.wait(0.3)
+                            end
+                            if selected.Value == v.name and actual.Value ~= selected.Value then
+                                if game.PlaceId == 114014249462644 and topTransformRemote then
+                                    topTransformRemote:InvokeServer()
+                                elseif game.PlaceId == 3311165597 and earthTransformRemote then
+                                    earthTransformRemote:InvokeServer()
+                                end
+                            end
+                            break 
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(1.5)
+    end
+end)
+
+-- ==============================================================================
+-- COMBAT SYSTEM (EARTH & TOP)
+-- ==============================================================================
+task.spawn(function ()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local Living = workspace:WaitForChild("Living")
+
+    local function Furming(boss)
+        if not boss then return end
+        local bossHRP = boss:WaitForChild("HumanoidRootPart", 5)
+        if not bossHRP then return end
+        
+        local behindOffset = bossHRP.CFrame.LookVector * -5  
+        local character = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+        local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+        local camera = workspace.CurrentCamera
+        
+        -- Sceglie il remote d'attacco in base al PlaceId
+        local attackRemote
+        if game.PlaceId == 114014249462644 then
+            attackRemote = Events:WaitForChild("letsplayagame")
+        elseif game.PlaceId == 3311165597 then
+            attackRemote = Events:WaitForChild("FaFa")
+        end
+
+        while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
+            if getgenv().IsSwitching then break end -- Ferma il farm se sta switchando server
+            if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then break end
+
+            pcall(function()
+                camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+                humanoidRootPart.CFrame = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
+            end)
+
+            if attackRemote then
+                pcall(function()
+                    Events.p:FireServer("Blacknwhite27", 1)
+                    coroutine.wrap(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+                    coroutine.wrap(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+                    coroutine.wrap(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+                    -- Sostituito Spirit Barrage con Timeskip Domain anche su TOP!
+                    coroutine.wrap(function() attackRemote:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
+                    coroutine.wrap(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+                end)
+            end
+            task.wait(0.1)
+        end
+    end
+
+    local function GetAvailableBoss()
+        local targets = {}
+        if game.PlaceId == 114014249462644 then
+            targets = {"Wukong (MUI)", "Hit"}
+        elseif game.PlaceId == 3311165597 then
+            targets = {"Goheta (Base - SSJB)", "Fused Zamasu"}
+        end
+
+        for _, name in ipairs(targets) do
+            local target = Living:FindFirstChild(name)
+            if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+                return target
+            end
+        end
+        return nil
+    end
+
+    while true do
+        if not getgenv().IsSwitching then
+            if not localPlayer.Character or not localPlayer.Character:FindFirstChild("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+                localPlayer.CharacterAdded:Wait()
+                task.wait(2)
+            else
+                local currentBoss = GetAvailableBoss()
+                if currentBoss then Furming(currentBoss) end
+            end
+        end
+        task.wait(0.5) 
+    end
+end)
+
+-- ==============================================================================
+-- AUTO REFRESH SERVER 6000 SECONDI
+-- ==============================================================================
+task.spawn(function()
+	local PlaceId = game.PlaceId
+	local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+
+    local TimerScreenGui = Instance.new("ScreenGui", game:GetService("CoreGui"))
+    TimerScreenGui.DisplayOrder = 999
+    local TimerFrame = Instance.new("Frame", TimerScreenGui)
+    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
+    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
+    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    TimerFrame.BackgroundTransparency = 0.4
+    local UICorner = Instance.new("UICorner", TimerFrame)
+    UICorner.CornerRadius = UDim.new(0, 8)
+    local TimerLabel = Instance.new("TextLabel", TimerFrame)
+    TimerLabel.Size = UDim2.new(1, 0, 1, 0)
+    TimerLabel.BackgroundTransparency = 1
+    TimerLabel.Font = Enum.Font.FredokaOne
+    TimerLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TimerLabel.TextScaled = true
+
+    -- Solo se si trova nella mappa corretta per il farm avvia il timer
+	if (getgenv().FarmTarget == "EARTH" and PlaceId == 3311165597) or (getgenv().FarmTarget == "TOP" and PlaceId == 114014249462644) then
+		local timeLeft = 6000
+
+		while timeLeft > 0 do
+            if getgenv().IsSwitching then TimerScreenGui:Destroy() return end -- Annulla timer se switchi a mano
+			TimerLabel.Text = "Farm " .. getgenv().FarmTarget .. ". TP Refresh in: " .. timeLeft .. "s"
+			timeLeft = timeLeft - 1
+			task.wait(1)
+		end
+
+		TimerLabel.Text = "Refresh Server in corso..."
+        
+        -- TP Invertito per refreshare il server
+        if getgenv().FarmTarget == "EARTH" then
+            TPEvent:InvokeServer("T.O.P") 
+        else
+            TPEvent:InvokeServer("Earth")
+        end
+	end
+end)
