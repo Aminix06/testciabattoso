@@ -105,6 +105,44 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
+-- START
+--===============================================================================
+
+local function StartTheGame()
+    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    local mainGui = playerGui:WaitForChild("Main", 10)
+
+    if not mainGui then
+        warn("StartTheGame: GUI 'Main' non trovata. Impossibile continuare la funzione.")
+        return
+    end
+
+    task.wait()
+    local Event = game:GetService("ReplicatedStorage").Package.Events.Start
+    Event:InvokeServer()
+    task.wait()
+
+    local Event = game:GetService("ReplicatedStorage").Package.Events.Start
+    Event:InvokeServer()
+
+    task.wait()
+
+    local bruhButton = mainGui:FindFirstChild("bruh")
+    if bruhButton then
+        bruhButton.Disabled = true
+        bruhButton.Disabled = false
+    end
+
+    task.wait()
+    local Event = game:GetService("ReplicatedStorage").Package.Events.Start
+    Event:InvokeServer()
+end
+
+StartTheGame()
+
+wait(.5)
+
+-- ==============================================================================
 -- WEBHOOK
 -- ==============================================================================
 
