@@ -981,7 +981,7 @@ task.spawn(function ()
                     coroutine.wrap(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                    coroutine.wrap(function() attackRemote:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
+                    coroutine.wrap(function() attackRemote:InvokeServer("God Slicer", "Blacknwhite27") end)()
                     coroutine.wrap(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
                 end)
             end
