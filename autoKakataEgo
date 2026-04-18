@@ -1230,7 +1230,7 @@ if game.PlaceId == 3311165597 then
 
         local function GetAvailableBoss()
             -- Ordine di priorità
-            local targets = {"Goheta (Base - SSJB)", "Fused Zamasu", "Universal Vegito"}
+            local targets = {"Goheta (Base - SSJB)", "Fused Zamasu"}
             
             for _, name in ipairs(targets) do
                 local target = Living:FindFirstChild(name)
