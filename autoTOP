@@ -1094,6 +1094,7 @@ if game.PlaceId == 114014249462644 then
         local transformRemote = ReplicatedStorage.Package.Events.Hehehe
 
         local transformaciones = {
+			{name = "Beast", forza = 1000000000},
             {name = "LBSSJ4", forza = 100000000},
             {name = "SSJB4", forza = 50000000},
             {name = "SSJR3", forza = 50000000},
