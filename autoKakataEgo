@@ -1081,7 +1081,6 @@ if game.PlaceId == 3311165597 then
     
     -- AUTO TRANSFORMATION
     task.spawn(function()
-        task.wait(7)
         local Players = game:GetService("Players")
         local ReplicatedStorage = game:GetService("ReplicatedStorage")
         local yo = Players.LocalPlayer
