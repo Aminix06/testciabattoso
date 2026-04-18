@@ -1191,43 +1191,48 @@ if game.PlaceId == 3311165597 then
         local Living = workspace:WaitForChild("Living")
 
         local function Furming(boss)
-            if not boss or not boss:FindFirstChild("HumanoidRootPart") then return end
-            print("⚔️ INCOLLATO AL SEDERINO DI: " .. boss.Name)
+            if not boss then return end
+            print("⚔️ INIZIO FIGHT: " .. boss.Name)
+            local bossHRP = boss:WaitForChild("HumanoidRootPart", 5)
+            if not bossHRP then return end
             
+            local behindOffset = bossHRP.CFrame.LookVector * -5  
             local character = plr.Character or plr.CharacterAdded:Wait()
-            local hrp = character:WaitForChild("HumanoidRootPart")
-            
-            -- Il loop che ti tiene incollato finché il boss è vivo
+            local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+            local camera = workspace.CurrentCamera
+
             while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
-                local bossHRP = boss.HumanoidRootPart
-                
-                -- LOGICA "INCOLLATO AL SEDERINO"
+                if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
+                    print("⚠️ Player morto/respawn necessario.")
+                    break
+                end
+
+                -- MOVIMENTO ORIGINALE (Incollato dietro)
                 pcall(function()
-                    local offset = bossHRP.CFrame.LookVector * -5 
-                    local targetCFrame = bossHRP.CFrame + offset
-                    hrp.CFrame = CFrame.new(targetCFrame.Position, bossHRP.Position)
+                    camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+                    local behindPosition = bossHRP.Position + behindOffset 
+                    humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
                 end)
 
-                -- Attacchi
+                -- ATTACCHI ORIGINALI
                 pcall(function()
                     local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("FaFa")
                     Events.p:FireServer("Blacknwhite27", 1)
-                    letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27")
-                    letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27")
-                    letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27")
-                    letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27")
-                    letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27")
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
                 end)
-                
-                task.wait(0.05)
+                task.wait(0.1)
             end
         end
 
         local function GetAvailableBoss()
-            -- Priorità boss (cambia l'ordine se vuoi)
-            local bossNames = {"Goheta (Base - SSJB)", "Fused Zamasu", "Universal Vegito"}
+            -- Ordine di priorità
+            local targets = {"Goheta (Base - SSJB)", "Fused Zamasu", "Universal Vegito"}
             
-            for _, name in ipairs(bossNames) do
+            for _, name in ipairs(targets) do
                 local target = Living:FindFirstChild(name)
                 if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
                     return target
@@ -1236,21 +1241,19 @@ if game.PlaceId == 3311165597 then
             return nil
         end
 
-        -- IL WHILE CHE TI SERVE
+        -- Loop infinito con controllo spawn
         while true do
-            -- Controllo se il personaggio è vivo
             if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
                 plr.CharacterAdded:Wait()
                 task.wait(2)
             end
             
-            local currentBoss = GetAvailableBoss()
-            if currentBoss then
-                Furming(currentBoss) -- Qui chiama la funzione che ti incolla al boss
-            else
-                task.wait(1) -- Se non trova boss, aspetta 1 secondo e riprova
+            local targetBoss = GetAvailableBoss()
+            if targetBoss then
+                Furming(targetBoss)
             end
-            task.wait() 
+            
+            task.wait(0.5) -- Pausa breve prima di ricontrollare
         end
     end)
 end
