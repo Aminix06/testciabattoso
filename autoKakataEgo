@@ -1180,7 +1180,7 @@ if game.PlaceId == 3311165597 then
 end
 
 -- ==============================================================================
--- FARMING LOGIC (SOLO GOHETA SU TERRA)
+-- FARMING LOGIC (AGGIORNATO: GOHETA, FUSED ZAMASU, UNIVERSAL VEGITO)
 -- ==============================================================================
 if game.PlaceId == 3311165597 then
     task.spawn(function ()
@@ -1189,6 +1189,13 @@ if game.PlaceId == 3311165597 then
         local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
         local Living = workspace:WaitForChild("Living")
 
+        -- Lista dei boss da farmare (in ordine di priorità)
+        local BossList = {
+            "Goheta (Base - SSJB)",
+            "Fused Zamasu",
+            "Universal Vegito"
+        }
+
         local function Furming(boss)
             if not boss then return end
             print("⚔️ INIZIO FIGHT: " .. boss.Name)
@@ -1196,14 +1203,12 @@ if game.PlaceId == 3311165597 then
             if not bossHRP then return end
             
             local behindOffset = bossHRP.CFrame.LookVector * -5  
-
             local character = plr.Character or plr.CharacterAdded:Wait()
             local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
             local camera = workspace.CurrentCamera
 
             while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
                 if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
-                    print("⚠️ Player morto/respawn necessario.")
                     break
                 end
 
@@ -1216,36 +1221,36 @@ if game.PlaceId == 3311165597 then
                 pcall(function()
                     local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("FaFa")
                     Events.p:FireServer("Blacknwhite27", 1)
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+                    -- Attacchi combo
+                    letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27")
                 end)
                 task.wait(0.1)
             end
         end
 
-        local function WaitForSpecificBoss(bossName)
-            print("⏳ In attesa dello spawn di: " .. bossName)
-            while true do
-                if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
-                    plr.CharacterAdded:Wait()
-                    task.wait(2)
-                end
-
-                local target = Living:FindFirstChild(bossName)
-                if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
-                    return target
-                end
-                task.wait()
-            end
-        end
-
-        -- Frama Goheta all'infinito sulla Terra
+        -- Loop principale di ricerca boss
         while true do
-            local goheta = WaitForSpecificBoss("Goheta (Base - SSJB)")
-            Furming(goheta)
+            local foundBoss = nil
+            
+            -- Cerca se uno dei boss della lista è presente
+            for _, name in ipairs(BossList) do
+                local target = Living:FindFirstChild(name)
+                if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+                    foundBoss = target
+                    break -- Esce dal loop for se trova un boss
+                end
+            end
+
+            if foundBoss then
+                Furming(foundBoss)
+            else
+                -- Se non trova nessuno, aspetta un momento prima di ricontrollare
+                task.wait(2)
+            end
             task.wait() 
         end
     end)
