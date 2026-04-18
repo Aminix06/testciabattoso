@@ -880,7 +880,6 @@ task.spawn(function()
     local topTransformRemote = ReplicatedStorage.Package.Events:FindFirstChild("Hehehe")
 
     local transformaciones = {
-        {name = "God of Creation", forza = 30000000},
         {name = "God of Destruction", forza = 30000000},
         {name = "Jiren Ultra Instinct", forza = 14000000},
         {name = "Mastered Ultra Instinct", forza = 14000000},
