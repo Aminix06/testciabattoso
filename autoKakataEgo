@@ -1190,39 +1190,49 @@ if game.PlaceId == 3311165597 then
         local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
         local Living = workspace:WaitForChild("Living")
 
-        local function Furming(boss)
+		local function Furming(boss)
             if not boss then return end
-            print("⚔️ INIZIO FIGHT: " .. boss.Name)
-            local bossHRP = boss:WaitForChild("HumanoidRootPart", 5)
-            if not bossHRP then return end
+            print("⚔️ LOCK-ON E FIGHT: " .. boss.Name)
             
-            local behindOffset = bossHRP.CFrame.LookVector * -5  
-
             local character = plr.Character or plr.CharacterAdded:Wait()
             local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
             local camera = workspace.CurrentCamera
 
             while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
-                if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then
-                    print("⚠️ Player morto/respawn necessario.")
-                    break
-                end
+                local bossHRP = boss:FindFirstChild("HumanoidRootPart")
+                if not bossHRP then break end
 
+                -- LOGICA LOCK-ON
                 pcall(function()
+                    -- 1. Camera Lock: Guarda il boss
                     camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+                    
+                    -- 2. Posizionamento: Resta dietro al boss
+                    local behindOffset = bossHRP.CFrame.LookVector * -5  
                     local behindPosition = bossHRP.Position + behindOffset 
-                    humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
+                    
+                    -- 3. Movimento fluido verso il boss
+                    humanoidRootPart.CFrame = CFrame.new(humanoidRootPart.CFrame.Position, Vector3.new(bossHRP.Position.X, humanoidRootPart.Position.Y, bossHRP.Position.Z))
+                    
+                    -- Se sei troppo lontano, avvicinati
+                    if (humanoidRootPart.Position - bossHRP.Position).Magnitude > 10 then
+                        character.Humanoid:MoveTo(bossHRP.Position)
+                    end
                 end)
 
+                -- Attacchi
                 pcall(function()
                     local letsplayagame = ReplicatedStorage.Package.Events:WaitForChild("FaFa")
                     Events.p:FireServer("Blacknwhite27", 1)
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+                    
+                    -- Esegui gli attacchi
+                    letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27")
+                    letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27")
                 end)
+                
                 task.wait(0.1)
             end
         end
