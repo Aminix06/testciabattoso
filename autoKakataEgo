@@ -1220,7 +1220,7 @@ if game.PlaceId == 3311165597 then
                     coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
                     coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
                     coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-                    coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+                    coroutine.wrap(function() letsplayagame:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
                     coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
                 end)
                 task.wait(0.1)
