@@ -10,7 +10,7 @@ local Players = game:GetService("Players")
 local localPlayer = Players.LocalPlayer
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (Kick Pubblica / TP Privata)
+-- NUOVO SISTEMA INTELLIGENTE (Kick Pubblica / TP Privata + START AUTOMATICO)
 -- ==============================================================================
 
 task.spawn(function()
@@ -96,6 +96,17 @@ task.spawn(function()
 
 		-- Controllo iniziale
 		CheckIntruders()
+
+		-- AUTO-START DEL GIOCO (Bypass Menù sulla Terra se il server è sicuro)
+		if #Players:GetPlayers() == 1 and game.PlaceId == 3311165597 then
+			task.spawn(function()
+				task.wait(1) -- Piccolo ritardo per assicurarci che i Remote siano caricati
+				pcall(function()
+					print("▶️ Nessun intruso! Avvio automatico del gioco (Invoke Start)...")
+					ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start"):InvokeServer()
+				end)
+			end)
+		end
 
 		-- Controllo continuo (se entra qualcuno dopo)
 		Players.PlayerAdded:Connect(function()
