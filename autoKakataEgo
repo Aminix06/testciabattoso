@@ -1182,6 +1182,7 @@ end
 -- ==============================================================================
 -- FARMING LOGIC (SOLO GOHETA SU TERRA)
 -- ==============================================================================
+
 if game.PlaceId == 3311165597 then
     task.spawn(function ()
         local plr = game.Players.LocalPlayer
@@ -1226,31 +1227,45 @@ if game.PlaceId == 3311165597 then
             end
         end
 
-        local function WaitForSpecificBoss(bossName)
-            print("⏳ In attesa dello spawn di: " .. bossName)
-            while true do
-                if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
-                    plr.CharacterAdded:Wait()
-                    task.wait(2)
-                end
-
-                local target = Living:FindFirstChild(bossName)
-                if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
-                    return target
-                end
-                task.wait()
+        local function GetAvailableBoss()
+            -- Priorità 1: Goheta
+            local goheta = Living:FindFirstChild("Goheta (Base - SSJB)")
+            if goheta and goheta:FindFirstChild("Humanoid") and goheta.Humanoid.Health > 0 then
+                return goheta
             end
+            
+            -- Priorità 2: Fused Zamasu
+            local zamasu = Living:FindFirstChild("Fused Zamasu")
+            if zamasu and zamasu:FindFirstChild("Humanoid") and zamasu.Humanoid.Health > 0 then
+                return zamasu
+            end
+
+            -- Priorità 3: Universal Vegito
+            local vegito = Living:FindFirstChild("Universal Vegito")
+            if vegito and vegito:FindFirstChild("Humanoid") and vegito.Humanoid.Health > 0 then
+                return vegito
+            end
+            
+            return nil
         end
 
-        -- Frama Goheta all'infinito sulla Terra
+        -- Loop infinito di farming
         while true do
-            local goheta = WaitForSpecificBoss("Goheta (Base - SSJB)")
-            Furming(goheta)
+            if not plr.Character or not plr.Character:FindFirstChild("Humanoid") or plr.Character.Humanoid.Health <= 0 then
+                plr.CharacterAdded:Wait()
+                task.wait(2)
+            end
+            
+            local currentBoss = GetAvailableBoss()
+            if currentBoss then
+                Furming(currentBoss)
+            else
+                task.wait(1) -- Attesa di 1 secondo se nessun boss è disponibile
+            end
             task.wait() 
         end
     end)
 end
-
 
 -- ==============================================================================
 -- AUTO TP & REFRESH SERVER
