@@ -864,11 +864,6 @@ task.spawn(function()
     local equipRemote = Events:WaitForChild("equipskill")
 
     local transformaciones = {
-        {name = "God of Creation", forza = 30000000},
-        {name = "God of Destruction", forza = 30000000},
-        {name = "Jiren Ultra Instinct", forza = 14000000},
-        {name = "Mastered Ultra Instinct", forza = 14000000},
-        {name = "Godly SSJ2", forza = 8000000},
         {name = "Ultra Instinct Omen", forza = 5000000},
         {name = "Super Broly", forza = 4000000},
         {name = "Evil SSJ", forza = 4000000},
