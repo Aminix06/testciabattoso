@@ -839,7 +839,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC (CORRETTA)
+-- AUTO TRANSFORMATION LOGIC (CORRETTA PER RESPAWN)
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -875,41 +875,45 @@ task.spawn(function()
         {name = "SSJ Kaioken", forza = 16000},
     }
 
-    local function getStatusFolder()
-        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
-    end
-
     while true do
         if not getgenv().IsSwitching then
             pcall(function()
-                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                local char = localPlayer.Character
                 
-                if folderData then
+                -- CONTROLLO FONDAMENTALE: Salta il ciclo se sei morto o stai respawnando
+                if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then 
+                    return 
+                end
+
+                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                local status = char:FindFirstChild("Status") or localPlayer:FindFirstChild("Status")
+                
+                if folderData and status then
                     local strength = folderData.Strength.Value
-                    local status = getStatusFolder()
-                    
-                    if status then
-                        local selected = status:FindFirstChild("SelectedTransformation")
-                        local actual = status:FindFirstChild("Transformation")
+                    local selected = status:FindFirstChild("SelectedTransformation")
+                    local actual = status:FindFirstChild("Transformation")
 
-                        for _, v in ipairs(transformaciones) do
-                            if strength >= v.forza then
-                                if selected.Value ~= v.name then
-                                    equipRemote:InvokeServer(v.name)
-                                    task.wait(0.3)
-                                end
-
-                                if selected.Value == v.name then
-                                    if actual.Value ~= selected.Value then
-                                        if game.PlaceId == 114014249462644 then
-                                            Events.Hehehe:InvokeServer()
-                                        elseif game.PlaceId == 3311165597 then
-                                            Events.Fa:InvokeServer()
-                                        end
-                                    end
-                                    break 
-                                end
+                    for _, v in ipairs(transformaciones) do
+                        if strength >= v.forza then
+                            -- Abbiamo trovato la forma più forte che puoi usare!
+                            
+                            -- 1. Seleziona l'abilità (se non l'hai già fatto)
+                            if selected and selected.Value ~= v.name then
+                                equipRemote:InvokeServer(v.name)
+                                task.wait(0.5) -- Aspetta che il server del gioco registri l'equipaggiamento
                             end
+
+                            -- 2. Trasformati (se non sei già trasformato)
+                            if actual and actual.Value ~= v.name then
+                                if game.PlaceId == 114014249462644 then
+                                    Events.Hehehe:InvokeServer()
+                                elseif game.PlaceId == 3311165597 then
+                                    Events.Fa:InvokeServer()
+                                end
+                                task.wait(1.5) -- Attendi l'animazione per non spammare il comando
+                            end
+                            
+                            break -- Interrompi il ciclo for: non ha senso controllare le forme più deboli!
                         end
                     end
                 end
