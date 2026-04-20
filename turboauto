@@ -770,6 +770,7 @@ local function createGUI()
 	playerStats.Defense.Changed:Connect(updateStats)
 	playerStats.Energy.Changed:Connect(updateStats)
 	playerStats.Speed.Changed:Connect(updateStats)
+	playerStats.Rebirth.Changed:Connect(updateStats)
 
 	RunService.RenderStepped:Connect(function()
 		ConvertedStats["_UIGradient"].Rotation += 2
