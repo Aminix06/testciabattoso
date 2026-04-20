@@ -1023,12 +1023,20 @@ task.spawn(function()
 		local timeLeft = 6000
 
 		while timeLeft > 0 do
-            if getgenv().IsSwitching then TimerScreenGui:Destroy() return end
-			TimerLabel.Text = "Farm " .. getgenv().FarmTarget .. ". TP Refresh in: " .. timeLeft .. "s"
-			timeLeft = timeLeft - 1
-			task.wait(1)
+            task.wait(1)
+            
+            if getgenv().IsSwitching then
+                -- Mette in pausa e nasconde il timer durante il cooldown dei 20 sec
+                TimerScreenGui.Enabled = false
+            else
+                -- Mostra il timer e continua a contare se non stiamo switchando
+                TimerScreenGui.Enabled = true
+                timeLeft = timeLeft - 1
+                TimerLabel.Text = "Farm " .. getgenv().FarmTarget .. ". TP Refresh in: " .. timeLeft .. "s"
+            end
 		end
 
+		TimerScreenGui.Enabled = true
 		TimerLabel.Text = "Refresh Server in corso..."
         
         if getgenv().FarmTarget == "EARTH" then
