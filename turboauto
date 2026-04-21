@@ -14,29 +14,48 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 -- ==============================================================================
--- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON)
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES
 -- ==============================================================================
 local ConfigName = "CiabTurboConfig.json"
+
+local DefaultBosses = {
+    ["Wukong (MUI)"] = true,
+    ["Hit"] = true,
+    ["Universal Vegito"] = true,
+    ["Goheta (Base - SSJB)"] = true,
+    ["Fused Zamasu"] = true
+}
 
 if isfile and isfile(ConfigName) then
     local success, data = pcall(function()
         return HttpService:JSONDecode(readfile(ConfigName))
     end)
-    if success and data and data.FarmTarget then
-        getgenv().FarmTarget = data.FarmTarget
+    if success and data then
+        getgenv().FarmTarget = data.FarmTarget or "EARTH"
+        getgenv().BossTargets = data.BossTargets or {}
+        for boss, val in pairs(DefaultBosses) do
+            if getgenv().BossTargets[boss] == nil then
+                getgenv().BossTargets[boss] = val
+            end
+        end
     else
-        getgenv().FarmTarget = "EARTH" -- Default se corrotto
+        getgenv().FarmTarget = "EARTH"
+        getgenv().BossTargets = DefaultBosses
     end
 else
-    getgenv().FarmTarget = "EARTH" -- Default primo avvio
+    getgenv().FarmTarget = "EARTH"
+    getgenv().BossTargets = DefaultBosses
     if writefile then
-        writefile(ConfigName, HttpService:JSONEncode({FarmTarget = "EARTH"}))
+        writefile(ConfigName, HttpService:JSONEncode({FarmTarget = "EARTH", BossTargets = DefaultBosses}))
     end
 end
 
 local function SaveConfig()
     if writefile then
-        writefile(ConfigName, HttpService:JSONEncode({FarmTarget = getgenv().FarmTarget}))
+        writefile(ConfigName, HttpService:JSONEncode({
+            FarmTarget = getgenv().FarmTarget,
+            BossTargets = getgenv().BossTargets
+        }))
     end
 end
 
@@ -44,7 +63,7 @@ getgenv().IsSwitching = false
 getgenv().CancelSwitch = false
 
 -- ==============================================================================
--- 🔘 GUI BOTTONE SWITCH (Draggable Custom + Cooldown Annullabile)
+-- 🔘 GUI BOTTONE SWITCH MODE (Posizionato sopra la GUI Fortnite)
 -- ==============================================================================
 local function CreateToggleButton()
     local sg = Instance.new("ScreenGui")
@@ -55,46 +74,38 @@ local function CreateToggleButton()
 
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0, 220, 0, 55)
-    frame.Position = UDim2.new(0.5, -110, 0, 100)
+    -- Centrato perfettamente sopra la GUI di sinistra (Fortnite)
+    frame.Position = UDim2.new(0.163, -110, 0.26, -65)
     frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
     frame.Active = true
     frame.Parent = sg
 
-    local corner = Instance.new("UICorner")
+    local corner = Instance.new("UICorner", frame)
     corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = frame
-
-    local stroke = Instance.new("UIStroke")
+    local stroke = Instance.new("UIStroke", frame)
     stroke.Color = Color3.fromRGB(0, 255, 204)
     stroke.Thickness = 2
-    stroke.Parent = frame
 
-    local btn = Instance.new("TextButton")
+    local btn = Instance.new("TextButton", frame)
     btn.Size = UDim2.new(1, 0, 1, 0)
     btn.BackgroundTransparency = 1
     btn.Font = Enum.Font.FredokaOne
     btn.Text = "MODE: FARM " .. getgenv().FarmTarget
     btn.TextColor3 = Color3.fromRGB(255, 255, 255)
     btn.TextScaled = true
-    btn.Parent = frame
 
+    -- Custom Drag
     local dragging, dragInput, mousePos, framePos
     frame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             mousePos = input.Position
             framePos = frame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
     frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
     end)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
@@ -104,14 +115,9 @@ local function CreateToggleButton()
     end)
 
     btn.MouseButton1Click:Connect(function()
-        if getgenv().IsSwitching then
-            getgenv().CancelSwitch = true
-            return
-        end
-
+        if getgenv().IsSwitching then getgenv().CancelSwitch = true return end
         getgenv().IsSwitching = true
         getgenv().CancelSwitch = false
-
         local nextTarget = (getgenv().FarmTarget == "EARTH") and "TOP" or "EARTH"
 
         task.spawn(function()
@@ -131,16 +137,11 @@ local function CreateToggleButton()
                 getgenv().FarmTarget = nextTarget
                 SaveConfig()
                 btn.Text = "TELETRASPORTO..."
-                
                 local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
                 local PlaceId = game.PlaceId
 
                 if getgenv().FarmTarget == "TOP" then
-                    if PlaceId == 5151400895 then
-                        TPEvent:InvokeServer("Earth")
-                    else
-                        TPEvent:InvokeServer("T.O.P")
-                    end
+                    if PlaceId == 5151400895 then TPEvent:InvokeServer("Earth") else TPEvent:InvokeServer("T.O.P") end
                 elseif getgenv().FarmTarget == "EARTH" then
                     TPEvent:InvokeServer("Earth")
                 end
@@ -149,6 +150,107 @@ local function CreateToggleButton()
     end)
 end
 CreateToggleButton()
+
+-- ==============================================================================
+-- 📋 GUI SELEZIONE BOSS DINAMICA (Verde/Rosso)
+-- ==============================================================================
+local function CreateBossMenu()
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "BossSelectorGUI"
+    sg.Parent = game:GetService("CoreGui")
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 1001
+
+    local frame = Instance.new("Frame", sg)
+    frame.Size = UDim2.new(0, 200, 0, 220)
+    frame.Position = UDim2.new(1, -220, 0.5, -110)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    frame.Active = true
+    
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius = UDim.new(0, 8)
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(255, 215, 0)
+    stroke.Thickness = 2
+
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 30)
+    title.BackgroundTransparency = 1
+    title.Font = Enum.Font.FredokaOne
+    title.Text = "BOSS: " .. getgenv().FarmTarget
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.TextScaled = true
+
+    local scroll = Instance.new("ScrollingFrame", frame)
+    scroll.Size = UDim2.new(1, -10, 1, -40)
+    scroll.Position = UDim2.new(0, 5, 0, 35)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 4
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    
+    local listLayout = Instance.new("UIListLayout", scroll)
+    listLayout.Padding = UDim.new(0, 5)
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    local dragging, dragInput, mousePos, framePos
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            mousePos = input.Position
+            framePos = frame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- Lista Dinamica in base al target scelto
+    local bossNamesList = {}
+    if getgenv().FarmTarget == "EARTH" then
+        bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+    elseif getgenv().FarmTarget == "TOP" then
+        bossNamesList = {"Wukong (MUI)", "Hit"}
+    end
+    
+    for _, bossName in ipairs(bossNamesList) do
+        local btn = Instance.new("TextButton", scroll)
+        btn.Size = UDim2.new(1, -10, 0, 40)
+        btn.Font = Enum.Font.FredokaOne
+        btn.Text = bossName
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextScaled = true
+        
+        local btnCorner = Instance.new("UICorner", btn)
+        btnCorner.CornerRadius = UDim.new(0, 6)
+
+        local function UpdateColor()
+            if getgenv().BossTargets[bossName] then
+                btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+            else
+                btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+            end
+        end
+        UpdateColor()
+
+        btn.MouseButton1Click:Connect(function()
+            getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
+            UpdateColor()
+            SaveConfig()
+        end)
+    end
+    
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+end
+CreateBossMenu()
 
 -- ==============================================================================
 -- QUEUE ON TELEPORT
@@ -204,21 +306,13 @@ task.spawn(function()
             if getgenv().FarmTarget == "EARTH" and pId ~= 3311165597 then
                 TPEvent:InvokeServer("Earth")
             elseif getgenv().FarmTarget == "TOP" and pId ~= 114014249462644 then
-                if pId == 5151400895 then
-                    TPEvent:InvokeServer("Earth")
-                else
-                    TPEvent:InvokeServer("T.O.P")
-                end
+                if pId == 5151400895 then TPEvent:InvokeServer("Earth") else TPEvent:InvokeServer("T.O.P") end
             end
         end
 
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
-				if game.PlaceId == 114014249462644 then 
-					TPEvent:InvokeServer("Earth")
-				else 
-					TPEvent:InvokeServer("T.O.P")
-				end
+				if game.PlaceId == 114014249462644 then TPEvent:InvokeServer("Earth") else TPEvent:InvokeServer("T.O.P") end
 			end
 		end
 
@@ -255,15 +349,11 @@ wait(.5)
 -- WEBHOOK
 -- ==============================================================================
 task.spawn(function()
-    -- CONTROLLO MAPPA: Manda il webhook SOLO se sei nella mappa corretta per il tuo Farm
     local PlaceId = game.PlaceId
     local target = getgenv().FarmTarget
 
-    if target == "EARTH" and PlaceId ~= 3311165597 then
-        return -- Sei in un server di passaggio (TOP/Vills), niente webhook
-    elseif target == "TOP" and PlaceId ~= 114014249462644 then
-        return -- Sei in un server di passaggio (Earth/Vills), niente webhook
-    end
+    if target == "EARTH" and PlaceId ~= 3311165597 then return end
+    if target == "TOP" and PlaceId ~= 114014249462644 then return end
 
 	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
 	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
@@ -281,10 +371,10 @@ task.spawn(function()
 			Body = HttpService:JSONEncode({
 				["content"] = "",
 				["embeds"] = {{
-					["title"] = "Script eseguito! " .. target .. "!",
+					["title"] = "✅ Auto-Farm avviato in " .. target .. "!",
 					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
 					["type"] = "rich",
-					["color"] = 16777215, 
+					["color"] = 65280, 
 					["fields"] = {
 						{ ["name"] = "Rebirths", ["value"] = rebs, ["inline"] = true },
 						{ ["name"] = "Defense", ["value"] = statz, ["inline"] = true }
@@ -347,7 +437,7 @@ Converted["_UIStroke"].Parent = Converted["_Frame"]
 
 Converted["_UIGradient"].Color = ColorSequence.new{
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.5013927817344666, Color3.fromRGB(0, 252.869074344635, 255)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 }
 Converted["_UIGradient"].Parent = Converted["_UIStroke"]
@@ -482,7 +572,6 @@ task.spawn(function()
     end)
 end)
 
-local running = true
 local function formatNumber(number)
 	if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
 	elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
@@ -492,36 +581,39 @@ local function formatNumber(number)
 	else return tostring(number) end
 end
 
-local function CambiareVitaNormal()
-	while running do
-		local character = localPlayer.Character
-		if character and character:FindFirstChild("Humanoid") then
-			local humanoid = character.Humanoid
-			Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
-			Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
-		end
-		task.wait(0.1)
-	end
-end
-
-local function CambiareEnergyaNormale()
-	while running do
-		local character = game.Workspace.Living:FindFirstChild(localPlayer.Name)
-		if character and character:FindFirstChild("Stats") and character.Stats:FindFirstChild("Ki") then
-			local ki = character.Stats.Ki
-			Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-			Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
-		end
-		task.wait(0.1)
-	end
-end
-
 local function setupCharacter(character)
-	running = false
-	task.wait(0.1)
-	running = true 
-	task.spawn(CambiareVitaNormal)
-	task.spawn(CambiareEnergyaNormale)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        -- Aggiornamento iniziale
+        Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
+        Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+        
+        -- Si aggiorna SOLO quando la vita cambia (Addio lag!)
+        humanoid.HealthChanged:Connect(function(health)
+            Converted["_health"].Text = formatNumber(math.floor(health))
+            Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+        end)
+    end
+
+    -- Aspettiamo che il gioco carichi le Stats nel Workspace
+    task.spawn(function()
+        local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
+        if wsChar then
+            local statsFolder = wsChar:WaitForChild("Stats", 5)
+            if statsFolder then
+                local ki = statsFolder:WaitForChild("Ki", 5)
+                if ki then
+                    Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
+                    Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+                    
+                    ki.Changed:Connect(function()
+                        Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
+                        Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+                    end)
+                end
+            end
+        end
+    end)
 end
 
 localPlayer.CharacterAdded:Connect(setupCharacter)
@@ -535,7 +627,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==============================================================================
--- GUI MENU STATISTICHE LATERALI
+-- GUI MENU STATISTICHE LATERALI (FIX LEAK E REBIRTH)
 -- ==============================================================================
 local function createGUI()
 	local ConvertedStats = {
@@ -588,7 +680,6 @@ local function createGUI()
 	ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
 
 	ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
-
 	ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
 	ConvertedStats["_UIStroke"].Thickness = 4
 	ConvertedStats["_UIStroke"].Parent = ConvertedStats["_Frame"]
@@ -770,15 +861,20 @@ local function createGUI()
 	playerStats.Defense.Changed:Connect(updateStats)
 	playerStats.Energy.Changed:Connect(updateStats)
 	playerStats.Speed.Changed:Connect(updateStats)
-	playerStats.Rebirth.Changed:Connect(updateStats)
+    playerStats.Rebirth.Changed:Connect(updateStats)
 
 	RunService.RenderStepped:Connect(function()
-		ConvertedStats["_UIGradient"].Rotation += 2
-		ConvertedStats["_UIGradient1"].Rotation += 2
+        if ConvertedStats["_UIGradient"].Parent then
+		    ConvertedStats["_UIGradient"].Rotation += 2
+		    ConvertedStats["_UIGradient1"].Rotation += 2
+        end
 	end)
 end
+
+if game:GetService("CoreGui"):FindFirstChild("AUTOFARM") then
+	game:GetService("CoreGui").AUTOFARM:Destroy()
+end
 createGUI()
-localPlayer.CharacterAdded:Connect(createGUI)
 
 -- ==============================================================================
 -- ANTIAFK & UNIVERSAL COMBAT FEATURES
@@ -814,12 +910,20 @@ end
 localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
+-- Loop ottimizzati per limitare le chiamate al server (Riduzione Lag)
 task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local blockEvent = Events:WaitForChild("block")
+    local chaEvent = Events:WaitForChild("cha")
+    
     while true do
         if not getgenv().IsSwitching then
-            ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(true)
+            pcall(function()
+                task.spawn(function() blockEvent:InvokeServer(true) end)
+                task.spawn(function() chaEvent:InvokeServer("Blacknwhite27") end)
+            end)
         end
-        task.wait(0.1)
+        task.wait(0.15)
     end
 end)
 
@@ -829,34 +933,14 @@ task.spawn(function()
     end
 end)
 
-task.spawn(function()
-    while true do
-        if not getgenv().IsSwitching then
-            ReplicatedStorage.Package.Events.cha:InvokeServer("Blacknwhite27")
-        end
-        task.wait(0.1)
-    end
-end)
-
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC (CORRETTA PER RESPAWN)
+-- AUTO TRANSFORMATION LOGIC (ANTI-FREEZE E RESPAWN DETECTOR)
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local equipRemote = Events:WaitForChild("equipskill")
 
     local transformaciones = {
-		{name = "Evil Saiyan", forza = 1000000000},
-        {name = "LBSSJ4", forza = 100000000},
-        {name = "SSJB4", forza = 50000000},
-        {name = "SSJR3", forza = 50000000},
-        {name = "True God of Creation", forza = 30000000},
-        {name = "True God of Destruction", forza = 30000000},
-        {name = "God of Creation", forza = 30000000},
-        {name = "God of Destruction", forza = 30000000},
-        {name = "Jiren Ultra Instinct", forza = 14000000},
-        {name = "Mastered Ultra Instinct", forza = 14000000},
-        {name = "Godly SSJ2", forza = 8000000},
         {name = "Ultra Instinct Omen", forza = 5000000},
         {name = "Super Broly", forza = 4000000},
         {name = "Evil SSJ", forza = 4000000},
@@ -886,52 +970,61 @@ task.spawn(function()
         {name = "SSJ Kaioken", forza = 16000},
     }
 
-    local function getStatusFolder()
-        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
-    end
+    local currentCharacter = nil
 
     while true do
         if not getgenv().IsSwitching then
             pcall(function()
-                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                local char = localPlayer.Character
                 
-                if folderData then
+                if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then 
+                    return 
+                end
+
+                if char ~= currentCharacter then
+                    currentCharacter = char
+                    task.wait(2.5)
+                end
+
+                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+                
+                if folderData and status then
                     local strength = folderData.Strength.Value
-                    local status = getStatusFolder()
-                    
-                    if status then
-                        local selected = status:FindFirstChild("SelectedTransformation")
-                        local actual = status:FindFirstChild("Transformation")
+                    local selected = status:FindFirstChild("SelectedTransformation")
+                    local actual = status:FindFirstChild("Transformation")
 
-                        for _, v in ipairs(transformaciones) do
-                            if strength >= v.forza then
-                                if selected.Value ~= v.name then
-                                    equipRemote:InvokeServer(v.name)
-                                    task.wait(0.3)
-                                end
-
-                                if selected.Value == v.name then
-                                    if actual.Value ~= selected.Value then
-                                        if game.PlaceId == 114014249462644 then
-                                            Events.Hehehe:InvokeServer()
-                                        elseif game.PlaceId == 3311165597 then
-                                            Events.Fa:InvokeServer()
-                                        end
-                                    end
-                                    break 
-                                end
+                    for _, v in ipairs(transformaciones) do
+                        if strength >= v.forza then
+                            
+                            if selected and selected.Value ~= v.name then
+                                task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                                task.wait(0.5)
                             end
+
+                            if actual and actual.Value ~= v.name then
+                                task.spawn(function()
+                                    if game.PlaceId == 114014249462644 then
+                                        Events.Hehehe:InvokeServer()
+                                    elseif game.PlaceId == 3311165597 then
+                                        Events.Fa:InvokeServer()
+                                    end
+                                end)
+                                task.wait(2)
+                            end
+                            
+                            break
                         end
                     end
                 end
             end)
         end
-        task.wait(1.5)
+        task.wait(1)
     end
 end)
 
 -- ==============================================================================
--- COMBAT SYSTEM (EARTH & TOP)
+-- COMBAT SYSTEM (EARTH & TOP) CON LOGICA BOSS MENU DINAMICO
 -- ==============================================================================
 task.spawn(function ()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -956,6 +1049,7 @@ task.spawn(function ()
 
         while boss and boss.Parent and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 do
             if getgenv().IsSwitching then break end 
+            if not getgenv().BossTargets[boss.Name] then break end 
             if not character or not character.Parent or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then break end
 
             pcall(function()
@@ -982,13 +1076,15 @@ task.spawn(function ()
         if game.PlaceId == 114014249462644 then
             targets = {"Wukong (MUI)", "Hit"}
         elseif game.PlaceId == 3311165597 then
-            targets = {"Goheta (Base - SSJB)", "Universal Vegito"}
+            targets = {"Goheta (Base - SSJB)",  "Fused Zamasu", "Universal Vegito"}
         end
 
         for _, name in ipairs(targets) do
-            local target = Living:FindFirstChild(name)
-            if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
-                return target
+            if getgenv().BossTargets[name] == true then
+                local target = Living:FindFirstChild(name)
+                if target and target:FindFirstChild("Humanoid") and target.Humanoid.Health > 0 then
+                    return target
+                end
             end
         end
         return nil
@@ -1038,10 +1134,8 @@ task.spawn(function()
             task.wait(1)
             
             if getgenv().IsSwitching then
-                -- Mette in pausa e nasconde il timer durante il cooldown dei 20 sec
                 TimerScreenGui.Enabled = false
             else
-                -- Mostra il timer e continua a contare se non stiamo switchando
                 TimerScreenGui.Enabled = true
                 timeLeft = timeLeft - 1
                 TimerLabel.Text = "Farm " .. getgenv().FarmTarget .. ". TP Refresh in: " .. timeLeft .. "s"
