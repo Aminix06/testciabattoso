@@ -842,100 +842,93 @@ end)
 -- AUTO TRANSFORMATION LOGIC (CORRETTA PER RESPAWN)
 -- ==============================================================================
 task.spawn(function()
-        local Players = game:GetService("Players")
-        local ReplicatedStorage = game:GetService("ReplicatedStorage")
-        local yo = Players.LocalPlayer
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local equipRemote = Events:WaitForChild("equipskill")
 
-        local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
- 
-        if not folderData then
-            warn("IL SOMMO dice: Cartella dati non trovata per l'ID " .. yo.UserId)
-            return
-        end
+    local transformaciones = {
+		{name = "Evil Saiyan", forza = 1000000000},
+        {name = "LBSSJ4", forza = 100000000},
+        {name = "SSJB4", forza = 50000000},
+        {name = "SSJR3", forza = 50000000},
+        {name = "True God of Creation", forza = 30000000},
+        {name = "True God of Destruction", forza = 30000000},
+        {name = "God of Creation", forza = 30000000},
+        {name = "God of Destruction", forza = 30000000},
+        {name = "Jiren Ultra Instinct", forza = 14000000},
+        {name = "Mastered Ultra Instinct", forza = 14000000},
+        {name = "Godly SSJ2", forza = 8000000},
+        {name = "Ultra Instinct Omen", forza = 5000000},
+        {name = "Super Broly", forza = 4000000},
+        {name = "Evil SSJ", forza = 4000000},
+        {name = "Blue Evolution", forza = 3500000},
+        {name = "Dark Rose", forza = 3500000},
+        {name = "LSSJG", forza = 3000000},
+        {name = "SSJ Berseker", forza = 3000000},
+        {name = "Kefla SSJ2", forza = 3000000},
+        {name = "True Rose", forza = 2400000},
+        {name = "SSJ Blue Kaioken", forza = 2200000},
+        {name = "SSJ Rose", forza = 1400000},
+        {name = "SSJ Blue", forza = 1200000},
+        {name = "SSJG4", forza = 1000000},
+        {name = "LSSJ3", forza = 800000},
+        {name = "Corrupt SSJ", forza = 700000},
+        {name = "SSJ Rage", forza = 700000},
+        {name = "SSJ5", forza = 550000},
+        {name = "SSJ4", forza = 300000},
+        {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000},
+        {name = "LSSJ Kaioken", forza = 160000},
+        {name = "LSSJ", forza = 140000},
+        {name = "SSJ3", forza = 95000},
+        {name = "SSJ2 Majin", forza = 65000},
+        {name = "Spirit SSJ", forza = 65000},
+        {name = "SSJ2 Kaioken", forza = 50000},
+        {name = "SSJ Kaioken", forza = 16000},
+    }
 
-        local equipRemote = ReplicatedStorage.Package.Events.equipskill
-        local transformRemote = ReplicatedStorage.Package.Events.Fa
+    local function getStatusFolder()
+        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
+    end
 
-        local transformaciones = {
-			{name = "Evil Saiyan", forza = 1000000000},
-            {name = "LBSSJ4", forza = 100000000},
-            {name = "SSJB4", forza = 50000000},
-            {name = "SSJR3", forza = 50000000},
-            {name = "True God of Creation", forza = 30000000},
-            {name = "True God of Destruction", forza = 30000000},
-            {name = "God of Creation", forza = 30000000},
-            {name = "God of Destruction", forza = 30000000},
-            {name = "Jiren Ultra Instinct", forza = 14000000},
-            {name = "Mastered Ultra Instinct", forza = 14000000},
-            {name = "Godly SSJ2", forza = 8000000},
-            {name = "Ultra Instinct Omen", forza = 5000000},
-            {name = "Super Broly", forza = 4000000},
-            {name = "Evil SSJ", forza = 4000000},
-            {name = "Blue Evolution", forza = 3500000},
-            {name = "Dark Rose", forza = 3500000},
-            {name = "LSSJG", forza = 3000000},
-            {name = "SSJ Berseker", forza = 3000000},
-            {name = "Kefla SSJ2", forza = 3000000},
-            {name = "True Rose", forza = 2400000},
-            {name = "SSJ Blue Kaioken", forza = 2200000},
-            {name = "SSJ Rose", forza = 1400000},
-            {name = "SSJ Blue", forza = 1200000},
-            {name = "SSJG4", forza = 1000000},
-            {name = "LSSJ3", forza = 800000},
-            {name = "Corrupt SSJ", forza = 700000},
-            {name = "SSJ Rage", forza = 700000},
-            {name = "SSJ5", forza = 550000},
-            {name = "SSJ4", forza = 300000},
-            {name = "Mystic Kaioken", forza = 250000},
-            {name = "Mystic", forza = 200000},
-            {name = "LSSJ Kaioken", forza = 160000},
-            {name = "LSSJ", forza = 140000},
-            {name = "SSJ3", forza = 95000},
-            {name = "SSJ2 Majin", forza = 65000},
-            {name = "Spirit SSJ", forza = 65000},
-            {name = "SSJ2 Kaioken", forza = 50000},
-            {name = "SSJ Kaioken", forza = 16000},
-        }
-
-        local function getStatusFolder()
-            return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
-        end
-
-        print("IL SOMMO: Script Avviato con successo!")
-
-        while true do
+    while true do
+        if not getgenv().IsSwitching then
             pcall(function()
-                local strength = folderData.Strength.Value
-                local status = getStatusFolder()
- 
-                if status then
-                    local selected = status:FindFirstChild("SelectedTransformation")
-                    local actual = status:FindFirstChild("Transformation")
+                local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(localPlayer.UserId)
+                
+                if folderData then
+                    local strength = folderData.Strength.Value
+                    local status = getStatusFolder()
+                    
+                    if status then
+                        local selected = status:FindFirstChild("SelectedTransformation")
+                        local actual = status:FindFirstChild("Transformation")
 
-                    for _, v in ipairs(transformaciones) do
-                        if strength >= v.forza then
-                            if selected.Value ~= v.name then
-                                equipRemote:InvokeServer(v.name)
-                                task.wait(0.3)
-                            end
-
-                            if selected.Value == v.name then
-                                if actual.Value ~= selected.Value then
-                                    transformRemote:InvokeServer()
+                        for _, v in ipairs(transformaciones) do
+                            if strength >= v.forza then
+                                if selected.Value ~= v.name then
+                                    equipRemote:InvokeServer(v.name)
+                                    task.wait(0.3)
                                 end
-                                break
+
+                                if selected.Value == v.name then
+                                    if actual.Value ~= selected.Value then
+                                        if game.PlaceId == 114014249462644 then
+                                            Events.Hehehe:InvokeServer()
+                                        elseif game.PlaceId == 3311165597 then
+                                            Events.Fa:InvokeServer()
+                                        end
+                                    end
+                                    break 
+                                end
                             end
                         end
                     end
-                else
-                    warn("IL SOMMO: Cartella 'Status' non trovata né nel Player né nel Character!")
                 end
             end)
-            task.wait(1.5)
         end
-    end)
-end
-
+        task.wait(1.5)
+    end
+end)
 
 -- ==============================================================================
 -- COMBAT SYSTEM (EARTH & TOP)
