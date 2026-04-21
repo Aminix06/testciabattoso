@@ -975,7 +975,7 @@ task.spawn(function ()
         if game.PlaceId == 114014249462644 then
             targets = {"Wukong (MUI)", "Hit"}
         elseif game.PlaceId == 3311165597 then
-            targets = {"Goheta (Base - SSJB)", "Fused Zamasu"}
+            targets = {"Goheta (Base - SSJB)", "Fused Zamasu", "Universal Vegito"}
         end
 
         for _, name in ipairs(targets) do
