@@ -12,6 +12,7 @@ local HttpService = game:GetService("HttpService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService") -- Aggiunto per animazioni fluide
 
 -- ==============================================================================
 -- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES
@@ -63,10 +64,9 @@ getgenv().IsSwitching = false
 getgenv().CancelSwitch = false
 
 -- ==============================================================================
--- 🗂️ GUI UNIFICATA (MODE + BOSS TABS)
+-- 🗂️ GUI UNIFICATA (PREMIUM DESIGN - LATO DESTRO)
 -- ==============================================================================
 local function CreateUnifiedGUI()
-    -- Rimuove vecchie GUI se esistono per evitare cloni
     if game:GetService("CoreGui"):FindFirstChild("UnifiedFarmGUI") then
         game:GetService("CoreGui").UnifiedFarmGUI:Destroy()
     end
@@ -77,20 +77,27 @@ local function CreateUnifiedGUI()
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 1000
 
-    -- Frame Principale (Posizionato sopra la GUI di Fortnite)
+    -- Frame Principale (A destra, centrato)
     local MainFrame = Instance.new("Frame", sg)
-    MainFrame.Size = UDim2.new(0, 230, 0, 270)
-    MainFrame.Position = UDim2.new(0.163, -115, 0.26, -280)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    MainFrame.Size = UDim2.new(0, 240, 0, 310)
+    MainFrame.Position = UDim2.new(1, -260, 0.5, -155)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    MainFrame.BackgroundTransparency = 0.15 -- Effetto Vetro Scuro
     MainFrame.Active = true
 
     local mainCorner = Instance.new("UICorner", MainFrame)
-    mainCorner.CornerRadius = UDim.new(0, 8)
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    
     local mainStroke = Instance.new("UIStroke", MainFrame)
-    mainStroke.Color = Color3.fromRGB(0, 255, 204)
+    mainStroke.Color = Color3.fromRGB(255, 255, 255)
     mainStroke.Thickness = 2
+    local strokeGradient = Instance.new("UIGradient", mainStroke)
+    strokeGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 204)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
+    }
 
-    -- Sistema di trascinamento (Drag)
+    -- Dragging Logica
     local dragging, dragInput, mousePos, framePos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -110,42 +117,58 @@ local function CreateUnifiedGUI()
         end
     end)
 
-    -- Barra dei TABS
+    -- Titolo Superiore
+    local Title = Instance.new("TextLabel", MainFrame)
+    Title.Size = UDim2.new(1, 0, 0, 35)
+    Title.BackgroundTransparency = 1
+    Title.Font = Enum.Font.FredokaOne
+    Title.Text = "⚡ CIAB PANEL ⚡"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+
+    -- Barra dei Tabs
     local TabBar = Instance.new("Frame", MainFrame)
-    TabBar.Size = UDim2.new(1, 0, 0, 40)
+    TabBar.Size = UDim2.new(1, -20, 0, 35)
+    TabBar.Position = UDim2.new(0, 10, 0, 40)
     TabBar.BackgroundTransparency = 1
 
+    local TabListLayout = Instance.new("UIListLayout", TabBar)
+    TabListLayout.FillDirection = Enum.FillDirection.Horizontal
+    TabListLayout.Padding = UDim.new(0, 10)
+    TabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+    -- Bottoni TABS
+    local activeColor = Color3.fromRGB(0, 200, 150)
+    local inactiveColor = Color3.fromRGB(40, 40, 45)
+
     local ModeTab = Instance.new("TextButton", TabBar)
-    ModeTab.Size = UDim2.new(0.5, 0, 1, 0)
+    ModeTab.Size = UDim2.new(0.5, -5, 1, 0)
     ModeTab.Font = Enum.Font.FredokaOne
     ModeTab.Text = "MODE"
     ModeTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ModeTab.TextScaled = true
-    ModeTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-    local ModeCorner = Instance.new("UICorner", ModeTab)
-    ModeCorner.CornerRadius = UDim.new(0, 8)
+    ModeTab.TextSize = 16
+    ModeTab.BackgroundColor3 = activeColor
+    Instance.new("UICorner", ModeTab).CornerRadius = UDim.new(0, 8)
 
     local BossTab = Instance.new("TextButton", TabBar)
-    BossTab.Size = UDim2.new(0.5, 0, 1, 0)
-    BossTab.Position = UDim2.new(0.5, 0, 0, 0)
+    BossTab.Size = UDim2.new(0.5, -5, 1, 0)
     BossTab.Font = Enum.Font.FredokaOne
     BossTab.Text = "BOSS"
-    BossTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-    BossTab.TextScaled = true
-    BossTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-    local BossCorner = Instance.new("UICorner", BossTab)
-    BossCorner.CornerRadius = UDim.new(0, 8)
+    BossTab.TextColor3 = Color3.fromRGB(180, 180, 180)
+    BossTab.TextSize = 16
+    BossTab.BackgroundColor3 = inactiveColor
+    Instance.new("UICorner", BossTab).CornerRadius = UDim.new(0, 8)
 
     -- CONTENITORI
     local ModeContainer = Instance.new("Frame", MainFrame)
-    ModeContainer.Size = UDim2.new(1, -10, 1, -50)
-    ModeContainer.Position = UDim2.new(0, 5, 0, 45)
+    ModeContainer.Size = UDim2.new(1, -20, 1, -95)
+    ModeContainer.Position = UDim2.new(0, 10, 0, 85)
     ModeContainer.BackgroundTransparency = 1
     ModeContainer.Visible = true
 
     local BossContainer = Instance.new("Frame", MainFrame)
-    BossContainer.Size = UDim2.new(1, -10, 1, -50)
-    BossContainer.Position = UDim2.new(0, 5, 0, 45)
+    BossContainer.Size = UDim2.new(1, -20, 1, -95)
+    BossContainer.Position = UDim2.new(0, 10, 0, 85)
     BossContainer.BackgroundTransparency = 1
     BossContainer.Visible = false
 
@@ -161,13 +184,24 @@ local function CreateUnifiedGUI()
     local SwitchBtn = Instance.new("TextButton", ModeContainer)
     SwitchBtn.Size = UDim2.new(1, 0, 0, 70)
     SwitchBtn.Position = UDim2.new(0, 0, 0.4, 0)
-    SwitchBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    SwitchBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
     SwitchBtn.Font = Enum.Font.FredokaOne
     SwitchBtn.Text = "SWITCH TO\n" .. (getgenv().FarmTarget == "EARTH" and "TOP" or "EARTH")
     SwitchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     SwitchBtn.TextScaled = true
-    local SwitchCorner = Instance.new("UICorner", SwitchBtn)
-    SwitchCorner.CornerRadius = UDim.new(0, 8)
+    Instance.new("UICorner", SwitchBtn).CornerRadius = UDim.new(0, 10)
+    
+    -- Animazione Hover SwitchBtn
+    SwitchBtn.MouseEnter:Connect(function()
+        if not getgenv().IsSwitching then
+            TweenService:Create(SwitchBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 150, 255)}):Play()
+        end
+    end)
+    SwitchBtn.MouseLeave:Connect(function()
+        if not getgenv().IsSwitching then
+            TweenService:Create(SwitchBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 120, 255)}):Play()
+        end
+    end)
 
     SwitchBtn.MouseButton1Click:Connect(function()
         if getgenv().IsSwitching then 
@@ -183,11 +217,11 @@ local function CreateUnifiedGUI()
                 if getgenv().CancelSwitch then
                     getgenv().IsSwitching = false
                     SwitchBtn.Text = "SWITCH TO\n" .. nextTarget
-                    SwitchBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+                    TweenService:Create(SwitchBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(0, 120, 255)}):Play()
                     return
                 end
-                SwitchBtn.Text = "SWITCH A " .. nextTarget .. " IN " .. i .. "s\n(CLICCA PER ANNULLARE)"
-                SwitchBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+                SwitchBtn.Text = "SWITCH A " .. nextTarget .. "\nANNULLA (" .. i .. "s)"
+                TweenService:Create(SwitchBtn, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(200, 50, 50)}):Play()
                 task.wait(1)
             end
             
@@ -211,15 +245,16 @@ local function CreateUnifiedGUI()
     local scroll = Instance.new("ScrollingFrame", BossContainer)
     scroll.Size = UDim2.new(1, 0, 1, 0)
     scroll.BackgroundTransparency = 1
-    scroll.ScrollBarThickness = 4
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 204)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.BorderSizePixel = 0
     
     local listLayout = Instance.new("UIListLayout", scroll)
-    listLayout.Padding = UDim.new(0, 5)
+    listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
     local function BuildBossList()
-        -- Pulisce la lista vecchia
         for _, child in pairs(scroll:GetChildren()) do
             if child:IsA("TextButton") then child:Destroy() end
         end
@@ -233,23 +268,20 @@ local function CreateUnifiedGUI()
         
         for _, bossName in ipairs(bossNamesList) do
             local btn = Instance.new("TextButton", scroll)
-            btn.Size = UDim2.new(1, -10, 0, 45)
+            btn.Size = UDim2.new(1, -10, 0, 42)
             btn.Font = Enum.Font.FredokaOne
             btn.Text = bossName
             btn.TextColor3 = Color3.fromRGB(255, 255, 255)
             btn.TextScaled = true
-            
-            local btnCorner = Instance.new("UICorner", btn)
-            btnCorner.CornerRadius = UDim.new(0, 6)
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 
             local function UpdateColor()
-                if getgenv().BossTargets[bossName] then
-                    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-                else
-                    btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
-                end
+                local targetColor = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
+                TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play()
             end
-            UpdateColor()
+            
+            -- Set color instantly on spawn
+            btn.BackgroundColor3 = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
 
             btn.MouseButton1Click:Connect(function()
                 getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
@@ -263,20 +295,19 @@ local function CreateUnifiedGUI()
         scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end)
 
-    -- Costruisce la lista boss iniziale
     BuildBossList()
 
     -- === SWITCH TABS ===
     ModeTab.MouseButton1Click:Connect(function()
-        ModeTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        BossTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        TweenService:Create(ModeTab, TweenInfo.new(0.2), {BackgroundColor3 = activeColor, TextColor3 = Color3.fromRGB(255,255,255)}):Play()
+        TweenService:Create(BossTab, TweenInfo.new(0.2), {BackgroundColor3 = inactiveColor, TextColor3 = Color3.fromRGB(180,180,180)}):Play()
         ModeContainer.Visible = true
         BossContainer.Visible = false
     end)
 
     BossTab.MouseButton1Click:Connect(function()
-        BossTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        ModeTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        TweenService:Create(BossTab, TweenInfo.new(0.2), {BackgroundColor3 = activeColor, TextColor3 = Color3.fromRGB(255,255,255)}):Play()
+        TweenService:Create(ModeTab, TweenInfo.new(0.2), {BackgroundColor3 = inactiveColor, TextColor3 = Color3.fromRGB(180,180,180)}):Play()
         ModeContainer.Visible = false
         BossContainer.Visible = true
     end)
@@ -615,18 +646,15 @@ end
 local function setupCharacter(character)
     local humanoid = character:WaitForChild("Humanoid", 5)
     if humanoid then
-        -- Aggiornamento iniziale
         Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
         Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
         
-        -- Si aggiorna SOLO quando la vita cambia (Addio lag!)
         humanoid.HealthChanged:Connect(function(health)
             Converted["_health"].Text = formatNumber(math.floor(health))
             Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
         end)
     end
 
-    -- Aspettiamo che il gioco carichi le Stats nel Workspace
     task.spawn(function()
         local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
         if wsChar then
@@ -658,7 +686,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==============================================================================
--- GUI MENU STATISTICHE LATERALI (FIX LEAK E REBIRTH)
+-- GUI MENU STATISTICHE LATERALI
 -- ==============================================================================
 local function createGUI()
 	local ConvertedStats = {
@@ -941,7 +969,6 @@ end
 localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
--- Loop ottimizzati per limitare le chiamate al server (Riduzione Lag)
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local blockEvent = Events:WaitForChild("block")
@@ -965,7 +992,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC (ANTI-FREEZE E RESPAWN DETECTOR)
+-- AUTO TRANSFORMATION LOGIC
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -1055,7 +1082,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- COMBAT SYSTEM (EARTH & TOP) CON LOGICA BOSS MENU DINAMICO
+-- COMBAT SYSTEM (EARTH & TOP)
 -- ==============================================================================
 task.spawn(function ()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
