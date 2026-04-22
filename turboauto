@@ -63,59 +63,117 @@ getgenv().IsSwitching = false
 getgenv().CancelSwitch = false
 
 -- ==============================================================================
--- 🔘 GUI BOTTONE SWITCH MODE (Posizionato sopra la GUI Fortnite)
+-- 🗂️ GUI UNIFICATA (MODE + BOSS TABS)
 -- ==============================================================================
-local function CreateToggleButton()
+local function CreateUnifiedGUI()
+    -- Rimuove vecchie GUI se esistono per evitare cloni
+    if game:GetService("CoreGui"):FindFirstChild("UnifiedFarmGUI") then
+        game:GetService("CoreGui").UnifiedFarmGUI:Destroy()
+    end
+
     local sg = Instance.new("ScreenGui")
-    sg.Name = "ToggleFarmGUI"
+    sg.Name = "UnifiedFarmGUI"
     sg.Parent = game:GetService("CoreGui")
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 1000
 
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 220, 0, 55)
-    -- Centrato perfettamente sopra la GUI di sinistra (Fortnite)
-    frame.Position = UDim2.new(0.163, -110, 0.26, -65)
-    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    frame.Active = true
-    frame.Parent = sg
+    -- Frame Principale (Posizionato sopra la GUI di Fortnite)
+    local MainFrame = Instance.new("Frame", sg)
+    MainFrame.Size = UDim2.new(0, 230, 0, 270)
+    MainFrame.Position = UDim2.new(0.163, -115, 0.26, -280)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    MainFrame.Active = true
 
-    local corner = Instance.new("UICorner", frame)
-    corner.CornerRadius = UDim.new(0, 8)
-    local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.fromRGB(0, 255, 204)
-    stroke.Thickness = 2
+    local mainCorner = Instance.new("UICorner", MainFrame)
+    mainCorner.CornerRadius = UDim.new(0, 8)
+    local mainStroke = Instance.new("UIStroke", MainFrame)
+    mainStroke.Color = Color3.fromRGB(0, 255, 204)
+    mainStroke.Thickness = 2
 
-    local btn = Instance.new("TextButton", frame)
-    btn.Size = UDim2.new(1, 0, 1, 0)
-    btn.BackgroundTransparency = 1
-    btn.Font = Enum.Font.FredokaOne
-    btn.Text = "MODE: FARM " .. getgenv().FarmTarget
-    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-    btn.TextScaled = true
-
-    -- Custom Drag
+    -- Sistema di trascinamento (Drag)
     local dragging, dragInput, mousePos, framePos
-    frame.InputBegan:Connect(function(input)
+    MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             mousePos = input.Position
-            framePos = frame.Position
+            framePos = MainFrame.Position
             input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
         end
     end)
-    frame.InputChanged:Connect(function(input)
+    MainFrame.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
     end)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - mousePos
-            frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+            MainFrame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
         end
     end)
 
-    btn.MouseButton1Click:Connect(function()
-        if getgenv().IsSwitching then getgenv().CancelSwitch = true return end
+    -- Barra dei TABS
+    local TabBar = Instance.new("Frame", MainFrame)
+    TabBar.Size = UDim2.new(1, 0, 0, 40)
+    TabBar.BackgroundTransparency = 1
+
+    local ModeTab = Instance.new("TextButton", TabBar)
+    ModeTab.Size = UDim2.new(0.5, 0, 1, 0)
+    ModeTab.Font = Enum.Font.FredokaOne
+    ModeTab.Text = "MODE"
+    ModeTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    ModeTab.TextScaled = true
+    ModeTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    local ModeCorner = Instance.new("UICorner", ModeTab)
+    ModeCorner.CornerRadius = UDim.new(0, 8)
+
+    local BossTab = Instance.new("TextButton", TabBar)
+    BossTab.Size = UDim2.new(0.5, 0, 1, 0)
+    BossTab.Position = UDim2.new(0.5, 0, 0, 0)
+    BossTab.Font = Enum.Font.FredokaOne
+    BossTab.Text = "BOSS"
+    BossTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BossTab.TextScaled = true
+    BossTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    local BossCorner = Instance.new("UICorner", BossTab)
+    BossCorner.CornerRadius = UDim.new(0, 8)
+
+    -- CONTENITORI
+    local ModeContainer = Instance.new("Frame", MainFrame)
+    ModeContainer.Size = UDim2.new(1, -10, 1, -50)
+    ModeContainer.Position = UDim2.new(0, 5, 0, 45)
+    ModeContainer.BackgroundTransparency = 1
+    ModeContainer.Visible = true
+
+    local BossContainer = Instance.new("Frame", MainFrame)
+    BossContainer.Size = UDim2.new(1, -10, 1, -50)
+    BossContainer.Position = UDim2.new(0, 5, 0, 45)
+    BossContainer.BackgroundTransparency = 1
+    BossContainer.Visible = false
+
+    -- === LOGICA TAB MODE ===
+    local CurrentModeLabel = Instance.new("TextLabel", ModeContainer)
+    CurrentModeLabel.Size = UDim2.new(1, 0, 0, 40)
+    CurrentModeLabel.BackgroundTransparency = 1
+    CurrentModeLabel.Font = Enum.Font.FredokaOne
+    CurrentModeLabel.Text = "ATTUALE: " .. getgenv().FarmTarget
+    CurrentModeLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+    CurrentModeLabel.TextScaled = true
+
+    local SwitchBtn = Instance.new("TextButton", ModeContainer)
+    SwitchBtn.Size = UDim2.new(1, 0, 0, 70)
+    SwitchBtn.Position = UDim2.new(0, 0, 0.4, 0)
+    SwitchBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
+    SwitchBtn.Font = Enum.Font.FredokaOne
+    SwitchBtn.Text = "SWITCH TO\n" .. (getgenv().FarmTarget == "EARTH" and "TOP" or "EARTH")
+    SwitchBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SwitchBtn.TextScaled = true
+    local SwitchCorner = Instance.new("UICorner", SwitchBtn)
+    SwitchCorner.CornerRadius = UDim.new(0, 8)
+
+    SwitchBtn.MouseButton1Click:Connect(function()
+        if getgenv().IsSwitching then 
+            getgenv().CancelSwitch = true 
+            return 
+        end
         getgenv().IsSwitching = true
         getgenv().CancelSwitch = false
         local nextTarget = (getgenv().FarmTarget == "EARTH") and "TOP" or "EARTH"
@@ -124,19 +182,19 @@ local function CreateToggleButton()
             for i = 20, 1, -1 do
                 if getgenv().CancelSwitch then
                     getgenv().IsSwitching = false
-                    btn.Text = "MODE: FARM " .. getgenv().FarmTarget
-                    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    SwitchBtn.Text = "SWITCH TO\n" .. nextTarget
+                    SwitchBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
                     return
                 end
-                btn.Text = "SWITCH A " .. nextTarget .. " IN " .. i .. "s\n(CLICCA PER ANNULLARE)"
-                btn.TextColor3 = Color3.fromRGB(255, 100, 100)
+                SwitchBtn.Text = "SWITCH A " .. nextTarget .. " IN " .. i .. "s\n(CLICCA PER ANNULLARE)"
+                SwitchBtn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
                 task.wait(1)
             end
             
             if not getgenv().CancelSwitch then
                 getgenv().FarmTarget = nextTarget
                 SaveConfig()
-                btn.Text = "TELETRASPORTO..."
+                SwitchBtn.Text = "TELETRASPORTO..."
                 local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
                 local PlaceId = game.PlaceId
 
@@ -148,42 +206,10 @@ local function CreateToggleButton()
             end
         end)
     end)
-end
-CreateToggleButton()
 
--- ==============================================================================
--- 📋 GUI SELEZIONE BOSS DINAMICA (Verde/Rosso)
--- ==============================================================================
-local function CreateBossMenu()
-    local sg = Instance.new("ScreenGui")
-    sg.Name = "BossSelectorGUI"
-    sg.Parent = game:GetService("CoreGui")
-    sg.ResetOnSpawn = false
-    sg.DisplayOrder = 1001
-
-    local frame = Instance.new("Frame", sg)
-    frame.Size = UDim2.new(0, 200, 0, 220)
-    frame.Position = UDim2.new(1, -220, 0.5, -110)
-    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-    frame.Active = true
-    
-    local corner = Instance.new("UICorner", frame)
-    corner.CornerRadius = UDim.new(0, 8)
-    local stroke = Instance.new("UIStroke", frame)
-    stroke.Color = Color3.fromRGB(255, 215, 0)
-    stroke.Thickness = 2
-
-    local title = Instance.new("TextLabel", frame)
-    title.Size = UDim2.new(1, 0, 0, 30)
-    title.BackgroundTransparency = 1
-    title.Font = Enum.Font.FredokaOne
-    title.Text = "BOSS: " .. getgenv().FarmTarget
-    title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    title.TextScaled = true
-
-    local scroll = Instance.new("ScrollingFrame", frame)
-    scroll.Size = UDim2.new(1, -10, 1, -40)
-    scroll.Position = UDim2.new(0, 5, 0, 35)
+    -- === LOGICA TAB BOSS ===
+    local scroll = Instance.new("ScrollingFrame", BossContainer)
+    scroll.Size = UDim2.new(1, 0, 1, 0)
     scroll.BackgroundTransparency = 1
     scroll.ScrollBarThickness = 4
     scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -192,65 +218,70 @@ local function CreateBossMenu()
     listLayout.Padding = UDim.new(0, 5)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local dragging, dragInput, mousePos, framePos
-    frame.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            mousePos = input.Position
-            framePos = frame.Position
-            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+    local function BuildBossList()
+        -- Pulisce la lista vecchia
+        for _, child in pairs(scroll:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
         end
-    end)
-    frame.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - mousePos
-            frame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
-        end
-    end)
 
-    -- Lista Dinamica in base al target scelto
-    local bossNamesList = {}
-    if getgenv().FarmTarget == "EARTH" then
-        bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
-    elseif getgenv().FarmTarget == "TOP" then
-        bossNamesList = {"Wukong (MUI)", "Hit"}
-    end
-    
-    for _, bossName in ipairs(bossNamesList) do
-        local btn = Instance.new("TextButton", scroll)
-        btn.Size = UDim2.new(1, -10, 0, 40)
-        btn.Font = Enum.Font.FredokaOne
-        btn.Text = bossName
-        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-        btn.TextScaled = true
+        local bossNamesList = {}
+        if getgenv().FarmTarget == "EARTH" then
+            bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+        elseif getgenv().FarmTarget == "TOP" then
+            bossNamesList = {"Wukong (MUI)", "Hit"}
+        end
         
-        local btnCorner = Instance.new("UICorner", btn)
-        btnCorner.CornerRadius = UDim.new(0, 6)
+        for _, bossName in ipairs(bossNamesList) do
+            local btn = Instance.new("TextButton", scroll)
+            btn.Size = UDim2.new(1, -10, 0, 45)
+            btn.Font = Enum.Font.FredokaOne
+            btn.Text = bossName
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.TextScaled = true
+            
+            local btnCorner = Instance.new("UICorner", btn)
+            btnCorner.CornerRadius = UDim.new(0, 6)
 
-        local function UpdateColor()
-            if getgenv().BossTargets[bossName] then
-                btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
-            else
-                btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+            local function UpdateColor()
+                if getgenv().BossTargets[bossName] then
+                    btn.BackgroundColor3 = Color3.fromRGB(0, 180, 0)
+                else
+                    btn.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+                end
             end
-        end
-        UpdateColor()
-
-        btn.MouseButton1Click:Connect(function()
-            getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
             UpdateColor()
-            SaveConfig()
-        end)
+
+            btn.MouseButton1Click:Connect(function()
+                getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
+                UpdateColor()
+                SaveConfig()
+            end)
+        end
     end
-    
+
     listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
     end)
+
+    -- Costruisce la lista boss iniziale
+    BuildBossList()
+
+    -- === SWITCH TABS ===
+    ModeTab.MouseButton1Click:Connect(function()
+        ModeTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        BossTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        ModeContainer.Visible = true
+        BossContainer.Visible = false
+    end)
+
+    BossTab.MouseButton1Click:Connect(function()
+        BossTab.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        ModeTab.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+        ModeContainer.Visible = false
+        BossContainer.Visible = true
+    end)
 end
-CreateBossMenu()
+CreateUnifiedGUI()
 
 -- ==============================================================================
 -- QUEUE ON TELEPORT
