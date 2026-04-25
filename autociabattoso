@@ -1,146 +1,299 @@
+--- START OF FILE Paste ---
+
 if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
 end
-
 getgenv().ScriptAlreadyRunning = true
 
---==============================================================================
--- CONTROLLO SERVER VUOTO (Esecuzione Immediata e Continua)
---==============================================================================
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+-- ==============================================================================
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES (SOLO TERRA)
+-- ==============================================================================
+local ConfigName = "CiabTurboConfig.json"
+
+local DefaultBosses = {
+    ["Wukong (MUI)"] = true,
+    ["Hit"] = true,
+    ["Universal Vegito"] = true,
+    ["Goheta (Base - SSJB)"] = true,
+    ["Fused Zamasu"] = true
+}
+
+if isfile and isfile(ConfigName) then
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(ConfigName))
+    end)
+    if success and data then
+        getgenv().BossTargets = data.BossTargets or {}
+        for boss, val in pairs(DefaultBosses) do
+            if getgenv().BossTargets[boss] == nil then
+                getgenv().BossTargets[boss] = val
+            end
+        end
+    else
+        getgenv().BossTargets = DefaultBosses
+    end
+else
+    getgenv().BossTargets = DefaultBosses
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({BossTargets = DefaultBosses}))
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({
+            BossTargets = getgenv().BossTargets
+        }))
+    end
+end
+
+-- ==============================================================================
+-- 🗂️ GUI PREMIUM (SOLO BOSS PANEL - LATO DESTRO)
+-- ==============================================================================
+local function CreateUnifiedGUI()
+    if game:GetService("CoreGui"):FindFirstChild("UnifiedFarmGUI") then
+        game:GetService("CoreGui").UnifiedFarmGUI:Destroy()
+    end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "UnifiedFarmGUI"
+    sg.Parent = game:GetService("CoreGui")
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 1000
+
+    -- Frame Principale (A destra)
+    local MainFrame = Instance.new("Frame", sg)
+    MainFrame.Size = UDim2.new(0, 240, 0, 280)
+    MainFrame.Position = UDim2.new(1, -260, 0.5, -140)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    MainFrame.BackgroundTransparency = 0.15 
+    MainFrame.Active = true
+
+    local mainCorner = Instance.new("UICorner", MainFrame)
+    mainCorner.CornerRadius = UDim.new(0, 12)
+    
+    local mainStroke = Instance.new("UIStroke", MainFrame)
+    mainStroke.Color = Color3.fromRGB(255, 255, 255)
+    mainStroke.Thickness = 2
+    local strokeGradient = Instance.new("UIGradient", mainStroke)
+    strokeGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 204)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
+    }
+
+    -- Dragging Logica
+    local dragging, dragInput, mousePos, framePos
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            mousePos = input.Position
+            framePos = MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    MainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            MainFrame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+
+    -- Titolo Superiore
+    local Title = Instance.new("TextLabel", MainFrame)
+    Title.Size = UDim2.new(1, 0, 0, 45)
+    Title.BackgroundTransparency = 1
+    Title.Font = Enum.Font.FredokaOne
+    Title.Text = "⚡ CIAB PANEL ⚡"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+
+    -- CONTENITORE BOSS
+    local BossContainer = Instance.new("Frame", MainFrame)
+    BossContainer.Size = UDim2.new(1, -20, 1, -55)
+    BossContainer.Position = UDim2.new(0, 10, 0, 45)
+    BossContainer.BackgroundTransparency = 1
+
+    local scroll = Instance.new("ScrollingFrame", BossContainer)
+    scroll.Size = UDim2.new(1, 0, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 204)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.BorderSizePixel = 0
+    
+    local listLayout = Instance.new("UIListLayout", scroll)
+    listLayout.Padding = UDim.new(0, 8)
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    local bossNamesList = {"Wukong (MUI)", "Hit", "Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+    
+    for _, bossName in ipairs(bossNamesList) do
+        local btn = Instance.new("TextButton", scroll)
+        btn.Size = UDim2.new(1, -10, 0, 42)
+        btn.Font = Enum.Font.FredokaOne
+        btn.Text = bossName
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextScaled = true
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+        local function UpdateColor()
+            local targetColor = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
+            TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play()
+        end
+        
+        btn.BackgroundColor3 = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
+
+        btn.MouseButton1Click:Connect(function()
+            getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
+            UpdateColor()
+            SaveConfig()
+        end)
+    end
+
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+end
+CreateUnifiedGUI()
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT
+-- ==============================================================================
+task.spawn(function()
+    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+    if queue_on_teleport then
+        queue_on_teleport([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
+        ]])
+    end
+end)
+
+-- ==============================================================================
+-- NUOVO SISTEMA INTELLIGENTE (SERVER CHECK E ANTI INTRUSI)
+-- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
-	
-	local HttpService = game:GetService("HttpService")
-	local TeleportService = game:GetService("TeleportService")
-	local Players = game:GetService("Players")
-	local LocalPlayer = Players.LocalPlayer
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
 	
 	local function IsPublicServer()
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
-		
 		while true do
 			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
 			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
-			
-			if not requestFunc then
-				warn("Executor non supporta request. Impossibile verificare server pubblico.")
-				return true 
-			end
-
-			local success, response = pcall(function()
-				return requestFunc({Url = url, Method = "GET"})
-			end)
-
+			if not requestFunc then return true end
+			local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
 			if not success or not response or response.StatusCode ~= 200 then
-				task.wait(1) 
+				task.wait(1)
 			else
 				local data = HttpService:JSONDecode(response.Body)
 				for _, server in ipairs(data.data) do
-					if server.id == jobId then
-						return true 
-					end
+					if server.id == jobId then return true end
 				end
 				cursor = data.nextPageCursor
 				if not cursor then break end
 			end
 			task.wait(0.1)
 		end
-		return false 
+		return false
 	end
 
-	print("🔍 Analisi tipo di server in corso...")
-	local publico = IsPublicServer()
-
-	if publico then
-		LocalPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+	if IsPublicServer() then
+		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
 		print("🔒 Server Privato confermato.")
+        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
 		
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
-				warn("⚠️ Intruso rilevato! Eseguo Server Hop sullo stesso pianeta...")
-				
-				local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
-				if queue_on_teleport then
-					queue_on_teleport([[
-						repeat task.wait() until game:IsLoaded()
-						loadstring(game:HttpGet("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/autociabattoso"))()
-					]])
-				end
-
-				-- REJOIN STESSO PIANETA
-				local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-				if game.PlaceId == 3311165597 then 
-					TPEvent:InvokeServer("Earth")
-				elseif game.PlaceId == 5151400895 then 
-					TPEvent:InvokeServer("Vills Planet")
-				end
+                warn("⚠️ Intruso rilevato! Eseguo Server Hop...")
+                -- Come richiesto, rimane sulla Terra
+				TPEvent:InvokeServer("Earth") 
 			end
 		end
 
 		CheckIntruders()
-		Players.PlayerAdded:Connect(function()
-			CheckIntruders()
-		end)
+		Players.PlayerAdded:Connect(CheckIntruders)
 	end
 end)
 
-local function CheckToGo()
-	local player = game.Players.LocalPlayer
-	local playerId = player.UserId
-	local data = game:GetService("ReplicatedStorage").Datas
-	local playerData = data:WaitForChild(tostring(playerId))
-	local statsz = playerData:WaitForChild("Strength")
-	while true do
-		if statsz.Value < 100000000 and game.PlaceId == 5151400895 then
-			local args = {[1] = "Earth"}
-			game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-		end
-		wait(.1)
-	end
-end
-task.spawn(CheckToGo)
- 
-local firstspawn = true
-local function startonskibidi()
-	if firstspawn and game.PlaceId == 5151400895 then
-		print("Start")
-		firstspawn = false
-	else
-		print("died")
-	end
-end
-game.Players.LocalPlayer.CharacterAdded:Connect(startonskibidi)
- 
+-- ==============================================================================
+-- START THE GAME
+-- ==============================================================================
 local function StartTheGame()
-    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    local playerGui = localPlayer:WaitForChild("PlayerGui")
     local mainGui = playerGui:WaitForChild("Main", 10)
-
     if not mainGui then return end
-
-	task.wait()
-	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
-	task.wait()
-	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
-	task.wait()
- 
+    task.wait()
+    local Event = ReplicatedStorage.Package.Events.Start
+    Event:InvokeServer()
+    task.wait()
+    Event:InvokeServer()
+    task.wait()
     local bruhButton = mainGui:FindFirstChild("bruh")
     if bruhButton then
-	    bruhButton.Disabled = true
-	    bruhButton.Disabled = false
+        bruhButton.Disabled = true
+        bruhButton.Disabled = false
     end
- 
-	task.wait()
-	game:GetService("ReplicatedStorage").Package.Events.Start:InvokeServer()
+    task.wait()
+    Event:InvokeServer()
 end
 StartTheGame()
-wait(.5)
- 
--- GUI ORIGINAL 1 (BARRE VITA/ENERGIA)
+task.wait(0.5)
+
+-- ==============================================================================
+-- WEBHOOK
+-- ==============================================================================
+task.spawn(function()
+    local PlaceId = game.PlaceId
+    if PlaceId ~= 3311165597 then return end
+
+	local Webhook_URL = "https://discord.com/api/webhooks/1456385233564733561/0Bom3FZYJaSBocpwj-cx2nHKIZP95tzpATGbfuuKrT1W9jxgjLtgPXeAuj6GZBWgqTm-"
+	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
+	if not playerStats then return end
+
+	local statz = tostring(playerStats.Defense.Value)
+	local rebs = tostring(playerStats.Rebirth.Value)
+	local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+
+	if requestFunc then
+		requestFunc({
+			Url = Webhook_URL,
+			Method = 'POST',
+			Headers = { ['Content-Type'] = 'application/json' },
+			Body = HttpService:JSONEncode({
+				["content"] = "",
+				["embeds"] = {{
+					["title"] = "✅ Auto-Farm avviato (EARTH)!",
+					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
+					["type"] = "rich",
+					["color"] = 65280, 
+					["fields"] = {
+						{ ["name"] = "Rebirths", ["value"] = rebs, ["inline"] = true },
+						{ ["name"] = "Defense", ["value"] = statz, ["inline"] = true }
+					}
+				}}
+			})
+		})
+	end
+end)
+
+-- ==============================================================================
+-- GUI SETUP (STATS & HEALTH/ENERGY)
+-- ==============================================================================
 local Converted = {
 	["_HealthAndEnergy"] = Instance.new("ScreenGui");
 	["_Frame"] = Instance.new("Frame");
@@ -170,316 +323,223 @@ local Converted = {
 	["_maxenergy"] = Instance.new("TextLabel");
 	["_UIStroke9"] = Instance.new("UIStroke");
 }
- 
+
 Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
 Converted["_HealthAndEnergy"].Parent = game:GetService("CoreGui")
- 
+
 Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
 Converted["_Frame"].BorderSizePixel = 0
 Converted["_Frame"].Position = UDim2.new(0.316506416, 0, 0.00999999978, 0)
 Converted["_Frame"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
 Converted["_Frame"].Parent = Converted["_HealthAndEnergy"]
- 
+
 Converted["_UICorner"].CornerRadius = UDim.new(1, 0)
 Converted["_UICorner"].Parent = Converted["_Frame"]
- 
 Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
 Converted["_UIStroke"].Thickness = 4
 Converted["_UIStroke"].Parent = Converted["_Frame"]
- 
+
 Converted["_UIGradient"].Color = ColorSequence.new{
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.055710308253765106, Color3.fromRGB(255, 85.23676782846451, 0)),
-	ColorSequenceKeypoint.new(0.11142061650753021, Color3.fromRGB(255, 170.47353565692902, 0)),
-	ColorSequenceKeypoint.new(0.16713091731071472, Color3.fromRGB(254.2897117137909, 255, 0)),
-	ColorSequenceKeypoint.new(0.22284123301506042, Color3.fromRGB(169.05292868614197, 255, 0)),
-	ColorSequenceKeypoint.new(0.27855151891708374, Color3.fromRGB(83.81617605686188, 255, 0)),
-	ColorSequenceKeypoint.new(0.33426183462142944, Color3.fromRGB(0, 255, 1.420576572418213)),
-	ColorSequenceKeypoint.new(0.38997215032577515, Color3.fromRGB(0, 255, 86.65735960006714)),
-	ColorSequenceKeypoint.new(0.44568246603012085, Color3.fromRGB(0, 255, 171.89414262771606)),
-	ColorSequenceKeypoint.new(0.5013927817344666, Color3.fromRGB(0, 252.869074344635, 255)),
-	ColorSequenceKeypoint.new(0.5571030378341675, Color3.fromRGB(0, 167.63235211372375, 255)),
-	ColorSequenceKeypoint.new(0.6128133535385132, Color3.fromRGB(0, 82.39556908607483, 255)),
-	ColorSequenceKeypoint.new(0.6685236692428589, Color3.fromRGB(2.841153144836426, 0, 255)),
-	ColorSequenceKeypoint.new(0.7242339849472046, Color3.fromRGB(88.07793617248535, 0, 255)),
-	ColorSequenceKeypoint.new(0.7799443006515503, Color3.fromRGB(173.31471920013428, 0, 255)),
-	ColorSequenceKeypoint.new(0.835654616355896, Color3.fromRGB(255, 0, 251.4484977722168)),
-	ColorSequenceKeypoint.new(0.8913649320602417, Color3.fromRGB(255, 0, 166.21171474456787)),
-	ColorSequenceKeypoint.new(0.9470751881599426, Color3.fromRGB(255, 0, 80.97493171691895)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 }
 Converted["_UIGradient"].Parent = Converted["_UIStroke"]
- 
+
 Converted["_TextLabel"].Font = Enum.Font.FredokaOne
 Converted["_TextLabel"].Text = "HEALTH:"
 Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_TextLabel"].TextScaled = true
-Converted["_TextLabel"].TextSize = 14
-Converted["_TextLabel"].TextWrapped = true
-Converted["_TextLabel"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_TextLabel"].BackgroundTransparency = 1
-Converted["_TextLabel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_TextLabel"].BorderSizePixel = 0
 Converted["_TextLabel"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
 Converted["_TextLabel"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
 Converted["_TextLabel"].Parent = Converted["_Frame"]
- 
 Converted["_UIStroke1"].Parent = Converted["_TextLabel"]
- 
+
 Converted["_UIGradient1"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(26.000000350177288, 255, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(8.000000473111868, 76.0000030696392, 0))
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 255, 0)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 76, 0))
 }
-Converted["_UIGradient1"].Offset = Vector2.new(0.10000000149011612, 0.10000000149011612)
+Converted["_UIGradient1"].Offset = Vector2.new(0.1, 0.1)
 Converted["_UIGradient1"].Rotation = 90
 Converted["_UIGradient1"].Parent = Converted["_Frame"]
- 
+
 Converted["_health"].Font = Enum.Font.FredokaOne
 Converted["_health"].Text = "nil"
 Converted["_health"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_health"].TextScaled = true
-Converted["_health"].TextSize = 14
-Converted["_health"].TextWrapped = true
-Converted["_health"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_health"].BackgroundTransparency = 1
-Converted["_health"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_health"].BorderSizePixel = 0
 Converted["_health"].Position = UDim2.new(0.234679773, 0, -0.0192308649, 0)
 Converted["_health"].Size = UDim2.new(0.303816825, 0, 1.00000012, 0)
-Converted["_health"].Name = "health"
 Converted["_health"].Parent = Converted["_Frame"]
- 
 Converted["_UIStroke2"].Parent = Converted["_health"]
- 
+
 Converted["_/"].Font = Enum.Font.FredokaOne
 Converted["_/"].Text = "/"
 Converted["_/"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_/"].TextScaled = true
-Converted["_/"].TextSize = 14
-Converted["_/"].TextWrapped = true
-Converted["_/"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_/"].BackgroundTransparency = 1
-Converted["_/"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_/"].BorderSizePixel = 0
-Converted["_/"].Position = UDim2.new(0.481177628, 0, -1.10039345e-07, 0)
-Converted["_/"].Size = UDim2.new(0.188958243, 0, 1.00000024, 0)
-Converted["_/"].Name = "/"
+Converted["_/"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/"].Size = UDim2.new(0.188958243, 0, 1, 0)
 Converted["_/"].Parent = Converted["_Frame"]
- 
 Converted["_UIStroke3"].Parent = Converted["_/"]
- 
+
 Converted["_maxhealth"].Font = Enum.Font.FredokaOne
 Converted["_maxhealth"].Text = "nil"
 Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxhealth"].TextScaled = true
-Converted["_maxhealth"].TextSize = 14
-Converted["_maxhealth"].TextWrapped = true
-Converted["_maxhealth"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxhealth"].BackgroundTransparency = 1
-Converted["_maxhealth"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_maxhealth"].BorderSizePixel = 0
-Converted["_maxhealth"].Position = UDim2.new(0.612817109, 0, -1.33070841e-07, 0)
-Converted["_maxhealth"].Size = UDim2.new(0.387182951, 0, 1.00000024, 0)
-Converted["_maxhealth"].Name = "maxhealth"
+Converted["_maxhealth"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxhealth"].Size = UDim2.new(0.387182951, 0, 1, 0)
 Converted["_maxhealth"].Parent = Converted["_Frame"]
- 
 Converted["_UIStroke4"].Parent = Converted["_maxhealth"]
- 
+
 Converted["_freim"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_freim"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_freim"].BorderSizePixel = 0
-Converted["_freim"].Position = UDim2.new(0.316506416, 0, 0.075000003, 0)
+Converted["_freim"].Position = UDim2.new(0.316506416, 0, 0.075, 0)
 Converted["_freim"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
-Converted["_freim"].Name = "freim"
 Converted["_freim"].Parent = Converted["_HealthAndEnergy"]
- 
+
 Converted["_UICorner1"].CornerRadius = UDim.new(1, 0)
 Converted["_UICorner1"].Parent = Converted["_freim"]
- 
 Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
 Converted["_UIStroke5"].Thickness = 4
 Converted["_UIStroke5"].Parent = Converted["_freim"]
- 
+
 Converted["_Uigraddd"].Color = ColorSequence.new{
 	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.055710308253765106, Color3.fromRGB(255, 85.23676782846451, 0)),
-	ColorSequenceKeypoint.new(0.11142061650753021, Color3.fromRGB(255, 170.47353565692902, 0)),
-	ColorSequenceKeypoint.new(0.16713091731071472, Color3.fromRGB(254.2897117137909, 255, 0)),
-	ColorSequenceKeypoint.new(0.22284123301506042, Color3.fromRGB(169.05292868614197, 255, 0)),
-	ColorSequenceKeypoint.new(0.27855151891708374, Color3.fromRGB(83.81617605686188, 255, 0)),
-	ColorSequenceKeypoint.new(0.33426183462142944, Color3.fromRGB(0, 255, 1.420576572418213)),
-	ColorSequenceKeypoint.new(0.38997215032577515, Color3.fromRGB(0, 255, 86.65735960006714)),
-	ColorSequenceKeypoint.new(0.44568246603012085, Color3.fromRGB(0, 255, 171.89414262771606)),
-	ColorSequenceKeypoint.new(0.5013927817344666, Color3.fromRGB(0, 252.869074344635, 255)),
-	ColorSequenceKeypoint.new(0.5571030378341675, Color3.fromRGB(0, 167.63235211372375, 255)),
-	ColorSequenceKeypoint.new(0.6128133535385132, Color3.fromRGB(0, 82.39556908607483, 255)),
-	ColorSequenceKeypoint.new(0.6685236692428589, Color3.fromRGB(2.841153144836426, 0, 255)),
-	ColorSequenceKeypoint.new(0.7242339849472046, Color3.fromRGB(88.07793617248535, 0, 255)),
-	ColorSequenceKeypoint.new(0.7799443006515503, Color3.fromRGB(173.31471920013428, 0, 255)),
-	ColorSequenceKeypoint.new(0.835654616355896, Color3.fromRGB(255, 0, 251.4484977722168)),
-	ColorSequenceKeypoint.new(0.8913649320602417, Color3.fromRGB(255, 0, 166.21171474456787)),
-	ColorSequenceKeypoint.new(0.9470751881599426, Color3.fromRGB(255, 0, 80.97493171691895)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
 	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 }
-Converted["_Uigraddd"].Name = "Uigraddd"
 Converted["_Uigraddd"].Parent = Converted["_UIStroke5"]
- 
+
 Converted["_TextLabel1"].Font = Enum.Font.FredokaOne
 Converted["_TextLabel1"].Text = "ENERGY:"
 Converted["_TextLabel1"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_TextLabel1"].TextScaled = true
-Converted["_TextLabel1"].TextSize = 14
-Converted["_TextLabel1"].TextWrapped = true
-Converted["_TextLabel1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_TextLabel1"].BackgroundTransparency = 1
-Converted["_TextLabel1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_TextLabel1"].BorderSizePixel = 0
 Converted["_TextLabel1"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
 Converted["_TextLabel1"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
 Converted["_TextLabel1"].Parent = Converted["_freim"]
- 
 Converted["_UIStroke6"].Parent = Converted["_TextLabel1"]
- 
+
 Converted["_Uigrad"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 221.00000202655792, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 67.00000360608101, 57.00000040233135))
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 221, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 67, 57))
 }
-Converted["_Uigrad"].Offset = Vector2.new(0.10000000149011612, 0.10000000149011612)
+Converted["_Uigrad"].Offset = Vector2.new(0.1, 0.1)
 Converted["_Uigrad"].Rotation = 90
-Converted["_Uigrad"].Name = "Uigrad"
 Converted["_Uigrad"].Parent = Converted["_freim"]
- 
+
 Converted["_energy"].Font = Enum.Font.FredokaOne
 Converted["_energy"].Text = "nil"
 Converted["_energy"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_energy"].TextScaled = true
-Converted["_energy"].TextSize = 14
-Converted["_energy"].TextWrapped = true
-Converted["_energy"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_energy"].BackgroundTransparency = 1
-Converted["_energy"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_energy"].BorderSizePixel = 0
 Converted["_energy"].Position = UDim2.new(0.234679773, 0, -0.0192310419, 0)
 Converted["_energy"].Size = UDim2.new(0.303816825, 0, 1.00000036, 0)
-Converted["_energy"].Name = "energy"
 Converted["_energy"].Parent = Converted["_freim"]
- 
 Converted["_UIStroke7"].Parent = Converted["_energy"]
- 
+
 Converted["_/1"].Font = Enum.Font.FredokaOne
 Converted["_/1"].Text = "/"
 Converted["_/1"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_/1"].TextScaled = true
-Converted["_/1"].TextSize = 14
-Converted["_/1"].TextWrapped = true
-Converted["_/1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_/1"].BackgroundTransparency = 1
-Converted["_/1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_/1"].BorderSizePixel = 0
-Converted["_/1"].Position = UDim2.new(0.481177628, 0, -1.10039345e-07, 0)
-Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1.00000024, 0)
-Converted["_/1"].Name = "/"
+Converted["_/1"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1, 0)
 Converted["_/1"].Parent = Converted["_freim"]
- 
 Converted["_UIStroke8"].Parent = Converted["_/1"]
- 
+
 Converted["_maxenergy"].Font = Enum.Font.FredokaOne
 Converted["_maxenergy"].Text = "nil"
 Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxenergy"].TextScaled = true
-Converted["_maxenergy"].TextSize = 14
-Converted["_maxenergy"].TextWrapped = true
-Converted["_maxenergy"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxenergy"].BackgroundTransparency = 1
-Converted["_maxenergy"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_maxenergy"].BorderSizePixel = 0
-Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -1.77427779e-07, 0)
-Converted["_maxenergy"].Size = UDim2.new(0.387182951, 0, 1.00000024, 0)
-Converted["_maxenergy"].Name = "maxenergy"
+Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxenergy"].Size = UDim2.new(0.387182951, 0, 1, 0)
 Converted["_maxenergy"].Parent = Converted["_freim"]
- 
 Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
- 
+
 task.spawn(function()
-    local playerGui = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-    local mainGui = playerGui:WaitForChild("Main", 15)
-    if mainGui then
-        local mainFrame = mainGui:FindFirstChild("MainFrame")
-        if mainFrame then
-            local bars = mainFrame:FindFirstChild("Bars")
-            if bars then
-                bars.Visible = false
-                print("Barre della GUI di default nascoste con successo.")
+    RunService.RenderStepped:Connect(function()
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local mainGui = playerGui:FindFirstChild("Main")
+            if mainGui then
+                local mainFrame = mainGui:FindFirstChild("MainFrame")
+                if mainFrame then
+                    local bars = mainFrame:FindFirstChild("Bars")
+                    if bars then bars.Visible = false end
+                end
             end
         end
-    else
-        warn("Impossibile trovare la GUI 'Main' per nascondere le barre.")
-    end
+    end)
 end)
- 
-local running = true
+
 local function formatNumber(number)
-	if number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
+	if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
+	elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
 	elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
 	elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
 	elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
 	else return tostring(number) end
 end
- 
-local function CambiareVitaNormal()
-	while running do
-		local character = game.Players.LocalPlayer.Character
-		if character and character:FindFirstChild("Humanoid") then
-			local humanoid = character.Humanoid
-			Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
-			Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
-		end
-		wait(0.1)
-	end
-end
- 
-local function CambiareEnergyaNormale()
-	while running do
-		local player = game.Players.LocalPlayer
-		local character = game.Workspace.Living:FindFirstChild(player.Name)
-		if character and character:FindFirstChild("Stats") and character.Stats:FindFirstChild("Ki") then
-			local ki = character.Stats.Ki
-			Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-			Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
-		end
-		wait(0.1)
-	end
-end
- 
+
 local function setupCharacter(character)
-	running = false
-	wait(0.1)
-	running = true 
-	task.spawn(CambiareVitaNormal)
-	task.spawn(CambiareEnergyaNormale)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
+        Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+        
+        humanoid.HealthChanged:Connect(function(health)
+            Converted["_health"].Text = formatNumber(math.floor(health))
+            Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+        end)
+    end
+
+    task.spawn(function()
+        local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
+        if wsChar then
+            local statsFolder = wsChar:WaitForChild("Stats", 5)
+            if statsFolder then
+                local ki = statsFolder:WaitForChild("Ki", 5)
+                if ki then
+                    Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
+                    Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+                    
+                    ki.Changed:Connect(function()
+                        Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
+                        Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+                    end)
+                end
+            end
+        end
+    end)
 end
-game.Players.LocalPlayer.CharacterAdded:Connect(setupCharacter)
-if game.Players.LocalPlayer.Character then setupCharacter(game.Players.LocalPlayer.Character) end
- 
-game:GetService("RunService").RenderStepped:Connect(function()
+
+localPlayer.CharacterAdded:Connect(setupCharacter)
+if localPlayer.Character then setupCharacter(localPlayer.Character) end
+
+RunService.RenderStepped:Connect(function()
 	Converted["_UIGradient1"].Rotation += 2
 	Converted["_UIGradient"].Rotation += 2
 	Converted["_Uigrad"].Rotation += 2
 	Converted["_Uigraddd"].Rotation += 2
 end)
 
--- GUI ORIGINAL 2 (STATS AUTOFARM)
+-- ==============================================================================
+-- GUI MENU STATISTICHE LATERALI
+-- ==============================================================================
 local function createGUI()
-	local Converted = {
+	local ConvertedStats = {
 		["_AUTOFARM"] = Instance.new("ScreenGui");
 		["_Frame"] = Instance.new("Frame");
 		["_UICorner"] = Instance.new("UICorner");
 		["_UIStroke"] = Instance.new("UIStroke");
 		["_UIGradient"] = Instance.new("UIGradient");
 		["_UIGradient1"] = Instance.new("UIGradient");
-		["_LocalScript"] = Instance.new("LocalScript");
 		["_ImageLabel"] = Instance.new("ImageLabel");
 		["_UICorner1"] = Instance.new("UICorner");
 		["_TextLabel"] = Instance.new("TextLabel");
@@ -510,421 +570,276 @@ local function createGUI()
 		["_REBSNUMBER"] = Instance.new("TextLabel");
 		["_UIStroke12"] = Instance.new("UIStroke");
 	}
- 
-	Converted["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	Converted["_AUTOFARM"].Name = "AUTOFARM"
-	Converted["_AUTOFARM"].Parent = game:GetService("CoreGui")
- 
-	Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_Frame"].BorderSizePixel = 0
-	Converted["_Frame"].Position = UDim2.new(0.0210622549, 0, 0.260050237, 0)
-	Converted["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
-	Converted["_Frame"].Parent = Converted["_AUTOFARM"]
- 
-	Converted["_UICorner"].Parent = Converted["_Frame"]
- 
-	Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
-	Converted["_UIStroke"].Thickness = 4
-	Converted["_UIStroke"].Parent = Converted["_Frame"]
- 
-	Converted["_UIGradient"].Color = ColorSequence.new{
+
+	ConvertedStats["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ConvertedStats["_AUTOFARM"].Name = "AUTOFARM"
+	ConvertedStats["_AUTOFARM"].Parent = game:GetService("CoreGui")
+
+	ConvertedStats["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+	ConvertedStats["_Frame"].BorderSizePixel = 0
+	ConvertedStats["_Frame"].Position = UDim2.new(0.0210622549, 0, 0.260050237, 0)
+	ConvertedStats["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
+	ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
+
+	ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
+	ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_UIStroke"].Thickness = 4
+	ConvertedStats["_UIStroke"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_UIGradient"].Color = ColorSequence.new{
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-		ColorSequenceKeypoint.new(0.055710308253765106, Color3.fromRGB(255, 85.23676782846451, 0)),
-		ColorSequenceKeypoint.new(0.11142061650753021, Color3.fromRGB(255, 170.47353565692902, 0)),
-		ColorSequenceKeypoint.new(0.16713091731071472, Color3.fromRGB(254.2897117137909, 255, 0)),
-		ColorSequenceKeypoint.new(0.22284123301506042, Color3.fromRGB(169.05292868614197, 255, 0)),
-		ColorSequenceKeypoint.new(0.27855151891708374, Color3.fromRGB(83.81617605686188, 255, 0)),
-		ColorSequenceKeypoint.new(0.33426183462142944, Color3.fromRGB(0, 255, 1.420576572418213)),
-		ColorSequenceKeypoint.new(0.38997215032577515, Color3.fromRGB(0, 255, 86.65735960006714)),
-		ColorSequenceKeypoint.new(0.44568246603012085, Color3.fromRGB(0, 255, 171.89414262771606)),
-		ColorSequenceKeypoint.new(0.5013927817344666, Color3.fromRGB(0, 252.869074344635, 255)),
-		ColorSequenceKeypoint.new(0.5571030378341675, Color3.fromRGB(0, 167.63235211372375, 255)),
-		ColorSequenceKeypoint.new(0.6128133535385132, Color3.fromRGB(0, 82.39556908607483, 255)),
-		ColorSequenceKeypoint.new(0.6685236692428589, Color3.fromRGB(2.841153144836426, 0, 255)),
-		ColorSequenceKeypoint.new(0.7242339849472046, Color3.fromRGB(88.07793617248535, 0, 255)),
-		ColorSequenceKeypoint.new(0.7799443006515503, Color3.fromRGB(173.31471920013428, 0, 255)),
-		ColorSequenceKeypoint.new(0.835654616355896, Color3.fromRGB(255, 0, 251.4484977722168)),
-		ColorSequenceKeypoint.new(0.8913649320602417, Color3.fromRGB(255, 0, 166.21171474456787)),
-		ColorSequenceKeypoint.new(0.9470751881599426, Color3.fromRGB(255, 0, 80.97493171691895)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
 		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
 	}
-	Converted["_UIGradient"].Parent = Converted["_UIStroke"]
- 
-	Converted["_UIGradient1"].Color = ColorSequence.new{
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 153.00000607967377, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 247.00000047683716))
+	ConvertedStats["_UIGradient"].Parent = ConvertedStats["_UIStroke"]
+
+	ConvertedStats["_UIGradient1"].Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 153, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 247))
 	}
-	Converted["_UIGradient1"].Parent = Converted["_Frame"]
- 
-	Converted["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(0, 123.00000786781311, 255)
-	Converted["_ImageLabel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_ImageLabel"].BorderSizePixel = 0
-	Converted["_ImageLabel"].Position = UDim2.new(0.0438596494, 0, 0.020833334, 0)
-	Converted["_ImageLabel"].Size = UDim2.new(0.912280679, 0, 0.125628158, 0)
-	Converted["_ImageLabel"].Parent = Converted["_Frame"]
- 
-	Converted["_UICorner1"].Parent = Converted["_ImageLabel"]
- 
-	Converted["_TextLabel"].Font = Enum.Font.FredokaOne
-	Converted["_TextLabel"].Text = "By Ciab"
-	Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_TextLabel"].TextScaled = true
-	Converted["_TextLabel"].TextSize = 14
-	Converted["_TextLabel"].TextWrapped = true
-	Converted["_TextLabel"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_TextLabel"].BackgroundTransparency = 1
-	Converted["_TextLabel"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_TextLabel"].BorderSizePixel = 0
-	Converted["_TextLabel"].Position = UDim2.new(1.46719131e-07, 0, 0.118450202, 0)
-	Converted["_TextLabel"].Size = UDim2.new(0.999999881, 0, 0.749835074, 0)
-	Converted["_TextLabel"].Parent = Converted["_ImageLabel"]
- 
-	Converted["_UIStroke1"].Parent = Converted["_TextLabel"]
- 
-	Converted["_Fortnait"].Image = "rbxassetid://17207994014"
-	Converted["_Fortnait"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Fortnait"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_Fortnait"].BorderSizePixel = 0
-	Converted["_Fortnait"].Position = UDim2.new(0.0438596494, 0, 0.196428567, 0)
-	Converted["_Fortnait"].Size = UDim2.new(0.912280679, 0, 0.774437666, 0)
-	Converted["_Fortnait"].Name = "Fortnait"
-	Converted["_Fortnait"].Parent = Converted["_Frame"]
- 
-	Converted["_Stren"].Font = Enum.Font.FredokaOne
-	Converted["_Stren"].Text = "STRENGTH:"
-	Converted["_Stren"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Stren"].TextScaled = true
-	Converted["_Stren"].TextSize = 25
-	Converted["_Stren"].TextWrapped = true
-	Converted["_Stren"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Stren"].BackgroundTransparency = 1
-	Converted["_Stren"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_Stren"].BorderSizePixel = 0
-	Converted["_Stren"].Position = UDim2.new(0.0257487558, 0, 0.0420393385, 0)
-	Converted["_Stren"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	Converted["_Stren"].Name = "Stren"
-	Converted["_Stren"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UIStroke2"].Parent = Converted["_Stren"]
- 
-	Converted["_STRENGTHNUMBER"].Font = Enum.Font.FredokaOne
-	Converted["_STRENGTHNUMBER"].Text = "nil"
-	Converted["_STRENGTHNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_STRENGTHNUMBER"].TextScaled = true
-	Converted["_STRENGTHNUMBER"].TextSize = 1
-	Converted["_STRENGTHNUMBER"].TextWrapped = true
-	Converted["_STRENGTHNUMBER"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_STRENGTHNUMBER"].BackgroundTransparency = 1
-	Converted["_STRENGTHNUMBER"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_STRENGTHNUMBER"].BorderSizePixel = 0
-	Converted["_STRENGTHNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	Converted["_STRENGTHNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	Converted["_STRENGTHNUMBER"].Name = "STRENGTHNUMBER"
-	Converted["_STRENGTHNUMBER"].Parent = Converted["_Stren"]
- 
-	Converted["_UIStroke3"].Parent = Converted["_STRENGTHNUMBER"]
- 
-	Converted["_Sped"].Font = Enum.Font.FredokaOne
-	Converted["_Sped"].Text = "SPEED:"
-	Converted["_Sped"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Sped"].TextScaled = true
-	Converted["_Sped"].TextSize = 29
-	Converted["_Sped"].TextWrapped = true
-	Converted["_Sped"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_Sped"].BackgroundTransparency = 1
-	Converted["_Sped"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_Sped"].BorderSizePixel = 0
-	Converted["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
-	Converted["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	Converted["_Sped"].Name = "Sped"
-	Converted["_Sped"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UIStroke4"].Parent = Converted["_Sped"]
- 
-	Converted["_SPEEDNUMBER"].Font = Enum.Font.FredokaOne
-	Converted["_SPEEDNUMBER"].Text = "nil"
-	Converted["_SPEEDNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_SPEEDNUMBER"].TextScaled = true
-	Converted["_SPEEDNUMBER"].TextSize = 1
-	Converted["_SPEEDNUMBER"].TextWrapped = true
-	Converted["_SPEEDNUMBER"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_SPEEDNUMBER"].BackgroundTransparency = 1
-	Converted["_SPEEDNUMBER"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_SPEEDNUMBER"].BorderSizePixel = 0
-	Converted["_SPEEDNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	Converted["_SPEEDNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	Converted["_SPEEDNUMBER"].Name = "SPEEDNUMBER"
-	Converted["_SPEEDNUMBER"].Parent = Converted["_Sped"]
- 
-	Converted["_UIStroke5"].Parent = Converted["_SPEEDNUMBER"]
- 
-	Converted["_DEF"].Font = Enum.Font.FredokaOne
-	Converted["_DEF"].Text = "DEFENSE:"
-	Converted["_DEF"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEF"].TextScaled = true
-	Converted["_DEF"].TextSize = 28
-	Converted["_DEF"].TextWrapped = true
-	Converted["_DEF"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEF"].BackgroundTransparency = 1
-	Converted["_DEF"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_DEF"].BorderSizePixel = 0
-	Converted["_DEF"].Position = UDim2.new(0.0257487558, 0, 0.38976115, 0)
-	Converted["_DEF"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	Converted["_DEF"].Name = "DEF"
-	Converted["_DEF"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UIStroke6"].Parent = Converted["_DEF"]
- 
-	Converted["_DEFENSENUMBER"].Font = Enum.Font.FredokaOne
-	Converted["_DEFENSENUMBER"].Text = "nil"
-	Converted["_DEFENSENUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEFENSENUMBER"].TextScaled = true
-	Converted["_DEFENSENUMBER"].TextSize = 1
-	Converted["_DEFENSENUMBER"].TextWrapped = true
-	Converted["_DEFENSENUMBER"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEFENSENUMBER"].BackgroundTransparency = 1
-	Converted["_DEFENSENUMBER"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_DEFENSENUMBER"].BorderSizePixel = 0
-	Converted["_DEFENSENUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	Converted["_DEFENSENUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	Converted["_DEFENSENUMBER"].Name = "DEFENSENUMBER"
-	Converted["_DEFENSENUMBER"].Parent = Converted["_DEF"]
- 
-	Converted["_UIStroke7"].Parent = Converted["_DEFENSENUMBER"]
- 
-	Converted["_ENERGY"].Font = Enum.Font.FredokaOne
-	Converted["_ENERGY"].Text = "ENERGY:"
-	Converted["_ENERGY"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_ENERGY"].TextScaled = true
-	Converted["_ENERGY"].TextSize = 28
-	Converted["_ENERGY"].TextWrapped = true
-	Converted["_ENERGY"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_ENERGY"].BackgroundTransparency = 1
-	Converted["_ENERGY"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_ENERGY"].BorderSizePixel = 0
-	Converted["_ENERGY"].Position = UDim2.new(0.0257487558, 0, 0.552013576, 0)
-	Converted["_ENERGY"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	Converted["_ENERGY"].Name = "ENERGY"
-	Converted["_ENERGY"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UIStroke8"].Parent = Converted["_ENERGY"]
- 
-	Converted["_ENERGYNUMBER"].Font = Enum.Font.FredokaOne
-	Converted["_ENERGYNUMBER"].Text = "nil"
-	Converted["_ENERGYNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_ENERGYNUMBER"].TextScaled = true
-	Converted["_ENERGYNUMBER"].TextSize = 1
-	Converted["_ENERGYNUMBER"].TextWrapped = true
-	Converted["_ENERGYNUMBER"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_ENERGYNUMBER"].BackgroundTransparency = 1
-	Converted["_ENERGYNUMBER"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_ENERGYNUMBER"].BorderSizePixel = 0
-	Converted["_ENERGYNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	Converted["_ENERGYNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	Converted["_ENERGYNUMBER"].Name = "ENERGYNUMBER"
-	Converted["_ENERGYNUMBER"].Parent = Converted["_ENERGY"]
- 
-	Converted["_UIStroke9"].Parent = Converted["_ENERGYNUMBER"]
- 
-	Converted["_sup"].BackgroundColor3 = Color3.fromRGB(0, 255, 204.0000182390213)
-	Converted["_sup"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_sup"].BorderSizePixel = 0
-	Converted["_sup"].Position = UDim2.new(-0.0260067098, 0, 0.872107267, 0)
-	Converted["_sup"].Size = UDim2.new(1.05175519, 0, 0.127892867, 0)
-	Converted["_sup"].Name = "sup"
-	Converted["_sup"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UICorner2"].Parent = Converted["_sup"]
- 
-	Converted["_DEF1"].Font = Enum.Font.FredokaOne
-	Converted["_DEF1"].Text = "sup " .. game.Players.LocalPlayer.DisplayName
-	Converted["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEF1"].TextSize = 28
-	Converted["_DEF1"].TextWrapped = true
-	Converted["_DEF1"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_DEF1"].BackgroundTransparency = 1
-	Converted["_DEF1"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_DEF1"].BorderSizePixel = 0
-	Converted["_DEF1"].Position = UDim2.new(0, 0, 0.105724856, 0)
-	Converted["_DEF1"].Size = UDim2.new(1, 0, 0.742611945, 0)
-	Converted["_DEF1"].Name = "DEF"
-	Converted["_DEF1"].Parent = Converted["_sup"]
- 
-	Converted["_UIStroke10"].Parent = Converted["_DEF1"]
- 
-	Converted["_REBS"].Font = Enum.Font.FredokaOne
-	Converted["_REBS"].Text = "REBIRTHS"
-	Converted["_REBS"].TextColor3 = Color3.fromRGB(255, 234.00001645088196, 0)
-	Converted["_REBS"].TextScaled = true
-	Converted["_REBS"].TextSize = 28
-	Converted["_REBS"].TextWrapped = true
-	Converted["_REBS"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_REBS"].BackgroundTransparency = 1
-	Converted["_REBS"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_REBS"].BorderSizePixel = 0
-	Converted["_REBS"].Position = UDim2.new(0.0257487558, 0, 0.706855357, 0)
-	Converted["_REBS"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	Converted["_REBS"].Name = "REBS"
-	Converted["_REBS"].Parent = Converted["_Fortnait"]
- 
-	Converted["_UIStroke11"].Parent = Converted["_REBS"]
- 
-	Converted["_REBSNUMBER"].Font = Enum.Font.FredokaOne
-	Converted["_REBSNUMBER"].Text = "nil"
-	Converted["_REBSNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_REBSNUMBER"].TextScaled = true
-	Converted["_REBSNUMBER"].TextSize = 1
-	Converted["_REBSNUMBER"].TextWrapped = true
-	Converted["_REBSNUMBER"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	Converted["_REBSNUMBER"].BackgroundTransparency = 1
-	Converted["_REBSNUMBER"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	Converted["_REBSNUMBER"].BorderSizePixel = 0
-	Converted["_REBSNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	Converted["_REBSNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	Converted["_REBSNUMBER"].Name = "REBSNUMBER"
-	Converted["_REBSNUMBER"].Parent = Converted["_REBS"]
- 
-	Converted["_UIStroke12"].Parent = Converted["_REBSNUMBER"]
- 
-	local playerid = game.Players.LocalPlayer.UserId
-	local playerStats = game:GetService("ReplicatedStorage").Datas:WaitForChild(tostring(playerid))
- 
+	ConvertedStats["_UIGradient1"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(0, 123, 255)
+	ConvertedStats["_ImageLabel"].Position = UDim2.new(0.0438596494, 0, 0.020833334, 0)
+	ConvertedStats["_ImageLabel"].Size = UDim2.new(0.912280679, 0, 0.125628158, 0)
+	ConvertedStats["_ImageLabel"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_UICorner1"].Parent = ConvertedStats["_ImageLabel"]
+
+	ConvertedStats["_TextLabel"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_TextLabel"].Text = "By Ciab"
+	ConvertedStats["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_TextLabel"].TextScaled = true
+	ConvertedStats["_TextLabel"].BackgroundTransparency = 1
+	ConvertedStats["_TextLabel"].Position = UDim2.new(1.46719131e-07, 0, 0.118450202, 0)
+	ConvertedStats["_TextLabel"].Size = UDim2.new(0.999999881, 0, 0.749835074, 0)
+	ConvertedStats["_TextLabel"].Parent = ConvertedStats["_ImageLabel"]
+	ConvertedStats["_UIStroke1"].Parent = ConvertedStats["_TextLabel"]
+
+	ConvertedStats["_Fortnait"].Image = "rbxassetid://17207994014"
+	ConvertedStats["_Fortnait"].Position = UDim2.new(0.0438596494, 0, 0.196428567, 0)
+	ConvertedStats["_Fortnait"].Size = UDim2.new(0.912280679, 0, 0.774437666, 0)
+	ConvertedStats["_Fortnait"].BackgroundTransparency = 1
+	ConvertedStats["_Fortnait"].Parent = ConvertedStats["_Frame"]
+
+	ConvertedStats["_Stren"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_Stren"].Text = "STRENGTH:"
+	ConvertedStats["_Stren"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Stren"].TextScaled = true
+	ConvertedStats["_Stren"].BackgroundTransparency = 1
+	ConvertedStats["_Stren"].Position = UDim2.new(0.0257487558, 0, 0.0420393385, 0)
+	ConvertedStats["_Stren"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_Stren"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke2"].Parent = ConvertedStats["_Stren"]
+
+	ConvertedStats["_STRENGTHNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_STRENGTHNUMBER"].Text = "nil"
+	ConvertedStats["_STRENGTHNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_STRENGTHNUMBER"].TextScaled = true
+	ConvertedStats["_STRENGTHNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_STRENGTHNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_STRENGTHNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_STRENGTHNUMBER"].Parent = ConvertedStats["_Stren"]
+	ConvertedStats["_UIStroke3"].Parent = ConvertedStats["_STRENGTHNUMBER"]
+
+	ConvertedStats["_Sped"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_Sped"].Text = "SPEED:"
+	ConvertedStats["_Sped"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_Sped"].TextScaled = true
+	ConvertedStats["_Sped"].BackgroundTransparency = 1
+	ConvertedStats["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
+	ConvertedStats["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_Sped"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke4"].Parent = ConvertedStats["_Sped"]
+
+	ConvertedStats["_SPEEDNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_SPEEDNUMBER"].Text = "nil"
+	ConvertedStats["_SPEEDNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_SPEEDNUMBER"].TextScaled = true
+	ConvertedStats["_SPEEDNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_SPEEDNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_SPEEDNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_SPEEDNUMBER"].Parent = ConvertedStats["_Sped"]
+	ConvertedStats["_UIStroke5"].Parent = ConvertedStats["_SPEEDNUMBER"]
+
+	ConvertedStats["_DEF"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEF"].Text = "DEFENSE:"
+	ConvertedStats["_DEF"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEF"].TextScaled = true
+	ConvertedStats["_DEF"].BackgroundTransparency = 1
+	ConvertedStats["_DEF"].Position = UDim2.new(0.0257487558, 0, 0.38976115, 0)
+	ConvertedStats["_DEF"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_DEF"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke6"].Parent = ConvertedStats["_DEF"]
+
+	ConvertedStats["_DEFENSENUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEFENSENUMBER"].Text = "nil"
+	ConvertedStats["_DEFENSENUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEFENSENUMBER"].TextScaled = true
+	ConvertedStats["_DEFENSENUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_DEFENSENUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_DEFENSENUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_DEFENSENUMBER"].Parent = ConvertedStats["_DEF"]
+	ConvertedStats["_UIStroke7"].Parent = ConvertedStats["_DEFENSENUMBER"]
+
+	ConvertedStats["_ENERGY"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_ENERGY"].Text = "ENERGY:"
+	ConvertedStats["_ENERGY"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_ENERGY"].TextScaled = true
+	ConvertedStats["_ENERGY"].BackgroundTransparency = 1
+	ConvertedStats["_ENERGY"].Position = UDim2.new(0.0257487558, 0, 0.552013576, 0)
+	ConvertedStats["_ENERGY"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_ENERGY"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke8"].Parent = ConvertedStats["_ENERGY"]
+
+	ConvertedStats["_ENERGYNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_ENERGYNUMBER"].Text = "nil"
+	ConvertedStats["_ENERGYNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_ENERGYNUMBER"].TextScaled = true
+	ConvertedStats["_ENERGYNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_ENERGYNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_ENERGYNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_ENERGYNUMBER"].Parent = ConvertedStats["_ENERGY"]
+	ConvertedStats["_UIStroke9"].Parent = ConvertedStats["_ENERGYNUMBER"]
+
+	ConvertedStats["_sup"].BackgroundColor3 = Color3.fromRGB(0, 255, 204)
+	ConvertedStats["_sup"].Position = UDim2.new(-0.0260067098, 0, 0.872107267, 0)
+	ConvertedStats["_sup"].Size = UDim2.new(1.05175519, 0, 0.127892867, 0)
+	ConvertedStats["_sup"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UICorner2"].Parent = ConvertedStats["_sup"]
+
+	ConvertedStats["_DEF1"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_DEF1"].Text = "sup " .. localPlayer.DisplayName
+	ConvertedStats["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_DEF1"].TextScaled = true
+	ConvertedStats["_DEF1"].BackgroundTransparency = 1
+	ConvertedStats["_DEF1"].Position = UDim2.new(0, 0, 0.105724856, 0)
+	ConvertedStats["_DEF1"].Size = UDim2.new(1, 0, 0.742611945, 0)
+	ConvertedStats["_DEF1"].Parent = ConvertedStats["_sup"]
+	ConvertedStats["_UIStroke10"].Parent = ConvertedStats["_DEF1"]
+
+	ConvertedStats["_REBS"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_REBS"].Text = "REBIRTHS"
+	ConvertedStats["_REBS"].TextColor3 = Color3.fromRGB(255, 234, 0)
+	ConvertedStats["_REBS"].TextScaled = true
+	ConvertedStats["_REBS"].BackgroundTransparency = 1
+	ConvertedStats["_REBS"].Position = UDim2.new(0.0257487558, 0, 0.706855357, 0)
+	ConvertedStats["_REBS"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+	ConvertedStats["_REBS"].Parent = ConvertedStats["_Fortnait"]
+	ConvertedStats["_UIStroke11"].Parent = ConvertedStats["_REBS"]
+
+	ConvertedStats["_REBSNUMBER"].Font = Enum.Font.FredokaOne
+	ConvertedStats["_REBSNUMBER"].Text = "nil"
+	ConvertedStats["_REBSNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+	ConvertedStats["_REBSNUMBER"].TextScaled = true
+	ConvertedStats["_REBSNUMBER"].BackgroundTransparency = 1
+	ConvertedStats["_REBSNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+	ConvertedStats["_REBSNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+	ConvertedStats["_REBSNUMBER"].Parent = ConvertedStats["_REBS"]
+	ConvertedStats["_UIStroke12"].Parent = ConvertedStats["_REBSNUMBER"]
+
+	local playerid = localPlayer.UserId
+	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(playerid))
+
 	local function formatNumberForTheStats(number)
-		if number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000) 
+		if number >= 1_000_000_000_000_000 then return string.format("%.2fQd", number / 1_000_000_000_000_000) 
+		elseif number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000) 
 		elseif number >= 1_000_000_000 then return string.format("%.2fB", number / 1_000_000_000)
 		elseif number >= 1_000_000 then return string.format("%.2fM", number / 1_000_000)
 		elseif number >= 1_000 then return string.format("%.2fK", number / 1_000)
 		else return tostring(number) end
 	end
- 
+
 	local function updateStats()
-		Converted["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
-		Converted["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
-		Converted["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
-		Converted["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
-		Converted["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
+		ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
+		ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
+		ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
+		ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
+		ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
 	end
 	updateStats()
- 
+
 	playerStats.Strength.Changed:Connect(updateStats)
 	playerStats.Defense.Changed:Connect(updateStats)
 	playerStats.Energy.Changed:Connect(updateStats)
 	playerStats.Speed.Changed:Connect(updateStats)
- 
-	game:GetService("RunService").RenderStepped:Connect(function()
-		Converted["_UIGradient"].Rotation += 2
-		Converted["_UIGradient1"].Rotation += 2
+    playerStats.Rebirth.Changed:Connect(updateStats)
+
+	RunService.RenderStepped:Connect(function()
+        if ConvertedStats["_UIGradient"].Parent then
+		    ConvertedStats["_UIGradient"].Rotation += 2
+		    ConvertedStats["_UIGradient1"].Rotation += 2
+        end
 	end)
 end
- 
-local function onPlayerRespawn()
-	createGUI()
+
+if game:GetService("CoreGui"):FindFirstChild("AUTOFARM") then
+	game:GetService("CoreGui").AUTOFARM:Destroy()
 end
-local player = game.Players.LocalPlayer
-player.CharacterAdded:Connect(onPlayerRespawn)
 createGUI()
- 
-local playerId = player.UserId
-local data = game:GetService("ReplicatedStorage").Datas
-local playerData = data:WaitForChild(tostring(playerId))
-local statsz = playerData:WaitForChild("Defense")
-local zeni = playerData:WaitForChild("Zeni")
- 
+
+-- ==============================================================================
+-- ANTIAFK & UNIVERSAL COMBAT FEATURES
+-- ==============================================================================
 local function ANTIAFK()
 	local vu = game:GetService("VirtualUser")
-	game:GetService("Players").LocalPlayer.Idled:connect(function()
+	localPlayer.Idled:connect(function()
 		vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
-		wait(1)
+		task.wait(1)
 		vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
 	end)
 end
 coroutine.wrap(ANTIAFK)()
- 
-local function FloatByHimself()
-	local function floatPlayer(character)
-		local humanoidRootPart = character:WaitForChild("HumanoidRootPart", 10)
-		if humanoidRootPart then
-			local bodyPosition = Instance.new("BodyPosition")
-			bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.1, 0)
-			bodyPosition.MaxForce = Vector3.new(0, 4000, 0)
-			bodyPosition.P = 2000
-			bodyPosition.D = 100
-			bodyPosition.Parent = humanoidRootPart
-			game:GetService("RunService").Stepped:Connect(function()
-                if bodyPosition and bodyPosition.Parent and humanoidRootPart and humanoidRootPart.Parent then
-				    bodyPosition.Position = humanoidRootPart.Position + Vector3.new(0, 0.0001, 0)
-                end
-			end)
-		end
-	end
-	game.Players.LocalPlayer.CharacterAdded:Connect(floatPlayer)
-	if game.Players.LocalPlayer.Character then floatPlayer(game.Players.LocalPlayer.Character) end
-end
-task.spawn(FloatByHimself)
- 
-local function Block()
-	while true do
-		game:GetService("ReplicatedStorage"):WaitForChild("Package"):WaitForChild("Events"):WaitForChild("block"):InvokeServer(true)
-		wait(.1)
-	end
-end
-task.spawn(Block)
- 
-local camera = game.Workspace.CurrentCamera
-task.spawn(function()
-	while true and task.wait() do
-		pcall(function() game.Players.LocalPlayer.Status.Blocking.Value = true end)
-	end
-end)
- 
-local function Charge()
-	while true do
-		wait(.1)
-		game:GetService("ReplicatedStorage").Package.Events.cha:InvokeServer("Blacknwhite27")
-	end
-end
-task.spawn(Charge)
- 
-local function TeleportToWhis()
-	game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer("Vills Planet")
-end
- 
-local function CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	if statsz.Value > 10000000000000 and zeni.Value > 100000 then
-		TeleportToWhis()
-	end
-end
- 
-local function ChekEverySeconds()
-	while true do
-		wait(.1)
-		CheckIfItHasGoodStatsAndZeniToTeleportToWhis()
-	end
-end
- 
-local function CheckGameId()
-	while true do
-		wait(.1)
-		if game.PlaceId == 3311165597 then
-			coroutine.wrap(ChekEverySeconds)()
-		end
-	end
-end
-coroutine.wrap(CheckGameId)()
 
--- STACK TRANSFORMATIONS
+local function ApplyFloat(char)
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        for _, child in pairs(root:GetChildren()) do
+            if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then child:Destroy() end
+        end
+        local att = Instance.new("Attachment", root)
+        att.Name = "FloatAttachment"
+        local lv = Instance.new("LinearVelocity", root)
+        lv.Name = "FloatVelocity"
+        lv.Attachment0 = att
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.new(0, 0, 0)
+        lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+        lv.MaxAxesForce = Vector3.new(0, math.huge, 0) 
+    end
+end
+localPlayer.CharacterAdded:Connect(ApplyFloat)
+if localPlayer.Character then ApplyFloat(localPlayer.Character) end
+
 task.spawn(function()
-	task.wait()
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local yo = Players.LocalPlayer
-    local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(yo.UserId)) or ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(yo.UserId)
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local blockEvent = Events:WaitForChild("block")
+    local chaEvent = Events:WaitForChild("cha")
     
-    if not folderData then return end
+    while true do
+        pcall(function()
+            task.spawn(function() blockEvent:InvokeServer(true) end)
+            task.spawn(function() chaEvent:InvokeServer("Blacknwhite27") end)
+        end)
+        task.wait(0.15)
+    end
+end)
 
-    local equipRemote = ReplicatedStorage.Package.Events.equipskill
-    local transformRemote = ReplicatedStorage.Package.Events.Hehehe
+task.spawn(function()
+    while true and task.wait() do
+        pcall(function() localPlayer.Status.Blocking.Value = true end)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO TRANSFORMATION LOGIC
+-- ==============================================================================
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local equipRemote = Events:WaitForChild("equipskill")
+    local transformRemote = Events:WaitForChild("Hehehe")
 
     local transformaciones = {
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
@@ -951,29 +866,41 @@ task.spawn(function()
         {name = "SSJ2 Kaioken", forza = 50000}, {name = "SSJ Kaioken", forza = 16000},
     }
 
+    local currentCharacter = nil
+
     local function getStatusFolder()
-        return yo:FindFirstChild("Status") or (yo.Character and yo.Character:FindFirstChild("Status"))
+        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
     end
 
     while true do
         pcall(function()
-            local strength = folderData.Strength.Value
+            local char = localPlayer.Character
+            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+
+            if char ~= currentCharacter then
+                currentCharacter = char
+                task.wait(2.5)
+            end
+
+            local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
             local status = getStatusFolder()
-            if status then
+            
+            if folderData and status then
+                local strength = folderData.Strength.Value
                 local selected = status:FindFirstChild("SelectedTransformation")
                 local actual = status:FindFirstChild("Transformation")
+
                 for _, v in ipairs(transformaciones) do
                     if strength >= v.forza then
-                        if selected.Value ~= v.name then
-                            equipRemote:InvokeServer(v.name)
-                            task.wait(0.3) 
+                        if selected and selected.Value ~= v.name then
+                            task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                            task.wait(0.5)
                         end
-                        if selected.Value == v.name then
-                            if actual.Value ~= selected.Value then
-                                transformRemote:InvokeServer()
-                            end
-                            break 
+                        if actual and actual.Value ~= v.name then
+                            task.spawn(function() transformRemote:InvokeServer() end)
+                            task.wait(2)
                         end
+                        break
                     end
                 end
             end
@@ -982,194 +909,131 @@ task.spawn(function()
     end
 end)
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
- 
+-- ==============================================================================
+-- SISTEMA DI COMBATTIMENTO AVANZATO (CON AUTO-QUEST)
+-- ==============================================================================
+local BossConfig = {
+    ["Wukong (MUI)"] = {QuestNPC = "Wukong (MUI)", BossName = "Wukong (MUI)", Distance = -3},
+    ["Hit"] = {QuestNPC = "Hit", BossName = "Hit", Distance = -3},
+    ["Universal Vegito"] = {QuestNPC = "Universal Vegito", BossName = "Universal Vegito", Distance = -3},
+    ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
+    ["Fused Zamasu"] = {QuestNPC = "Fused Zamasu", BossName = "Fused Zamasu", Distance = -3}
+}
+
 local function SafeWaitForChild(parent, name, timeout)
 	local success, result = pcall(function() return parent:WaitForChild(name, timeout) end)
 	if not success then return nil end
 	return result
 end
- 
-local AllBosses = {
-	{PlaceId = 3311165597, Name = "Klirin", MinStats = 0, MaxStats = 10000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -5},
-	{PlaceId = 3311165597, Name = "Radish", MinStats = 10000001, MaxStats = 40000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "Mapa", MinStats = 40000000, MaxStats = 50000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "Super Vegetable", MinStats = 50000001, MaxStats = 60000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "Chilly", MinStats = 60000001, MaxStats = 70000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "Perfect Atom", MinStats = 70000001, MaxStats = 1500000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "SSJ2 Wukong", MinStats = 1500000001, MaxStats = 1500000002, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "SSJB Wukong", MinStats = 1500000003, MaxStats = 1500000004, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "Broccoli", MinStats = 1500000005, MaxStats = 1500000006, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 3311165597, Name = "SSJG Kakata", MinStats = 1500000007, MaxStats = math.huge, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vegetable (GoD in-training)", MinStats = 121000000, MaxStats = 250000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Wukong (Omen)", MinStats = 250000001, MaxStats = 400000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vills (50%)", MinStats = 400000001, MaxStats = 800000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vis (20%)", MinStats = 800000001, MaxStats = 2000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vegetable (LBSSJ4)", MinStats = 2000000001, MaxStats = 3100000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Wukong (LBSSJ4)", MinStats = 3100000001, MaxStats = 4300000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vekuta (LBSSJ4)", MinStats = 4300000001, MaxStats = 15000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Wukong Rose", MinStats = 15000000001, MaxStats = 25000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vekuta (SSJBUI)", MinStats = 25000000001, MaxStats = 50000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Wukong (MUI)", MinStats = 50000000001, MaxStats = 75000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Vegetable (Ultra Ego)", MinStats = 75000000001, MaxStats = 100000000000, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-	{PlaceId = 5151400895, Name = "Nohag (Beast)", MinStats = 100000000001, MaxStats = math.huge, QuestLocation = workspace.Others.NPCs, FightLocation = workspace.Living, Distance = -2},
-}
-
-local character, humanoid, humanoidRootPart
 
 local function TeleportAndFight(bossData)
-	-- Questa funzione di combattimento è progettata per essere estremamente sicura.
-	-- Invece di fare affidamento su un riferimento iniziale al boss,
-	-- lo cercherà attivamente ad ogni ciclo per evitare di lavorare su un oggetto "fantasma".
-
+    local camera = workspace.CurrentCamera
 	local function getValidBoss()
-		-- Se il giocatore è morto, non c'è bisogno di cercare un boss.
-		if not (humanoid and humanoid.Health > 0) then return nil end
+        local character = localPlayer.Character
+		if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
 
-		local bossModel = bossData.FightLocation:FindFirstChild(bossData.Name)
+		local bossModel = workspace.Living:FindFirstChild(bossData.BossName)
 		if not (bossModel and bossModel.Parent) then return nil end
 
 		local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
 		local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
 
 		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
-			return bossModel -- Ritorna il modello del boss solo se è completamente valido
+			return bossModel 
 		end
 		return nil
 	end
 
-	-- Ciclo di combattimento principale
 	while true do
+        if not getgenv().BossTargets[bossData.BossName] then break end -- Esce se disattivi il boss dalla GUI
 		local currentBoss = getValidBoss()
+		if not currentBoss then break end
 
-		-- Se in qualsiasi momento il boss non è più valido (sconfitto, despawnato)
-		-- o il giocatore muore, esci dal ciclo di combattimento.
-		if not currentBoss then
-			break
-		end
+		local bossHRP = currentBoss.HumanoidRootPart 
+        local character = localPlayer.Character
+        local hrp = character:FindFirstChild("HumanoidRootPart")
 
-		local bossHRP = currentBoss.HumanoidRootPart -- Ora è sicuro accedervi
-
-		-- Aggiorna la telecamera e la posizione
 		pcall(function()
 			camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
 			local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
 			local behindPosition = bossHRP.Position + behindOffset
-			humanoidRootPart.CFrame = CFrame.new(behindPosition, bossHRP.Position)
+			hrp.CFrame = CFrame.new(behindPosition, bossHRP.Position)
 		end)
 
-		-- Esegui gli attacchi
 		pcall(function()
-			if game.PlaceId == 3311165597 then
-				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local letsplayagame = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("letsplayagame")
-						
-				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
+            local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+            local letsplayagame = Events:WaitForChild("letsplayagame")
+                    
+            Events.p:FireServer("Blacknwhite27", 1)
 
-				coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-				coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-			elseif game.PlaceId == 5151400895 then
-				local ReplicatedStorage = game:GetService("ReplicatedStorage")
-				local Higoober = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Haha")
-						
-				game:GetService("ReplicatedStorage").Package.Events.p:FireServer("Blacknwhite27", 1)
-
-				coroutine.wrap(function() Higoober:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-				coroutine.wrap(function() Higoober:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()	
-			end
+            coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
 		end)
 
-		task.wait() -- Attendi il prossimo frame prima di ricontrollare
+		task.wait()
 	end
 
-	print(bossData.Name .. " non più valido. Fine del combattimento.")
-	-- Ripristina la telecamera
 	pcall(function()
 		camera.CameraType = Enum.CameraType.Custom
-		camera.CameraSubject = humanoid
+		camera.CameraSubject = localPlayer.Character.Humanoid
 	end)
 end
- 
+
 local function WaitForBossToSpawn(bossData, timeLimit)
 	local startTime = os.time()
 	local bossReady = false
  
 	repeat
-        -- Se il giocatore muore mentre aspetta, interrompe la funzione
-        if not (humanoid and humanoid.Health > 0) then return end
+        local char = localPlayer.Character
+        if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+        if not getgenv().BossTargets[bossData.BossName] then return end -- Esce se disattivi il boss
+
 		task.wait() 
-		local boss = SafeWaitForChild(bossData.FightLocation, bossData.Name)
+		local boss = SafeWaitForChild(workspace.Living, bossData.BossName, 1)
 		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid")
 	until bossReady or os.time() - startTime > timeLimit 
  
 	if bossReady then
-		print("Boss " .. bossData.Name .. " è apparso!")
-        
         task.wait()
-        
 		TeleportAndFight(bossData)
-	else
-		print("Impossibile trovare " .. bossData.Name .. " entro il tempo limite. Passo al boss successivo.")
 	end
 end
- 
-local function CheckAndFightBoss(bossData)
+
+local function CheckAndFightBoss(bossName)
+    local bossData = BossConfig[bossName]
     if not bossData then return end
-	
+    
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return end
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    if not playerData or not hrp then return end
+
 	local questStarted = false
-	-- print("Inizio la missione per " .. bossData.Name) -- Commentato per meno spam
-
-	if bossData.Request then 
-		bossData.Request() 
-	end
-
 	local startTime = os.time()
-	local questTimeout = 30 
+	local questTimeout = 15 
 
 	while not questStarted do
-		-- 1. Controllo Timeout
-		if os.time() - startTime > questTimeout then
-			print("TIMEOUT MISSIONE: Impossibile ottenere la quest per " .. bossData.Name .. ". Resetto...")
-			humanoid.Health = 0
-			return 
-		end
-		
-        -- 2. Controllo Morte
-        if not (humanoid and humanoid.Health > 0) then return end
+		if os.time() - startTime > questTimeout then break end
+        if not character or character.Humanoid.Health <= 0 then return end
+        if not getgenv().BossTargets[bossName] then return end
 
-		-- 3. NUOVO FIX: Controllo se le stats sono crollate (Rebirth avvenuto)
-		-- Se le tue statistiche attuali sono inferiori a quelle richieste dal boss, esci subito!
-		if statsz.Value < bossData.MinStats then
-			print("⚠️ REBIRTH RILEVATO! Le stats sono troppo basse per " .. bossData.Name .. ". Annullamento...")
-			return -- Esce dalla funzione così il Main loop può scegliere il boss giusto (Klirin)
-		end
-
-		local bossNpc = SafeWaitForChild(bossData.QuestLocation, bossData.Name)
-		if bossNpc then
-			-- Ciclo di richiesta quest
-			while playerData:WaitForChild("Quest").Value ~= bossData.Name do
+		local bossNpc = SafeWaitForChild(workspace.Others.NPCs, bossData.QuestNPC, 1)
+		if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+			while playerData:WaitForChild("Quest").Value ~= bossData.BossName do
 				if os.time() - startTime > questTimeout then break end
-                if not (humanoid and humanoid.Health > 0) then return end
-				
-				-- ANCHE QUI: Controllo anti-blocco post-rebirth
-				if statsz.Value < bossData.MinStats then
-					return 
-				end
+                if not character or character.Humanoid.Health <= 0 then return end
+                if not getgenv().BossTargets[bossName] then return end
 
-				humanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-				Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
-                task.wait() 
+				hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+				ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+                task.wait(0.2) 
 			end
 
-			if playerData:WaitForChild("Quest").Value == bossData.Name then
-				-- print("Azione missione invocata e confermata per " .. bossData.Name) 
+			if playerData:WaitForChild("Quest").Value == bossData.BossName then
 				questStarted = true
 			end
 		else
@@ -1178,348 +1042,20 @@ local function CheckAndFightBoss(bossData)
 	end
 
 	if questStarted then
-		WaitForBossToSpawn(bossData, 60)
+		WaitForBossToSpawn(bossData, 30)
 	end
 end
 
- 
-local function onCharacterAdded(newCharacter)
-	character = newCharacter
-	humanoidRootPart = character:WaitForChild("HumanoidRootPart")
-	humanoid = character:WaitForChild("Humanoid")
-end
- 
-player.CharacterAdded:Connect(onCharacterAdded)
-if player.Character then onCharacterAdded(player.Character) else onCharacterAdded(player.CharacterAdded:Wait()) end
-
-local function findBossData(bossName)
-    for _, data in ipairs(AllBosses) do
-        if data.Name == bossName then return data end
-    end
-    return nil
-end
-
-local villsPlanetReady = false 
-local toggleKakataBroccoli = true 
-
-local function Main()
-    local kakataThreshold = findBossData("SSJG Kakata").MinStats
-    local nohagThreshold = findBossData("Nohag (Beast)").MinStats
-
-    while true do
-        task.wait(1) 
-        if not (humanoid and humanoid.Health > 0) then task.wait(1) continue end
-
-        local currentStats = statsz.Value
-        local currentPlaceId = game.PlaceId
-
-        if currentPlaceId == 5151400895 then
-            if not villsPlanetReady then
-                task.wait(7)
-                villsPlanetReady = true
-                continue 
-            end
-
-            if currentStats >= nohagThreshold then
-                local nohagData = findBossData("Nohag (Beast)")
-                if nohagData then CheckAndFightBoss(nohagData) end
-            else
-                local foughtBoss = false
-                for _, bossData in ipairs(AllBosses) do
-                    if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                        CheckAndFightBoss(bossData)
-                        foughtBoss = true
-                        break
-                    end
-                end
-                if not foughtBoss then task.wait(5) end
-            end
-
-        elseif currentPlaceId == 3311165597 then
-            villsPlanetReady = false 
-            if currentStats >= kakataThreshold then
-                if toggleKakataBroccoli then
-                    local kakataData = findBossData("SSJG Kakata")
-                    if kakataData then CheckAndFightBoss(kakataData) end
-                else
-                    local broccoliData = findBossData("Broccoli")
-                    if broccoliData then CheckAndFightBoss(broccoliData) end
-                end
-                toggleKakataBroccoli = not toggleKakataBroccoli 
-            else
-                local foughtBoss = false
-                for _, bossData in ipairs(AllBosses) do
-                    if bossData.PlaceId == currentPlaceId and currentStats >= bossData.MinStats and currentStats <= bossData.MaxStats then
-                        CheckAndFightBoss(bossData)
-                        foughtBoss = true
-                        break 
-                    end
-                end
-                if not foughtBoss then task.wait(5) end
-            end
-        else
-			villsPlanetReady = false 
-			task.wait(1) 
-        end
-    end
-end
-task.spawn(Main) 
-
+-- Main Farm Loop
 task.spawn(function()
     while true do
-        if humanoid then
-            humanoid.HealthChanged:Connect(function(newHealth)
-                if newHealth < humanoid.MaxHealth then humanoid.Health = humanoid.MaxHealth end
-            end)
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+            for bossName, isToggled in pairs(getgenv().BossTargets) do
+                if isToggled then
+                    CheckAndFightBoss(bossName)
+                end
+            end
         end
         task.wait(1)
-    end
-end)
-
-local function CheckAndPerformRebirth()
-    while true do
-        task.wait(.5) 
-        local player = game.Players.LocalPlayer
-        local playerData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(player.UserId))
-        if playerData then
-            local strength = playerData:FindFirstChild("Strength")
-            local rebirths = playerData:FindFirstChild("Rebirth")
-            if strength and rebirths then
-                local requiredStrength = 2000000 * (rebirths.Value + 1)
-                local maxStrengthForRebirth = requiredStrength * 2 
-                if strength.Value >= requiredStrength and strength.Value <= maxStrengthForRebirth then
-                    pcall(function() game:GetService("ReplicatedStorage").Package.Events.reb:InvokeServer() end)
-                end
-            end
-        end
-    end
-end
-task.spawn(CheckAndPerformRebirth)
-
--- ==============================================================================
--- GUI TIMER 1: VILLS PLANET (Rejoin Vills)
--- ==============================================================================
-local function CreateTimerGUI()
-    local TimerScreenGui = Instance.new("ScreenGui")
-    local TimerFrame = Instance.new("Frame")
-    local TimerTextLabel = Instance.new("TextLabel")
-    local TextStroke = Instance.new("UIStroke") 
-    local UICorner = Instance.new("UICorner")
-    local UIStroke = Instance.new("UIStroke") 
-
-    TimerScreenGui.Name = "RebirthTimerGUI"
-    TimerScreenGui.Parent = game:GetService("CoreGui")
-    TimerScreenGui.ResetOnSpawn = false
-    TimerScreenGui.Enabled = false
-    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    TimerScreenGui.DisplayOrder = 999
-
-    TimerFrame.Name = "TimerFrame"
-    TimerFrame.Parent = TimerScreenGui
-    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
-    -- FIX POSIZIONE: Messo a 50 pixel dall'alto (prima era -48 e non si vedeva)
-    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
-    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    TimerFrame.BackgroundTransparency = 0.4
-    TimerFrame.Active = true
-    TimerFrame.Draggable = true
-
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = TimerFrame
-    
-    -- Bordo Rosso per Vills
-    UIStroke.Color = Color3.fromRGB(255, 50, 50) 
-    UIStroke.Thickness = 2
-    UIStroke.Parent = TimerFrame
-
-    TimerTextLabel.Name = "TimerTextLabel"
-    TimerTextLabel.Parent = TimerFrame
-    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    TimerTextLabel.BackgroundTransparency = 1
-    TimerTextLabel.Font = Enum.Font.FredokaOne
-    TimerTextLabel.Text = "Loading..."
-    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TimerTextLabel.TextScaled = true
-    TimerTextLabel.TextSize = 14
-    TimerTextLabel.TextWrapped = true
-    
-    TextStroke.Parent = TimerTextLabel
-    TextStroke.Color = Color3.fromRGB(0, 0, 0)
-    TextStroke.Thickness = 1.2
-    
-    return TimerScreenGui, TimerTextLabel
-end
-
-local TimerScreenGui, TimerTextLabel = CreateTimerGUI()
-
--- LOGICA TIMER VILLS -> REJOIN VILLS
-local function RebirthTimerAndTeleport()
-    local timerEndTime = nil
-    local VILLS_PLANET_ID = 5151400895
-    local TIMER_DURATION = 6000 -- 6000 secondi
-
-    while true do
-        task.wait(1) 
-
-        local player = game.Players.LocalPlayer
-        local playerData = game:GetService("ReplicatedStorage").Datas:FindFirstChild(tostring(player.UserId))
-
-        if playerData and game.PlaceId == VILLS_PLANET_ID then
-            local strength = playerData:FindFirstChild("Strength")
-            local rebirths = playerData:FindFirstChild("Rebirth")
-
-            if strength and rebirths then
-                local requiredStrength = 2000000 * (rebirths.Value + 1)
-                local strengthThreshold = requiredStrength * 2
-
-                if strength.Value > strengthThreshold then
-                    if timerEndTime == nil then
-                        timerEndTime = os.time() + TIMER_DURATION
-                        TimerScreenGui.Enabled = true 
-                        print("TIMER VILLS ATTIVATO: Rejoin su Vills tra " .. TIMER_DURATION .. "s.")
-                    end
-                else
-                    if timerEndTime ~= nil then
-                        timerEndTime = nil
-                        TimerScreenGui.Enabled = false 
-                    end
-                end
-            end
-        else
-            if timerEndTime ~= nil then
-                timerEndTime = nil
-                TimerScreenGui.Enabled = false 
-            end
-        end
-
-        if timerEndTime ~= nil then
-            local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TimerTextLabel.Text = "Rejoin Vills in: " .. timeLeft
-
-            if timeLeft <= 0 then
-                print("TIMER SCADUTO: Rejoin Vills Planet...")
-                -- MODIFICA: Ora tippa su Vills Planet
-                local args = {[1] = "Vills Planet"}
-                game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-                
-                timerEndTime = nil 
-                TimerScreenGui.Enabled = false 
-            end
-        end
-    end
-end
-
-task.spawn(RebirthTimerAndTeleport)
-
-
--- ==============================================================================
--- GUI TIMER 2: EARTH (Rejoin Earth)
--- ==============================================================================
-local function CreateTopTimerGUI()
-    local TimerScreenGui = Instance.new("ScreenGui")
-    local TimerFrame = Instance.new("Frame")
-    local TimerTextLabel = Instance.new("TextLabel")
-    local TextStroke = Instance.new("UIStroke")
-    local UICorner = Instance.new("UICorner")
-    local UIStroke = Instance.new("UIStroke")
-
-    TimerScreenGui.Name = "TopTimerGUI"
-    TimerScreenGui.Parent = game:GetService("CoreGui")
-    TimerScreenGui.ResetOnSpawn = false
-    TimerScreenGui.Enabled = false
-    TimerScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    TimerScreenGui.DisplayOrder = 999
-
-    TimerFrame.Name = "TopTimerFrame"
-    TimerFrame.Parent = TimerScreenGui
-    TimerFrame.Size = UDim2.new(0, 220, 0, 40)
-    -- FIX POSIZIONE: Messo a 100 pixel dall'alto per non sovrapporsi all'altro
-    TimerFrame.Position = UDim2.new(0.5, -110, 0, -48)
-    TimerFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-    TimerFrame.BackgroundTransparency = 0.4
-    TimerFrame.Active = true
-    TimerFrame.Draggable = true
-
-    UICorner.CornerRadius = UDim.new(0, 8)
-    UICorner.Parent = TimerFrame
-    
-    -- Bordo Ciano per Terra
-    UIStroke.Color = Color3.fromRGB(0, 255, 255) 
-    UIStroke.Thickness = 2
-    UIStroke.Parent = TimerFrame
-
-    TimerTextLabel.Name = "TimerTextLabel"
-    TimerTextLabel.Parent = TimerFrame
-    TimerTextLabel.Size = UDim2.new(1, 0, 1, 0)
-    TimerTextLabel.BackgroundTransparency = 1
-    TimerTextLabel.Font = Enum.Font.FredokaOne
-    TimerTextLabel.Text = "Loading..."
-    TimerTextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    TimerTextLabel.TextScaled = true
-    TimerTextLabel.TextSize = 14
-    TimerTextLabel.TextWrapped = true
-    
-    TextStroke.Parent = TimerTextLabel
-    TextStroke.Color = Color3.fromRGB(0, 0, 0)
-    TextStroke.Thickness = 1.2
-    
-    return TimerScreenGui, TimerTextLabel
-end
-
-local TopTimerGui, TopTimerLabel = CreateTopTimerGUI()
-
--- LOGICA TIMER TERRA -> REJOIN TERRA
-local function EarthToTopTimer()
-    local timerEndTime = nil
-    local EARTH_PLACE_ID = 3311165597
-    local TIMER_DURATION = 2000
-
-    while true do
-        task.wait(1) 
-
-        if game.PlaceId == EARTH_PLACE_ID then
-            if timerEndTime == nil then
-                timerEndTime = os.time() + TIMER_DURATION
-                TopTimerGui.Enabled = true
-                print("TIMER TERRA ATTIVATO: Rejoin su Terra tra " .. TIMER_DURATION .. "s.")
-            end
-
-            local timeLeft = math.max(0, math.floor(timerEndTime - os.time()))
-            TopTimerLabel.Text = "Rejoin Earth in: " .. timeLeft
-
-            if timeLeft <= 0 then
-                TopTimerLabel.Text = "REJOINING..."
-                print("TIMER TERRA SCADUTO: Rejoin in corso...")
-                
-                -- MODIFICA: Ora tippa su Earth
-                local args = {[1] = "Earth"}
-                
-                -- Loop finché non avviene il TP (refresh del server)
-                while game.PlaceId == EARTH_PLACE_ID do
-                    game:GetService("ReplicatedStorage").Package.Events.TP:InvokeServer(unpack(args))
-                    task.wait(0.5) 
-                end
-                
-                timerEndTime = nil 
-                TopTimerGui.Enabled = false
-            end
-        else
-            if timerEndTime ~= nil then
-                timerEndTime = nil
-                TopTimerGui.Enabled = false
-            end
-        end
-    end
-end
-
-task.spawn(EarthToTopTimer)
-
-task.spawn(function()
-    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
-    if queue_on_teleport then
-        queue_on_teleport([[
-            repeat task.wait() until game:IsLoaded()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/autociabattoso"))()
-        ]])
     end
 end)
