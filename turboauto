@@ -68,7 +68,6 @@ local function CreateUnifiedGUI()
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 1000
 
-    -- Frame Principale (A destra)
     local MainFrame = Instance.new("Frame", sg)
     MainFrame.Size = UDim2.new(0, 240, 0, 280)
     MainFrame.Position = UDim2.new(1, -260, 0.5, -140)
@@ -88,7 +87,6 @@ local function CreateUnifiedGUI()
         ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
     }
 
-    -- Dragging Logica
     local dragging, dragInput, mousePos, framePos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -108,7 +106,6 @@ local function CreateUnifiedGUI()
         end
     end)
 
-    -- Titolo Superiore
     local Title = Instance.new("TextLabel", MainFrame)
     Title.Size = UDim2.new(1, 0, 0, 45)
     Title.BackgroundTransparency = 1
@@ -117,7 +114,6 @@ local function CreateUnifiedGUI()
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextScaled = true
 
-    -- CONTENITORE BOSS
     local BossContainer = Instance.new("Frame", MainFrame)
     BossContainer.Size = UDim2.new(1, -20, 1, -55)
     BossContainer.Position = UDim2.new(0, 10, 0, 45)
@@ -180,7 +176,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (SERVER CHECK E ANTI INTRUSI)
+-- NUOVO SISTEMA INTELLIGENTE (TUA VERSIONE HTTP)
 -- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -230,15 +226,20 @@ end)
 -- ==============================================================================
 -- START THE GAME
 -- ==============================================================================
-local function StartTheGame()
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
+task.spawn(function()
+    local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+    if not playerGui then return end
     local mainGui = playerGui:WaitForChild("Main", 10)
     if not mainGui then return end
-    task.wait()
-    local Event = ReplicatedStorage.Package.Events.Start
-    Event:InvokeServer()
-    task.wait()
-    Event:InvokeServer()
+    
+    task.wait(1)
+    local Event = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start")
+    pcall(function()
+        Event:InvokeServer()
+        task.wait()
+        Event:InvokeServer()
+    end)
+    
     task.wait()
     local bruhButton = mainGui:FindFirstChild("bruh")
     if bruhButton then
@@ -246,10 +247,8 @@ local function StartTheGame()
         bruhButton.Disabled = false
     end
     task.wait()
-    Event:InvokeServer()
-end
-StartTheGame()
-task.wait(0.5)
+    pcall(function() Event:InvokeServer() end)
+end)
 
 -- ==============================================================================
 -- WEBHOOK
@@ -527,7 +526,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==============================================================================
--- GUI MENU STATISTICHE LATERALI (CPU FIX)
+-- GUI MENU STATISTICHE LATERALI
 -- ==============================================================================
 local function createGUI()
 	local ConvertedStats = {
@@ -748,7 +747,6 @@ local function createGUI()
 		else return tostring(number) end
 	end
 
-    -- FIX CPU/LAG STATS: Aggiorna ogni mezzo secondo invece che istantaneamente
 	task.spawn(function()
 		while true do
 			if playerStats then
@@ -809,7 +807,6 @@ end
 localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
--- GODMODE (Evita la morte per AoE)
 task.spawn(function()
     while true do
         local char = localPlayer.Character
@@ -843,12 +840,12 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC (CON REMOTE "Fa" CORRETTO PER EARTH)
+-- AUTO TRANSFORMATION LOGIC
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-    local equipRemote = Events:WaitForChild("equipskill")
-    local transformRemote = Events:WaitForChild("Fa")
+    local equipRemote = Events:WaitForChild("equipskill", 10)
+    local transformRemote = Events:WaitForChild("Fa", 10)
 
     local transformaciones = {
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
@@ -882,56 +879,50 @@ task.spawn(function()
     end
 
     while true do
-        pcall(function()
-            local char = localPlayer.Character
-            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
             if char ~= currentCharacter then
                 currentCharacter = char
                 task.wait(2.5)
             end
 
-            local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
+            local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
             local status = getStatusFolder()
             
             if folderData and status then
-                local strength = folderData.Strength.Value
+                local strength = folderData:FindFirstChild("Strength")
                 local selected = status:FindFirstChild("SelectedTransformation")
                 local actual = status:FindFirstChild("Transformation")
 
-                for _, v in ipairs(transformaciones) do
-                    if strength >= v.forza then
-                        if selected and selected.Value ~= v.name then
-                            task.spawn(function() equipRemote:InvokeServer(v.name) end)
-                            task.wait(0.5)
+                if strength and selected and actual then
+                    for _, v in ipairs(transformaciones) do
+                        if strength.Value >= v.forza then
+                            if selected.Value ~= v.name then
+                                task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                                task.wait(0.5)
+                            end
+                            if actual.Value ~= v.name then
+                                task.spawn(function() transformRemote:InvokeServer() end)
+                                task.wait(2)
+                            end
+                            break
                         end
-                        if actual and actual.Value ~= v.name then
-                            task.spawn(function() transformRemote:InvokeServer() end)
-                            task.wait(2)
-                        end
-                        break
                     end
                 end
             end
-        end)
+        end
         task.wait(1.5)
     end
 end)
 
 -- ==============================================================================
--- SISTEMA DI COMBATTIMENTO AVANZATO (CON AUTO-QUEST E FaFa REMOTE)
+-- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE - CON O SENZA QUEST)
 -- ==============================================================================
 local BossConfig = {
     ["Universal Vegito"] = {QuestNPC = "Universal Vegito", BossName = "Universal Vegito", Distance = -3},
     ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
     ["Fused Zamasu"] = {QuestNPC = "Fused Zamasu", BossName = "Fused Zamasu", Distance = -3}
 }
-
-local function SafeWaitForChild(parent, name, timeout)
-	local success, result = pcall(function() return parent:WaitForChild(name, timeout) end)
-	if not success then return nil end
-	return result
-end
 
 local function TeleportAndFight(bossData)
     local camera = workspace.CurrentCamera
@@ -973,14 +964,14 @@ local function TeleportAndFight(bossData)
                     
             Events.p:FireServer("Blacknwhite27", 1)
 
-            coroutine.wrap(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-            coroutine.wrap(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-            coroutine.wrap(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-            coroutine.wrap(function() attackRemote:InvokeServer("God Slicer", "Blacknwhite27") end)()
-            coroutine.wrap(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+            task.spawn(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("God Slicer", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)
 		end)
 
-		task.wait()
+		task.wait(0.05)
 	end
 
 	pcall(function()
@@ -998,13 +989,13 @@ local function WaitForBossToSpawn(bossData, timeLimit)
         if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
         if not getgenv().BossTargets[bossData.BossName] then return end 
 
-		task.wait() 
-		local boss = SafeWaitForChild(workspace.Living, bossData.BossName, 1)
-		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid")
+		task.wait(0.2) 
+		local boss = workspace.Living:FindFirstChild(bossData.BossName)
+		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0
 	until bossReady or os.time() - startTime > timeLimit 
  
 	if bossReady then
-        task.wait()
+        task.wait(0.2)
 		TeleportAndFight(bossData)
 	end
 end
@@ -1019,38 +1010,26 @@ local function CheckAndFightBoss(bossName)
     local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     if not playerData or not hrp then return end
 
-	local questStarted = false
-	local startTime = os.time()
-	local questTimeout = 15 
+    -- 1. Controlla se l'NPC della quest ESISTE realmente sulla mappa
+    local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
+    
+    -- 2. Se l'NPC esiste, cerca di prendere la quest (solo per max 5 secondi)
+    if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+        local startTime = os.time()
+        while playerData:WaitForChild("Quest").Value ~= bossData.BossName do
+            if os.time() - startTime > 5 then break end -- Non bloccarsi per più di 5 sec
+            if not getgenv().BossTargets[bossName] then return end
+            if not localPlayer.Character or localPlayer.Character.Humanoid.Health <= 0 then return end
 
-	while not questStarted do
-		if os.time() - startTime > questTimeout then break end
-        if not character or character.Humanoid.Health <= 0 then return end
-        if not getgenv().BossTargets[bossName] then return end
+            hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+            pcall(function() ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) end)
+            task.wait(0.5)
+        end
+    end
 
-		local bossNpc = SafeWaitForChild(workspace.Others.NPCs, bossData.QuestNPC, 1)
-		if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-			while playerData:WaitForChild("Quest").Value ~= bossData.BossName do
-				if os.time() - startTime > questTimeout then break end
-                if not character or character.Humanoid.Health <= 0 then return end
-                if not getgenv().BossTargets[bossName] then return end
-
-				hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-				ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
-                task.wait(0.2) 
-			end
-
-			if playerData:WaitForChild("Quest").Value == bossData.BossName then
-				questStarted = true
-			end
-		else
-			task.wait() 
-		end
-	end
-
-	if questStarted then
-		WaitForBossToSpawn(bossData, 30)
-	end
+    -- 3. A prescindere dalla quest (che l'abbia presa o che non esista), aspetta il boss e picchialo
+    -- Aspetta massimo 5 secondi che compaia, se non compare passa subito al prossimo boss
+    WaitForBossToSpawn(bossData, 5) 
 end
 
 -- Main Farm Loop
@@ -1063,6 +1042,6 @@ task.spawn(function()
                 end
             end
         end
-        task.wait(1)
+        task.wait(0.5)
     end
 end)
