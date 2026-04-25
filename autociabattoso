@@ -20,8 +20,6 @@ local TweenService = game:GetService("TweenService")
 local ConfigName = "CiabTurboConfig.json"
 
 local DefaultBosses = {
-    ["Wukong (MUI)"] = true,
-    ["Hit"] = true,
     ["Universal Vegito"] = true,
     ["Goheta (Base - SSJB)"] = true,
     ["Fused Zamasu"] = true
@@ -70,7 +68,6 @@ local function CreateUnifiedGUI()
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 1000
 
-    -- Frame Principale (A destra)
     local MainFrame = Instance.new("Frame", sg)
     MainFrame.Size = UDim2.new(0, 240, 0, 280)
     MainFrame.Position = UDim2.new(1, -260, 0.5, -140)
@@ -90,7 +87,6 @@ local function CreateUnifiedGUI()
         ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
     }
 
-    -- Dragging Logica
     local dragging, dragInput, mousePos, framePos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -110,7 +106,6 @@ local function CreateUnifiedGUI()
         end
     end)
 
-    -- Titolo Superiore
     local Title = Instance.new("TextLabel", MainFrame)
     Title.Size = UDim2.new(1, 0, 0, 45)
     Title.BackgroundTransparency = 1
@@ -119,7 +114,6 @@ local function CreateUnifiedGUI()
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextScaled = true
 
-    -- CONTENITORE BOSS
     local BossContainer = Instance.new("Frame", MainFrame)
     BossContainer.Size = UDim2.new(1, -20, 1, -55)
     BossContainer.Position = UDim2.new(0, 10, 0, 45)
@@ -137,7 +131,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Wukong (MUI)", "Hit", "Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+    local bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -182,7 +176,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (SERVER CHECK E ANTI INTRUSI)
+-- NUOVO SISTEMA INTELLIGENTE (TUA VERSIONE HTTP)
 -- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -220,7 +214,6 @@ task.spawn(function()
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
                 warn("⚠️ Intruso rilevato! Eseguo Server Hop...")
-                -- Come richiesto, rimane sulla Terra
 				TPEvent:InvokeServer("Earth") 
 			end
 		end
@@ -231,17 +224,22 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- START THE GAME
+-- START THE GAME (IN TASK.SPAWN PER NON BLOCCARE LO SCRIPT)
 -- ==============================================================================
-local function StartTheGame()
-    local playerGui = localPlayer:WaitForChild("PlayerGui")
+task.spawn(function()
+    local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+    if not playerGui then return end
     local mainGui = playerGui:WaitForChild("Main", 10)
     if not mainGui then return end
-    task.wait()
-    local Event = ReplicatedStorage.Package.Events.Start
-    Event:InvokeServer()
-    task.wait()
-    Event:InvokeServer()
+    
+    task.wait(1)
+    local Event = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start")
+    pcall(function()
+        Event:InvokeServer()
+        task.wait()
+        Event:InvokeServer()
+    end)
+    
     task.wait()
     local bruhButton = mainGui:FindFirstChild("bruh")
     if bruhButton then
@@ -249,10 +247,8 @@ local function StartTheGame()
         bruhButton.Disabled = false
     end
     task.wait()
-    Event:InvokeServer()
-end
-StartTheGame()
-task.wait(0.5)
+    pcall(function() Event:InvokeServer() end)
+end)
 
 -- ==============================================================================
 -- WEBHOOK
@@ -454,7 +450,7 @@ Converted["_UIStroke8"].Parent = Converted["_/1"]
 
 Converted["_maxenergy"].Font = Enum.Font.FredokaOne
 Converted["_maxenergy"].Text = "nil"
-Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxenergy"].TextScaled = true
 Converted["_maxenergy"].BackgroundTransparency = 1
 Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
@@ -751,20 +747,18 @@ local function createGUI()
 		else return tostring(number) end
 	end
 
-	local function updateStats()
-		ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
-		ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
-		ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
-		ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
-		ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
-	end
-	updateStats()
-
-	playerStats.Strength.Changed:Connect(updateStats)
-	playerStats.Defense.Changed:Connect(updateStats)
-	playerStats.Energy.Changed:Connect(updateStats)
-	playerStats.Speed.Changed:Connect(updateStats)
-    playerStats.Rebirth.Changed:Connect(updateStats)
+	task.spawn(function()
+		while true do
+			if playerStats then
+				ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
+				ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
+				ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
+				ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
+				ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
+			end
+			task.wait(0.5)
+		end
+	end)
 
 	RunService.RenderStepped:Connect(function()
         if ConvertedStats["_UIGradient"].Parent then
@@ -780,7 +774,7 @@ end
 createGUI()
 
 -- ==============================================================================
--- ANTIAFK & UNIVERSAL COMBAT FEATURES
+-- ANTIAFK, GODMODE & UNIVERSAL COMBAT FEATURES
 -- ==============================================================================
 local function ANTIAFK()
 	local vu = game:GetService("VirtualUser")
@@ -814,6 +808,18 @@ localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
 task.spawn(function()
+    while true do
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            if char.Humanoid.Health < char.Humanoid.MaxHealth and char.Humanoid.Health > 0 then
+                char.Humanoid.Health = char.Humanoid.MaxHealth
+            end
+        end
+        task.wait(1)
+    end
+end)
+
+task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local blockEvent = Events:WaitForChild("block")
     local chaEvent = Events:WaitForChild("cha")
@@ -834,12 +840,12 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC
+-- AUTO TRANSFORMATION LOGIC (CON IL TUO REMOTE "Fa" RIPRISTINATO E SENZA PCALL PER VEDERE GLI ERRORI)
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-    local equipRemote = Events:WaitForChild("equipskill")
-    local transformRemote = Events:WaitForChild("Hehehe")
+    local equipRemote = Events:WaitForChild("equipskill", 10)
+    local transformRemote = Events:WaitForChild("Fa", 10)
 
     local transformaciones = {
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
@@ -873,48 +879,46 @@ task.spawn(function()
     end
 
     while true do
-        pcall(function()
-            local char = localPlayer.Character
-            if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
             if char ~= currentCharacter then
                 currentCharacter = char
                 task.wait(2.5)
             end
 
-            local folderData = ReplicatedStorage:WaitForChild("Datas"):FindFirstChild(tostring(localPlayer.UserId))
+            local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
             local status = getStatusFolder()
             
             if folderData and status then
-                local strength = folderData.Strength.Value
+                local strength = folderData:FindFirstChild("Strength")
                 local selected = status:FindFirstChild("SelectedTransformation")
                 local actual = status:FindFirstChild("Transformation")
 
-                for _, v in ipairs(transformaciones) do
-                    if strength >= v.forza then
-                        if selected and selected.Value ~= v.name then
-                            task.spawn(function() equipRemote:InvokeServer(v.name) end)
-                            task.wait(0.5)
+                if strength and selected and actual then
+                    for _, v in ipairs(transformaciones) do
+                        if strength.Value >= v.forza then
+                            if selected.Value ~= v.name then
+                                task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                                task.wait(0.5)
+                            end
+                            if actual.Value ~= v.name then
+                                task.spawn(function() transformRemote:InvokeServer() end)
+                                task.wait(2)
+                            end
+                            break
                         end
-                        if actual and actual.Value ~= v.name then
-                            task.spawn(function() transformRemote:InvokeServer() end)
-                            task.wait(2)
-                        end
-                        break
                     end
                 end
             end
-        end)
+        end
         task.wait(1.5)
     end
 end)
 
 -- ==============================================================================
--- SISTEMA DI COMBATTIMENTO AVANZATO (CON AUTO-QUEST)
+-- SISTEMA DI COMBATTIMENTO AVANZATO (CON AUTO-QUEST E FaFa REMOTE)
 -- ==============================================================================
 local BossConfig = {
-    ["Wukong (MUI)"] = {QuestNPC = "Wukong (MUI)", BossName = "Wukong (MUI)", Distance = -3},
-    ["Hit"] = {QuestNPC = "Hit", BossName = "Hit", Distance = -3},
     ["Universal Vegito"] = {QuestNPC = "Universal Vegito", BossName = "Universal Vegito", Distance = -3},
     ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
     ["Fused Zamasu"] = {QuestNPC = "Fused Zamasu", BossName = "Fused Zamasu", Distance = -3}
@@ -945,7 +949,7 @@ local function TeleportAndFight(bossData)
 	end
 
 	while true do
-        if not getgenv().BossTargets[bossData.BossName] then break end -- Esce se disattivi il boss dalla GUI
+        if not getgenv().BossTargets[bossData.BossName] then break end
 		local currentBoss = getValidBoss()
 		if not currentBoss then break end
 
@@ -962,18 +966,18 @@ local function TeleportAndFight(bossData)
 
 		pcall(function()
             local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-            local letsplayagame = Events:WaitForChild("letsplayagame")
+            local attackRemote = Events:WaitForChild("FaFa")
                     
             Events.p:FireServer("Blacknwhite27", 1)
 
-            coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
-            coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
-            coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-            coroutine.wrap(function() letsplayagame:InvokeServer("Spirit Barrage", "Blacknwhite27") end)()
-            coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+            task.spawn(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("God Slicer", "Blacknwhite27") end)
+            task.spawn(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)
 		end)
 
-		task.wait()
+		task.wait(0.05)
 	end
 
 	pcall(function()
@@ -989,15 +993,15 @@ local function WaitForBossToSpawn(bossData, timeLimit)
 	repeat
         local char = localPlayer.Character
         if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-        if not getgenv().BossTargets[bossData.BossName] then return end -- Esce se disattivi il boss
+        if not getgenv().BossTargets[bossData.BossName] then return end 
 
-		task.wait() 
+		task.wait(0.5) 
 		local boss = SafeWaitForChild(workspace.Living, bossData.BossName, 1)
 		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid")
 	until bossReady or os.time() - startTime > timeLimit 
  
 	if bossReady then
-        task.wait()
+        task.wait(0.5)
 		TeleportAndFight(bossData)
 	end
 end
@@ -1029,15 +1033,15 @@ local function CheckAndFightBoss(bossName)
                 if not getgenv().BossTargets[bossName] then return end
 
 				hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-				ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
-                task.wait(0.2) 
+				pcall(function() ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) end)
+                task.wait(0.5) 
 			end
 
 			if playerData:WaitForChild("Quest").Value == bossData.BossName then
 				questStarted = true
 			end
 		else
-			task.wait() 
+			task.wait(0.5) 
 		end
 	end
 
