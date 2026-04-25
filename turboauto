@@ -20,10 +20,8 @@ local TweenService = game:GetService("TweenService")
 local ConfigName = "CiabTurboConfig.json"
 
 local DefaultBosses = {
-    ["Wukong (MUI)"] = true,
-    ["Hit"] = true,
+	["Goheta (Base - SSJB)"] = true,
     ["Universal Vegito"] = true,
-    ["Goheta (Base - SSJB)"] = true,
     ["Fused Zamasu"] = true
 }
 
@@ -70,7 +68,6 @@ local function CreateUnifiedGUI()
     sg.ResetOnSpawn = false
     sg.DisplayOrder = 1000
 
-    -- Frame Principale (A destra)
     local MainFrame = Instance.new("Frame", sg)
     MainFrame.Size = UDim2.new(0, 240, 0, 280)
     MainFrame.Position = UDim2.new(1, -260, 0.5, -140)
@@ -90,7 +87,6 @@ local function CreateUnifiedGUI()
         ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
     }
 
-    -- Dragging Logica
     local dragging, dragInput, mousePos, framePos
     MainFrame.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -110,7 +106,6 @@ local function CreateUnifiedGUI()
         end
     end)
 
-    -- Titolo Superiore
     local Title = Instance.new("TextLabel", MainFrame)
     Title.Size = UDim2.new(1, 0, 0, 45)
     Title.BackgroundTransparency = 1
@@ -119,7 +114,6 @@ local function CreateUnifiedGUI()
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
     Title.TextScaled = true
 
-    -- CONTENITORE BOSS
     local BossContainer = Instance.new("Frame", MainFrame)
     BossContainer.Size = UDim2.new(1, -20, 1, -55)
     BossContainer.Position = UDim2.new(0, 10, 0, 45)
@@ -137,7 +131,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Wukong (MUI)", "Hit", "Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+    local bossNamesList = {"Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -220,7 +214,6 @@ task.spawn(function()
 		local function CheckIntruders()
 			if #Players:GetPlayers() > 1 then
                 warn("⚠️ Intruso rilevato! Eseguo Server Hop...")
-                -- Come richiesto, rimane sulla Terra
 				TPEvent:InvokeServer("Earth") 
 			end
 		end
@@ -454,7 +447,7 @@ Converted["_UIStroke8"].Parent = Converted["_/1"]
 
 Converted["_maxenergy"].Font = Enum.Font.FredokaOne
 Converted["_maxenergy"].Text = "nil"
-Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
 Converted["_maxenergy"].TextScaled = true
 Converted["_maxenergy"].BackgroundTransparency = 1
 Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
@@ -530,7 +523,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==============================================================================
--- GUI MENU STATISTICHE LATERALI
+-- GUI MENU STATISTICHE LATERALI (CPU FIX)
 -- ==============================================================================
 local function createGUI()
 	local ConvertedStats = {
@@ -751,20 +744,19 @@ local function createGUI()
 		else return tostring(number) end
 	end
 
-	local function updateStats()
-		ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
-		ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
-		ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
-		ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
-		ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
-	end
-	updateStats()
-
-	playerStats.Strength.Changed:Connect(updateStats)
-	playerStats.Defense.Changed:Connect(updateStats)
-	playerStats.Energy.Changed:Connect(updateStats)
-	playerStats.Speed.Changed:Connect(updateStats)
-    playerStats.Rebirth.Changed:Connect(updateStats)
+    -- FIX CPU/LAG STATS: Aggiorna ogni mezzo secondo invece che istantaneamente
+	task.spawn(function()
+		while true do
+			if playerStats then
+				ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
+				ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
+				ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
+				ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
+				ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
+			end
+			task.wait(0.5)
+		end
+	end)
 
 	RunService.RenderStepped:Connect(function()
         if ConvertedStats["_UIGradient"].Parent then
@@ -780,7 +772,7 @@ end
 createGUI()
 
 -- ==============================================================================
--- ANTIAFK & UNIVERSAL COMBAT FEATURES
+-- ANTIAFK, GODMODE & UNIVERSAL COMBAT FEATURES
 -- ==============================================================================
 local function ANTIAFK()
 	local vu = game:GetService("VirtualUser")
@@ -813,6 +805,19 @@ end
 localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
+-- GODMODE (Evita la morte per AoE)
+task.spawn(function()
+    while true do
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") then
+            if char.Humanoid.Health < char.Humanoid.MaxHealth and char.Humanoid.Health > 0 then
+                char.Humanoid.Health = char.Humanoid.MaxHealth
+            end
+        end
+        task.wait(1)
+    end
+end)
+
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local blockEvent = Events:WaitForChild("block")
@@ -834,12 +839,12 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC
+-- AUTO TRANSFORMATION LOGIC (CON REMOTE "Fa" CORRETTO PER EARTH)
 -- ==============================================================================
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local equipRemote = Events:WaitForChild("equipskill")
-    local transformRemote = Events:WaitForChild("Hehehe")
+    local transformRemote = Events:WaitForChild("Fa") -- <--- REMOTE CORRETTO TERRA
 
     local transformaciones = {
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
@@ -945,7 +950,7 @@ local function TeleportAndFight(bossData)
 	end
 
 	while true do
-        if not getgenv().BossTargets[bossData.BossName] then break end -- Esce se disattivi il boss dalla GUI
+        if not getgenv().BossTargets[bossData.BossName] then break end
 		local currentBoss = getValidBoss()
 		if not currentBoss then break end
 
@@ -989,7 +994,7 @@ local function WaitForBossToSpawn(bossData, timeLimit)
 	repeat
         local char = localPlayer.Character
         if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-        if not getgenv().BossTargets[bossData.BossName] then return end -- Esce se disattivi il boss
+        if not getgenv().BossTargets[bossData.BossName] then return end 
 
 		task.wait() 
 		local boss = SafeWaitForChild(workspace.Living, bossData.BossName, 1)
