@@ -133,7 +133,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu"}
+    local bossNamesList = {"Universal Vegito", "Goheta (Base - SSJB)", "Fused Zamasu", "Nohag (Beast)"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
