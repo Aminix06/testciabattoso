@@ -177,7 +177,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (SICUREZZA ESTREMA ANTI-INTRUSO)
+-- SISTEMA ANTI-INTRUSO (FUGA VERSO MAPPA "EARTH")
 -- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -209,54 +209,52 @@ task.spawn(function()
 	if IsPublicServer() then
 		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
-		print("🔒 Server Privato confermato. Sensori Anti-Intruso attivati.")
+		print("🔒 Server Privato confermato. Sensori attivati.")
         
-        -- Funzione di fuga immediata
-        local isEvacuating = false
-        local function Evacuate()
-            if isEvacuating then return end
-            isEvacuating = true
+        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+        local isEscaping = false
+		
+		local function FugaSullaTerra()
+            if isEscaping then return end
+            isEscaping = true
+            warn("⚠️ Intruso rilevato! Fuga istantanea verso la mappa Earth...")
             
-            warn("⚠️ INTRUSO RILEVATO! Fuga immediata...")
-            
-            -- 1. Congela istantaneamente il personaggio per smettere di attaccare/muoversi
+            -- Congela il personaggio per smettere di farmare
             pcall(function()
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     localPlayer.Character.HumanoidRootPart.Anchored = true
                 end
             end)
-            
-            -- 2. Tenta il Server Hop (ti ricollegherà, se è un server pubblico ti kikka di nuovo)
-            pcall(function()
-                TeleportService:Teleport(game.PlaceId, localPlayer)
-            end)
-            
-            -- 3. Failsafe: Se il teleport ci mette troppo, ti kicka dal gioco per sicurezza
-            task.delay(1.5, function()
-                localPlayer:Kick("🛡️ Sicurezza: Intruso rilevato nel Server Privato. Disconnessione forzata.")
-            end)
-        end
 
-		local function CheckIntruders()
-			if #Players:GetPlayers() > 1 then -- Se c'è chiunque oltre a te (> 1) scappa
-                Evacuate()
-			end
+            -- Usa il teletrasporto interno del gioco verso la Terra
+            pcall(function()
+			    TPEvent:InvokeServer("Earth") 
+            end)
+            
+            -- Failsafe: Se dopo 5 secondi sei ancora qui (es. il teletrasporto è buggato), ti kikka.
+            task.delay(5, function()
+                localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito e l'intruso è ancora qui. Disconnessione di emergenza.")
+            end)
 		end
 
-        -- Esegue il controllo subito
-		CheckIntruders()
+        -- Esegue il controllo subito all'avvio
+        if #Players:GetPlayers() > 1 then
+            FugaSullaTerra()
+        end
         
-        -- Evento in tempo reale: appena un giocatore entra, scappa.
+        -- Scatta appena qualcuno entra
 		Players.PlayerAdded:Connect(function(player)
             if player.UserId ~= localPlayer.UserId then
-                Evacuate()
+                FugaSullaTerra()
             end
         end)
         
-        -- Loop di backup (molto veloce) nel caso l'evento fallisca
+        -- Loop di backup extra sicuro
         task.spawn(function()
-            while task.wait(0.2) do
-                CheckIntruders()
+            while task.wait(1) do
+                if #Players:GetPlayers() > 1 then
+                    FugaSullaTerra()
+                end
             end
         end)
 	end
