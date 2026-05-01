@@ -897,8 +897,11 @@ task.spawn(function()
                 local actual = status:FindFirstChild("Transformation")
 
                 if strength and selected and actual then
+                    -- ECCO LA CORREZIONE NEL MAIN SCRIPT:
+                    local numStrength = tonumber(strength.Value) or 0
+                    
                     for _, v in ipairs(transformaciones) do
-                        if strength.Value >= v.forza then
+                        if numStrength >= v.forza then
                             if selected.Value ~= v.name then
                                 task.spawn(function() equipRemote:InvokeServer(v.name) end)
                                 task.wait(0.5)
