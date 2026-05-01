@@ -1,3 +1,5 @@
+--- START OF FILE Paste May 01, 2026 - 12:27PM ---
+
 --- START OF FILE Paste ---
 
 if getgenv().ScriptAlreadyRunning then
@@ -960,17 +962,9 @@ local function TeleportAndFight(bossData)
 
 		pcall(function()
             local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-            local attackRemote = Events:WaitForChild("FaFa")
                     
-            -- Chiave di sicurezza originale rimessa:
+            -- Solo attacchi a pugno .p come richiesto:
             Events.p:FireServer("Blacknwhite27", 1)
-
-            -- Ripristinato coroutine.wrap (spamma più velocemente le mosse rispetto a task.spawn in alcuni executor)
-            coroutine.wrap(function() pcall(function() attackRemote:InvokeServer("Meteor Crash", "Blacknwhite27") end) end)()
-            coroutine.wrap(function() pcall(function() attackRemote:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end) end)()
-            coroutine.wrap(function() pcall(function() attackRemote:InvokeServer("Mach Kick", "Blacknwhite27") end) end)()
-            coroutine.wrap(function() pcall(function() attackRemote:InvokeServer("God Slicer", "Blacknwhite27") end) end)()
-            coroutine.wrap(function() pcall(function() attackRemote:InvokeServer("Super Dragon Fist", "Blacknwhite27") end) end)()
 		end)
 
 		task.wait() -- Ripristinato alla velocità massima!
