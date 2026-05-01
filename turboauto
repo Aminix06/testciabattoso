@@ -1,5 +1,3 @@
---- START OF FILE Paste May 01, 2026 - 12:27PM ---
-
 --- START OF FILE Paste ---
 
 if getgenv().ScriptAlreadyRunning then
@@ -15,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService") -- Aggiunto TeleportService
 
 -- ==============================================================================
 -- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES (SOLO TERRA)
@@ -178,7 +177,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- NUOVO SISTEMA INTELLIGENTE (TUA VERSIONE HTTP)
+-- NUOVO SISTEMA INTELLIGENTE (SICUREZZA ESTREMA ANTI-INTRUSO)
 -- ==============================================================================
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
@@ -210,18 +209,56 @@ task.spawn(function()
 	if IsPublicServer() then
 		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
-		print("🔒 Server Privato confermato.")
-        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
-		
+		print("🔒 Server Privato confermato. Sensori Anti-Intruso attivati.")
+        
+        -- Funzione di fuga immediata
+        local isEvacuating = false
+        local function Evacuate()
+            if isEvacuating then return end
+            isEvacuating = true
+            
+            warn("⚠️ INTRUSO RILEVATO! Fuga immediata...")
+            
+            -- 1. Congela istantaneamente il personaggio per smettere di attaccare/muoversi
+            pcall(function()
+                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    localPlayer.Character.HumanoidRootPart.Anchored = true
+                end
+            end)
+            
+            -- 2. Tenta il Server Hop (ti ricollegherà, se è un server pubblico ti kikka di nuovo)
+            pcall(function()
+                TeleportService:Teleport(game.PlaceId, localPlayer)
+            end)
+            
+            -- 3. Failsafe: Se il teleport ci mette troppo, ti kicka dal gioco per sicurezza
+            task.delay(1.5, function()
+                localPlayer:Kick("🛡️ Sicurezza: Intruso rilevato nel Server Privato. Disconnessione forzata.")
+            end)
+        end
+
 		local function CheckIntruders()
-			if #Players:GetPlayers() > 2 then
-                warn("⚠️ Intruso rilevato! Eseguo Server Hop...")
-				TPEvent:InvokeServer("Earth") 
+			if #Players:GetPlayers() > 1 then -- Se c'è chiunque oltre a te (> 1) scappa
+                Evacuate()
 			end
 		end
 
+        -- Esegue il controllo subito
 		CheckIntruders()
-		Players.PlayerAdded:Connect(CheckIntruders)
+        
+        -- Evento in tempo reale: appena un giocatore entra, scappa.
+		Players.PlayerAdded:Connect(function(player)
+            if player.UserId ~= localPlayer.UserId then
+                Evacuate()
+            end
+        end)
+        
+        -- Loop di backup (molto veloce) nel caso l'evento fallisca
+        task.spawn(function()
+            while task.wait(0.2) do
+                CheckIntruders()
+            end
+        end)
 	end
 end)
 
@@ -897,7 +934,6 @@ task.spawn(function()
                 local actual = status:FindFirstChild("Transformation")
 
                 if strength and selected and actual then
-                    -- ECCO LA CORREZIONE NEL MAIN SCRIPT:
                     local numStrength = tonumber(strength.Value) or 0
                     
                     for _, v in ipairs(transformaciones) do
@@ -965,12 +1001,10 @@ local function TeleportAndFight(bossData)
 
 		pcall(function()
             local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-                    
-            -- Solo attacchi a pugno .p come richiesto:
             Events.p:FireServer("Blacknwhite27", 1)
 		end)
 
-		task.wait() -- Ripristinato alla velocità massima!
+		task.wait() 
 	end
 
 	pcall(function()
@@ -1009,14 +1043,12 @@ local function CheckAndFightBoss(bossName)
     local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     if not playerData or not hrp then return end
 
-    -- 1. Controlla se l'NPC della quest ESISTE realmente sulla mappa
     local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
     
-    -- 2. Se l'NPC esiste, cerca di prendere la quest (solo per max 5 secondi)
     if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
         local startTime = os.time()
         while playerData:WaitForChild("Quest").Value ~= bossData.BossName do
-            if os.time() - startTime > 5 then break end -- Non bloccarsi per più di 5 sec
+            if os.time() - startTime > 5 then break end 
             if not getgenv().BossTargets[bossName] then return end
             if not localPlayer.Character or localPlayer.Character.Humanoid.Health <= 0 then return end
 
@@ -1026,8 +1058,6 @@ local function CheckAndFightBoss(bossName)
         end
     end
 
-    -- 3. A prescindere dalla quest (che l'abbia presa o che non esista), aspetta il boss e picchialo
-    -- Aspetta massimo 5 secondi che compaia, se non compare passa subito al prossimo boss
     WaitForBossToSpawn(bossData, 5) 
 end
 
