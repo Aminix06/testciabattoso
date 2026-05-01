@@ -1043,32 +1043,41 @@ local function CheckAndFightBoss(bossName)
     local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     if not playerData or not hrp then return end
 
-    local bossNpc = SafeWaitForChild(workspace.Others.NPCs, bossData.QuestNPC, 1)
-    if not bossNpc or not bossNpc:FindFirstChild("HumanoidRootPart") then return end
+	local questStarted = false
+	local startTime = os.time()
+	local questTimeout = 15 
 
-    -- CAMPERA L'NPC: Continua a chiedere la missione finché il gioco non la accetta
-    while playerData:WaitForChild("Quest").Value ~= bossData.QuestNPC do
-        
-        -- Controlli di sicurezza per non far bloccare lo script
-        if not getgenv().BossTargets[bossName] then return end -- Esce se disattivi il boss dalla GUI
-        if not localPlayer.Character or localPlayer.Character.Humanoid.Health <= 0 then return end -- Esce se muori
+	while not questStarted do
+		if os.time() - startTime > questTimeout then break end
+        if not character or character.Humanoid.Health <= 0 then return end
+        if not getgenv().BossTargets[bossName] then return end
 
-        -- Si teletrasporta dietro l'NPC
-        hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-        
-        -- Spamma l'interazione per prendere la missione
-        pcall(function() 
-            ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) 
-        end)
-        
-        task.wait(0.5) -- Aspetta mezzo secondo per non laggare il server e riprova
-    end
+        -- Cerca l'NPC usando il nome specifico per l'NPC (es: "Goheta")
+		local bossNpc = SafeWaitForChild(workspace.Others.NPCs, bossData.QuestNPC, 1)
+		if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+            
+            -- Controlla se hai la quest usando il nome specifico della quest (es: "Goheta")
+			while playerData:WaitForChild("Quest").Value ~= bossData.QuestValue do
+				if os.time() - startTime > questTimeout then break end
+                if not character or character.Humanoid.Health <= 0 then return end
+                if not getgenv().BossTargets[bossName] then return end
 
-    -- Se lo script arriva a questo punto, significa che la missione è stata accettata!
-    -- Di conseguenza, il boss è appena spawnato. Ora va a distruggerlo:
-    if playerData:WaitForChild("Quest").Value == bossData.QuestNPC then
-        TeleportAndFight(bossData)
-    end
+				hrp.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+				pcall(function() ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) end)
+                task.wait(0.5) 
+			end
+
+			if playerData:WaitForChild("Quest").Value == bossData.QuestValue then
+				questStarted = true
+			end
+		else
+			task.wait(0.5) 
+		end
+	end
+
+	if questStarted then
+		WaitForBossToSpawn(bossData, 30)
+	end
 end
 
 -- Main Farm Loop
