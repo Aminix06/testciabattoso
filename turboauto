@@ -214,7 +214,7 @@ task.spawn(function()
         local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
 		
 		local function CheckIntruders()
-			if #Players:GetPlayers() > 1 then
+			if #Players:GetPlayers() > 2 then
                 warn("⚠️ Intruso rilevato! Eseguo Server Hop...")
 				TPEvent:InvokeServer("Earth") 
 			end
