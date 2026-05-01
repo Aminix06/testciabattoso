@@ -23,7 +23,8 @@ local ConfigName = "CiabTurboConfig.json"
 local DefaultBosses = {
     ["Universal Vegito"] = true,
     ["Goheta (Base - SSJB)"] = true,
-    ["Fused Zamasu"] = true
+    ["Fused Zamasu"] = true,
+	["Nohag (Beast)"] = true
 }
 
 if isfile and isfile(ConfigName) then
@@ -960,7 +961,8 @@ end)
 local BossConfig = {
     ["Universal Vegito"] = {QuestNPC = "Universal Vegito", BossName = "Universal Vegito", Distance = -3},
     ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
-    ["Fused Zamasu"] = {QuestNPC = "Fused Zamasu", BossName = "Fused Zamasu", Distance = -3}
+    ["Fused Zamasu"] = {QuestNPC = "Fused Zamasu", BossName = "Fused Zamasu", Distance = -3},
+	["Nohag (Beast)"] = {QuestNPC = "Nohag (Beast)", BossName = "Nohag (Beast)", Distance = -3}
 }
 
 local function TeleportAndFight(bossData)
