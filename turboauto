@@ -885,6 +885,7 @@ task.spawn(function()
     local transformRemote = Events:WaitForChild("Fa", 10)
 
     local transformaciones = {
+		{name = "Ultra Super Villain", forza = 4000000000000000},
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
         {name = "Ego Instinct", forza = 4500000000}, {name = "True Jui", forza = 750000000},
         {name = "Time Breaker", forza = 630000000}, {name = "Corrupt Astral", forza = 250000000},
