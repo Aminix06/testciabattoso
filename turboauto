@@ -22,7 +22,8 @@ local ConfigName = "CiabTurboConfig.json"
 
 local DefaultBosses = {
     ["Goheta (Base - SSJB)"] = true,
-	["Nohag (Beast)"] = true
+	["Nohag (Beast)"] = true,
+	["Ultra Super Villain Vegetable"] = true
 }
 
 if isfile and isfile(ConfigName) then
@@ -131,7 +132,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Goheta (Base - SSJB)", "Nohag (Beast)"}
+    local bossNamesList = {"Goheta (Base - SSJB)", "Nohag (Beast)", "Ultra Super Villain Vegetable"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -958,7 +959,8 @@ end)
 -- ==============================================================================
 local BossConfig = {
     ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
-	["Nohag (Beast)"] = {QuestNPC = "Nohag (Beast)", BossName = "Nohag (Beast)", Distance = -3}
+	["Nohag (Beast)"] = {QuestNPC = "Nohag (Beast)", BossName = "Nohag (Beast)", Distance = -3},
+	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -3}
 }
 
 local function TeleportAndFight(bossData)
