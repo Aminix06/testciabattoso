@@ -1044,31 +1044,37 @@ local function CheckAndFightBoss(bossName)
     local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     if not playerData or not hrp then return end
 
-    local questVal = playerData:WaitForChild("Quest")
-    local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
-    
-    -- Se l'NPC esiste, continua a teleportarsi dietro di lui finché non prende la quest
-    if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-        while questVal.Value ~= bossData.BossName do
-            -- Controlli di sicurezza per fermare il loop se disabiliti il boss o muori
-            if not getgenv().BossTargets[bossName] then return end
-            if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+    -- Controlla se il boss richiede una quest (QuestNPC non è nil)
+    if bossData.QuestNPC then
+        local questVal = playerData:WaitForChild("Quest")
+        local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
+        
+        -- Se l'NPC esiste, continua a teleportarsi dietro di lui finché non prende la quest
+        if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+            while questVal.Value ~= bossData.BossName do
+                -- Controlli di sicurezza per fermare il loop se disabiliti il boss o muori
+                if not getgenv().BossTargets[bossName] then return end
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
 
-            -- Teletrasporto continuo dietro l'NPC della quest
-            localPlayer.Character.HumanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
-            
-            -- Forza la richiesta della quest
-            pcall(function() 
-                ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) 
-            end)
-            
-            task.wait(0.2) -- Attende un istante breve e riprova se non ha ancora la quest
+                -- Teletrasporto continuo dietro l'NPC della quest
+                localPlayer.Character.HumanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+                
+                -- Forza la richiesta della quest
+                pcall(function() 
+                    ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) 
+                end)
+                
+                task.wait(0.2) -- Attende un istante breve e riprova se non ha ancora la quest
+            end
         end
-    end
 
-    -- Va dal boss SOLO E UNICAMENTE se la quest è stata presa con successo
-    if questVal.Value == bossData.BossName then
-        WaitForBossToSpawn(bossData, 5) 
+        -- Va dal boss SOLO E UNICAMENTE se la quest è stata presa con successo
+        if questVal.Value == bossData.BossName then
+            WaitForBossToSpawn(bossData, 5) 
+        end
+    else
+        -- IL BOSS NON HA UNA QUEST: Vai dritto a combattere senza cercare l'NPC
+        WaitForBossToSpawn(bossData, 5)
     end
 end
 
