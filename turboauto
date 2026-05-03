@@ -889,9 +889,9 @@ task.spawn(function()
         {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
         {name = "Ego Instinct", forza = 4500000000}, {name = "Krampus", forza = 4000000000},
 		{name = "Primal Ruin", forza = 2000000000}, {name = "True Jui", forza = 750000000},
-        {name = "Time Breaker", forza = 630000000},]] 
-		{name = "Corrupt Astral", forza = 250000000},
-        {name = "Beast", forza = 120000000}, {name = "LBSSJ4", forza = 100000000},
+        {name = "Time Breaker", forza = 630000000},	{name = "Corrupt Astral", forza = 250000000},
+        {name = "Beast", forza = 120000000}, ]]
+		{name = "LBSSJ4", forza = 100000000},
         {name = "SSJB4", forza = 50000000}, {name = "SSJR3", forza = 50000000},
         {name = "True God of Creation", forza = 30000000}, {name = "True God of Destruction", forza = 30000000},
         {name = "God of Creation", forza = 30000000}, {name = "God of Destruction", forza = 30000000},
