@@ -23,6 +23,7 @@ local ConfigName = "CiabTurboConfig.json"
 local DefaultBosses = {
     ["Goheta (Base - SSJB)"] = true,
 	["Vekuta (SSJBUI)"] = true,
+	["Kakata (Ego Instinct)"] = true,
 	["Ultra Super Villain Vegetable"] = true
 }
 
@@ -132,7 +133,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Goheta (Base - SSJB)", "Vekuta (SSJBUI)", "Ultra Super Villain Vegetable"}
+    local bossNamesList = {"Goheta (Base - SSJB)", "Vekuta (SSJBUI)", "Kakata (Ego Instinct)", "Ultra Super Villain Vegetable"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -962,6 +963,7 @@ end)
 local BossConfig = {
     ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
 	["Vekuta (SSJBUI)"] = {QuestNPC = "Vekuta (SSJBUI)", BossName = "Vekuta (SSJBUI)", Distance = -3},
+	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -3},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -3}
 }
 
