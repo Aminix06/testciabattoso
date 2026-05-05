@@ -904,8 +904,8 @@ task.spawn(function()
         {name = "SSJ Blue", forza = 1200000}, {name = "SSJG4", forza = 1000000},
         {name = "LSSJ3", forza = 800000}, {name = "Corrupt SSJ", forza = 700000},
         {name = "SSJ Rage", forza = 700000}, {name = "SSJ5", forza = 550000},
-        {name = "SSJ4", forza = 300000}, {name = "Mystic Kaioken", forza = 250000},]]
-        {name = "Mystic", forza = 200000}, {name = "LSSJ Kaioken", forza = 160000},
+        {name = "SSJ4", forza = 300000}, {name = "Mystic Kaioken", forza = 250000},
+        {name = "Mystic", forza = 200000}, {name = "LSSJ Kaioken", forza = 160000},]]
         {name = "LSSJ", forza = 140000}, {name = "SSJ3", forza = 95000},
         {name = "SSJ2 Majin", forza = 65000}, {name = "Spirit SSJ", forza = 65000},
         {name = "SSJ2 Kaioken", forza = 50000}, {name = "SSJ Kaioken", forza = 16000},
