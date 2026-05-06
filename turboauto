@@ -906,7 +906,7 @@ task.spawn(function()
                     if dsliceFolder and dsliceFolder:FindFirstChild("dslice") then
                         -- Inizia l'attacco
                         dsliceFolder.dslice:FireServer(true)
-                        task.wait(0.1) 
+                        task.wait(1) 
                         -- Rilascia l'attacco
                         dsliceFolder.dslice:FireServer(false)
                     end
