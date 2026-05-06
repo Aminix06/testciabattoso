@@ -847,18 +847,6 @@ localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
 task.spawn(function()
-    while true do
-        local char = localPlayer.Character
-        if char and char:FindFirstChild("Humanoid") then
-            if char.Humanoid.Health < char.Humanoid.MaxHealth and char.Humanoid.Health > 0 then
-                char.Humanoid.Health = char.Humanoid.MaxHealth
-            end
-        end
-        task.wait(1)
-    end
-end)
-
-task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local blockEvent = Events:WaitForChild("block")
     local chaEvent = Events:WaitForChild("cha")
@@ -875,6 +863,58 @@ end)
 task.spawn(function()
     while true and task.wait() do
         pcall(function() localPlayer.Status.Blocking.Value = true end)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO DIMENSION RAY (SPARA SOLO QUANDO SEI DAL BOSS)
+-- ==============================================================================
+task.spawn(function()
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    local Events = ReplicatedStorage:WaitForChild("Package", 10):WaitForChild("Events", 10)
+    local equipSkillEvent = Events:WaitForChild("equipskill", 10)
+    
+    while true do
+        pcall(function()
+            local char = localPlayer.Character
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 and char:FindFirstChild("HumanoidRootPart") then
+                
+                -- 1. Controlla se stiamo effettivamente combattendo un boss
+                local isFighting = false
+                for bossName, isTargeted in pairs(getgenv().BossTargets) do
+                    if isTargeted then
+                        local boss = workspace.Living:FindFirstChild(bossName)
+                        -- Se il boss esiste, è vivo, ed è vicino a noi (siamo teletrasportati da lui)
+                        if boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                            local distance = (boss.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                            if distance < 30 then -- Il teleport ti mette a 3 stud, 30 è un margine sicuro
+                                isFighting = true
+                                break
+                            end
+                        end
+                    end
+                end
+
+                -- 2. Se siamo in combattimento ravvicinato con il boss, spara!
+                if isFighting then
+                    -- Equippa in background per non causare lag
+                    task.spawn(function()
+                        equipSkillEvent:InvokeServer("Dimension Ray")
+                    end)
+                    
+                    local dsliceFolder = ReplicatedStorage:FindFirstChild("DimensionSlicer")
+                    if dsliceFolder and dsliceFolder:FindFirstChild("dslice") then
+                        -- Inizia l'attacco
+                        dsliceFolder.dslice:FireServer(true)
+                        task.wait(0.1) 
+                        -- Rilascia l'attacco
+                        dsliceFolder.dslice:FireServer(false)
+                    end
+                end
+
+            end
+        end)
+        task.wait(0.25) -- Tempo di attesa tra un colpo e l'altro (abbassa a 0.1 se lo vuoi istantaneo)
     end
 end)
 
