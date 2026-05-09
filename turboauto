@@ -21,6 +21,7 @@ local TeleportService = game:GetService("TeleportService") -- Aggiunto TeleportS
 local ConfigName = "CiabTurboConfig.json"
 
 local DefaultBosses = {
+	["Wukong (TUI)"] = true,
 	["Ultra Super Villain Vegetable"] = true,
 	["Grand Minister (1% power)"] = true,
 	["Kakata (Ego Instinct)"] = true,	
@@ -134,7 +135,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Vekuta (SSJBUI)"}
+    local bossNamesList = {"Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Vekuta (SSJBUI)"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -1002,6 +1003,7 @@ end)
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE - CON O SENZA QUEST)
 -- ==============================================================================
 local BossConfig = {
+	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -3},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -3},
 	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -3},
 	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -3},
