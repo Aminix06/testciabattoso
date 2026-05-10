@@ -523,6 +523,9 @@ local function setupCharacter(character)
                     
                     -- Forza il massimo a 100
                     Converted["_maxenergy"].Text = "100"
+					Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255) -- Bianco come gli altri
+					Converted["_maxenergy"].Font = Enum.Font.FredokaOne -- Stesso font degli altri
+					Converted["_maxenergy"].TextScaled = true -- Assicura che la dimensione sia corretta
                 end
 
                 updateEnergy()
