@@ -536,7 +536,7 @@ local function TeleportAndFight(bossData)
             coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
             coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
             coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
-            coroutine.wrap(function() letsplayagame:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("God Slicer", "Blacknwhite27") end)()
             coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
 		end)
 
