@@ -508,36 +508,34 @@ local function setupCharacter(character)
 
     task.spawn(function()
         local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
-        if wsChar then
-            local statsFolder = wsChar:WaitForChild("Stats", 5)
-            if statsFolder then
-                -- Legge il Ki corrente e l'Energy massima dalla cartella Stats
-                local currentKi = statsFolder:WaitForChild("Ki", 5) 
-                local maxEnergy = statsFolder:WaitForChild("Energy", 5) 
-                
-                local function updateEnergy()
-                    -- Aggiorna il Ki attuale (quello che scende)
-                    pcall(function()
-                        local val = tonumber(currentKi.Value) or 0
-                        Converted["_energy"].Text = formatNumber(math.floor(val))
-                    end)
-                    
-                    -- Aggiorna l'energia massima leggendo l'oggetto 'Energy'
-                    pcall(function()
-                        local mVal = 0
-                        if maxEnergy then mVal = tonumber(maxEnergy.Value) or 0 end
-                        Converted["_maxenergy"].Text = formatNumber(math.floor(mVal))
-                    end)
-                end
+        local statsFolder = wsChar and wsChar:WaitForChild("Stats", 5)
+        local statusFolder = localPlayer:WaitForChild("Status", 5) -- Cerchiamo anche in Status come avevi visto tu
 
-                updateEnergy()
+        if statsFolder and statusFolder then
+            -- currentKi: quello che scende (da Stats)
+            local currentKi = statsFolder:WaitForChild("Ki", 5) 
+            -- maxKi: il massimo (che solitamente è in Status, come avevi visto tu)
+            local maxKi = statusFolder:WaitForChild("Ki", 5) 
+            
+            local function updateEnergy()
+                -- Legge il Ki corrente
+                pcall(function()
+                    local val = tonumber(currentKi.Value) or 0
+                    Converted["_energy"].Text = formatNumber(math.floor(val))
+                end)
                 
-                -- Aggiorna quando il valore del Ki o dell'Energy cambiano
-                currentKi.Changed:Connect(updateEnergy)
-                if maxEnergy then
-                    maxEnergy.Changed:Connect(updateEnergy)
-                end
+                -- Legge il Ki Massimo (da Status)
+                pcall(function()
+                    local mVal = tonumber(maxKi.Value) or 0
+                    Converted["_maxenergy"].Text = formatNumber(math.floor(mVal))
+                end)
             end
+
+            updateEnergy()
+            
+            -- Ascolta i cambiamenti
+            currentKi.Changed:Connect(updateEnergy)
+            maxKi.Changed:Connect(updateEnergy)
         end
     end)
 end
