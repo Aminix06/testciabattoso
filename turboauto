@@ -508,34 +508,30 @@ local function setupCharacter(character)
 
     task.spawn(function()
         local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
-        local statsFolder = wsChar and wsChar:WaitForChild("Stats", 5)
-        local statusFolder = localPlayer:WaitForChild("Status", 5) -- Cerchiamo anche in Status come avevi visto tu
-
-        if statsFolder and statusFolder then
-            -- currentKi: quello che scende (da Stats)
-            local currentKi = statsFolder:WaitForChild("Ki", 5) 
-            -- maxKi: il massimo (che solitamente è in Status, come avevi visto tu)
-            local maxKi = statusFolder:WaitForChild("Ki", 5) 
-            
-            local function updateEnergy()
-                -- Legge il Ki corrente
-                pcall(function()
-                    local val = tonumber(currentKi.Value) or 0
-                    Converted["_energy"].Text = formatNumber(math.floor(val))
-                end)
+        if wsChar then
+            local statsFolder = wsChar:WaitForChild("Stats", 5)
+            if statsFolder then
+                -- currentKi è l'energia che scende (quella che cambia)
+                local currentKi = statsFolder:WaitForChild("Ki", 5) 
                 
-                -- Legge il Ki Massimo (da Status)
-                pcall(function()
-                    local mVal = tonumber(maxKi.Value) or 0
-                    Converted["_maxenergy"].Text = formatNumber(math.floor(mVal))
-                end)
-            end
+                local function updateEnergy()
+                    -- Aggiorna il Ki attuale (quello che scende)
+                    pcall(function()
+                        local val = tonumber(currentKi.Value) or 0
+                        Converted["_energy"].Text = formatNumber(math.floor(val))
+                    end)
+                    
+                    -- Forza il massimo a 100
+                    Converted["_maxenergy"].Text = "100"
+                end
 
-            updateEnergy()
-            
-            -- Ascolta i cambiamenti
-            currentKi.Changed:Connect(updateEnergy)
-            maxKi.Changed:Connect(updateEnergy)
+                updateEnergy()
+                
+                -- Aggiorna quando il valore del Ki cambia
+                if currentKi then
+                    currentKi.Changed:Connect(updateEnergy)
+                end
+            end
         end
     end)
 end
