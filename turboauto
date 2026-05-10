@@ -18,12 +18,8 @@ local TeleportService = game:GetService("TeleportService")
 -- ==============================================================================
 local ConfigName = "CiabTurboConfig.json"
 
-local DefaultBosses = {
-	["Wukong (TUI)"] = true,["Ultra Super Villain Vegetable"] = true,
-	["Grand Minister (1% power)"] = true,["Kakata (Ego Instinct)"] = true,	
-    ["Goheta (Base - SSJB)"] = true,
-	["Vekuta (SSJBUI)"] = true,
-	["Universal Vegito"] = true
+local DefaultBosses = {["Wukong (TUI)"] = true,["Ultra Super Villain Vegetable"] = true,["Grand Minister (1% power)"] = true,["Kakata (Ego Instinct)"] = true,["Goheta (Base - SSJB)"] = true,
+	["Vekuta (SSJBUI)"] = true,["Universal Vegito"] = true
 }
 
 if isfile and isfile(ConfigName) then
@@ -300,16 +296,13 @@ task.spawn(function()
 		requestFunc({
 			Url = Webhook_URL,
 			Method = 'POST',
-			Headers = { ['Content-Type'] = 'application/json' },
-			Body = HttpService:JSONEncode({
-				["content"] = "",
+			Headers = {['Content-Type'] = 'application/json' },
+			Body = HttpService:JSONEncode({["content"] = "",
 				["embeds"] = {{
 					["title"] = "✅ Auto-Farm avviato (EARTH)!",
-					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
-					["type"] = "rich",
-					["color"] = 65280, 
-					["fields"] = {
-						{["name"] = "Rebirths", ["value"] = rebs, ["inline"] = true },
+					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",["type"] = "rich",
+					["color"] = 65280,["fields"] = {
+						{["name"] = "Rebirths", ["value"] = rebs,["inline"] = true },
 						{["name"] = "Defense", ["value"] = statz, ["inline"] = true }
 					}
 				}}
@@ -321,24 +314,16 @@ end)
 -- ==============================================================================
 -- GUI SETUP (STATS & HEALTH/ENERGY)
 -- ==============================================================================
-local Converted = {
-	["_HealthAndEnergy"] = Instance.new("ScreenGui");
-	["_Frame"] = Instance.new("Frame");
-	["_UICorner"] = Instance.new("UICorner");["_UIStroke"] = Instance.new("UIStroke");
-	["_UIGradient"] = Instance.new("UIGradient");
-	["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");["_UIGradient1"] = Instance.new("UIGradient");
+local Converted = {["_HealthAndEnergy"] = Instance.new("ScreenGui");
+	["_Frame"] = Instance.new("Frame");["_UICorner"] = Instance.new("UICorner");["_UIStroke"] = Instance.new("UIStroke");
+	["_UIGradient"] = Instance.new("UIGradient");["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");["_UIGradient1"] = Instance.new("UIGradient");
 	["_health"] = Instance.new("TextLabel");["_UIStroke2"] = Instance.new("UIStroke");
 	["_/"] = Instance.new("TextLabel");
-	["_UIStroke3"] = Instance.new("UIStroke");["_maxhealth"] = Instance.new("TextLabel");
-	["_UIStroke4"] = Instance.new("UIStroke");
-	["_freim"] = Instance.new("Frame");["_UICorner1"] = Instance.new("UICorner");
-	["_UIStroke5"] = Instance.new("UIStroke");
-	["_Uigraddd"] = Instance.new("UIGradient");["_TextLabel1"] = Instance.new("TextLabel");
-	["_UIStroke6"] = Instance.new("UIStroke");
-	["_Uigrad"] = Instance.new("UIGradient");["_energy"] = Instance.new("TextLabel");
+	["_UIStroke3"] = Instance.new("UIStroke");["_maxhealth"] = Instance.new("TextLabel");["_UIStroke4"] = Instance.new("UIStroke");["_freim"] = Instance.new("Frame");["_UICorner1"] = Instance.new("UICorner");
+	["_UIStroke5"] = Instance.new("UIStroke");["_Uigraddd"] = Instance.new("UIGradient");["_TextLabel1"] = Instance.new("TextLabel");
+	["_UIStroke6"] = Instance.new("UIStroke");["_Uigrad"] = Instance.new("UIGradient");["_energy"] = Instance.new("TextLabel");
 	["_UIStroke7"] = Instance.new("UIStroke");
-	["_/1"] = Instance.new("TextLabel");
-	["_UIStroke8"] = Instance.new("UIStroke");
+	["_/1"] = Instance.new("TextLabel");["_UIStroke8"] = Instance.new("UIStroke");
 	["_maxenergy"] = Instance.new("TextLabel");
 	["_UIStroke9"] = Instance.new("UIStroke");
 }
@@ -506,6 +491,9 @@ local function formatNumber(number)
 	else return tostring(number) end
 end
 
+-- ==============================================================================
+-- NUOVO SISTEMA VITA E ENERGIA (FIXATO GRAZIE AGLI SCREENSHOT!)
+-- ==============================================================================
 local function setupCharacter(character)
     local humanoid = character:WaitForChild("Humanoid", 5)
     if humanoid then
@@ -523,15 +511,31 @@ local function setupCharacter(character)
         if wsChar then
             local statsFolder = wsChar:WaitForChild("Stats", 5)
             if statsFolder then
-                local ki = statsFolder:WaitForChild("Ki", 5)
-                if ki then
-                    Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-                    Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
-                    
-                    ki.Changed:Connect(function()
-                        Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-                        Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
+                -- Legge il Ki corrente e l'Energy massima dalla cartella Stats
+                local currentKi = statsFolder:WaitForChild("Ki", 5) 
+                local maxEnergy = statsFolder:WaitForChild("Energy", 5) 
+                
+                local function updateEnergy()
+                    -- Aggiorna il Ki attuale (quello che scende)
+                    pcall(function()
+                        local val = tonumber(currentKi.Value) or 0
+                        Converted["_energy"].Text = formatNumber(math.floor(val))
                     end)
+                    
+                    -- Aggiorna l'energia massima leggendo l'oggetto 'Energy'
+                    pcall(function()
+                        local mVal = 0
+                        if maxEnergy then mVal = tonumber(maxEnergy.Value) or 0 end
+                        Converted["_maxenergy"].Text = formatNumber(math.floor(mVal))
+                    end)
+                end
+
+                updateEnergy()
+                
+                -- Aggiorna quando il valore del Ki o dell'Energy cambiano
+                currentKi.Changed:Connect(updateEnergy)
+                if maxEnergy then
+                    maxEnergy.Changed:Connect(updateEnergy)
                 end
             end
         end
@@ -553,24 +557,12 @@ end)
 -- ==============================================================================
 local function createGUI()
 	local ConvertedStats = {
-		["_AUTOFARM"] = Instance.new("ScreenGui");
-		["_Frame"] = Instance.new("Frame");["_UICorner"] = Instance.new("UICorner");
+		["_AUTOFARM"] = Instance.new("ScreenGui");["_Frame"] = Instance.new("Frame");["_UICorner"] = Instance.new("UICorner");
 		["_UIStroke"] = Instance.new("UIStroke");
-		["_UIGradient"] = Instance.new("UIGradient");["_UIGradient1"] = Instance.new("UIGradient");["_ImageLabel"] = Instance.new("ImageLabel");
-		["_UICorner1"] = Instance.new("UICorner");
-		["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");
-		["_Fortnait"] = Instance.new("ImageLabel");["_Stren"] = Instance.new("TextLabel");["_UIStroke2"] = Instance.new("UIStroke");
-		["_STRENGTHNUMBER"] = Instance.new("TextLabel");["_UIStroke3"] = Instance.new("UIStroke");["_Sped"] = Instance.new("TextLabel");
-		["_UIStroke4"] = Instance.new("UIStroke");
-		["_SPEEDNUMBER"] = Instance.new("TextLabel");["_UIStroke5"] = Instance.new("UIStroke");["_DEF"] = Instance.new("TextLabel");
-		["_UIStroke6"] = Instance.new("UIStroke");
-		["_DEFENSENUMBER"] = Instance.new("TextLabel");["_UIStroke7"] = Instance.new("UIStroke");
-		["_ENERGY"] = Instance.new("TextLabel");
-		["_UIStroke8"] = Instance.new("UIStroke");
-		["_ENERGYNUMBER"] = Instance.new("TextLabel");["_UIStroke9"] = Instance.new("UIStroke");["_sup"] = Instance.new("ImageLabel");
-		["_UICorner2"] = Instance.new("UICorner");["_DEF1"] = Instance.new("TextLabel");["_UIStroke10"] = Instance.new("UIStroke");
-		["_REBS"] = Instance.new("TextLabel");["_UIStroke11"] = Instance.new("UIStroke");["_REBSNUMBER"] = Instance.new("TextLabel");
-		["_UIStroke12"] = Instance.new("UIStroke");
+		["_UIGradient"] = Instance.new("UIGradient");["_UIGradient1"] = Instance.new("UIGradient");["_ImageLabel"] = Instance.new("ImageLabel");["_UICorner1"] = Instance.new("UICorner");["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");
+		["_Fortnait"] = Instance.new("ImageLabel");["_Stren"] = Instance.new("TextLabel");["_UIStroke2"] = Instance.new("UIStroke");["_STRENGTHNUMBER"] = Instance.new("TextLabel");["_UIStroke3"] = Instance.new("UIStroke");["_Sped"] = Instance.new("TextLabel");
+		["_UIStroke4"] = Instance.new("UIStroke");["_SPEEDNUMBER"] = Instance.new("TextLabel");["_UIStroke5"] = Instance.new("UIStroke");["_DEF"] = Instance.new("TextLabel");["_UIStroke6"] = Instance.new("UIStroke");
+		["_DEFENSENUMBER"] = Instance.new("TextLabel");["_UIStroke7"] = Instance.new("UIStroke");["_ENERGY"] = Instance.new("TextLabel");["_UIStroke8"] = Instance.new("UIStroke");["_ENERGYNUMBER"] = Instance.new("TextLabel");["_UIStroke9"] = Instance.new("UIStroke");["_sup"] = Instance.new("ImageLabel");["_UICorner2"] = Instance.new("UICorner");["_DEF1"] = Instance.new("TextLabel");["_UIStroke10"] = Instance.new("UIStroke");["_REBS"] = Instance.new("TextLabel");["_UIStroke11"] = Instance.new("UIStroke");["_REBSNUMBER"] = Instance.new("TextLabel");["_UIStroke12"] = Instance.new("UIStroke");
 	}
 
 	ConvertedStats["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -988,11 +980,7 @@ end
 -- ==============================================================================
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
 -- ==============================================================================
-local BossConfig = {
-	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
-	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},
-    ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},["Vekuta (SSJBUI)"] = {QuestNPC = "Vekuta (SSJBUI)", BossName = "Vekuta (SSJBUI)", Distance = -5},
-	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5}
+local BossConfig = {["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},["Vekuta (SSJBUI)"] = {QuestNPC = "Vekuta (SSJBUI)", BossName = "Vekuta (SSJBUI)", Distance = -5},["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5}
 }
 
 local function TeleportAndFight(bossData)
