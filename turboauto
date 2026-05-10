@@ -1,5 +1,3 @@
---- START OF FILE Paste ---
-
 if getgenv().ScriptAlreadyRunning then
 	warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
 	return
@@ -13,10 +11,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService") -- Aggiunto TeleportService
 
 -- ==============================================================================
--- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES (SOLO TERRA)
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES
 -- ==============================================================================
 local ConfigName = "CiabTurboConfig.json"
 
@@ -168,19 +165,6 @@ end
 CreateUnifiedGUI()
 
 -- ==============================================================================
--- QUEUE ON TELEPORT
--- ==============================================================================
-task.spawn(function()
-    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
-    if queue_on_teleport then
-        queue_on_teleport([[
-            repeat task.wait() until game:IsLoaded()
-            loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
-        ]])
-    end
-end)
-
--- ==============================================================================
 -- SISTEMA ANTI-INTRUSO (FUGA VERSO MAPPA "EARTH")
 -- ==============================================================================
 task.spawn(function()
@@ -223,37 +207,31 @@ task.spawn(function()
             isEscaping = true
             warn("⚠️ Intruso rilevato! Fuga istantanea verso la mappa Earth...")
             
-            -- Congela il personaggio per smettere di farmare
             pcall(function()
                 if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
                     localPlayer.Character.HumanoidRootPart.Anchored = true
                 end
             end)
 
-            -- Usa il teletrasporto interno del gioco verso la Terra
             pcall(function()
 			    TPEvent:InvokeServer("Earth") 
             end)
             
-            -- Failsafe: Se dopo 5 secondi sei ancora qui (es. il teletrasporto è buggato), ti kikka.
             task.delay(5, function()
                 localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito e l'intruso è ancora qui. Disconnessione di emergenza.")
             end)
 		end
 
-        -- Esegue il controllo subito all'avvio
         if #Players:GetPlayers() > 1 then
             FugaSullaTerra()
         end
         
-        -- Scatta appena qualcuno entra
 		Players.PlayerAdded:Connect(function(player)
             if player.UserId ~= localPlayer.UserId then
                 FugaSullaTerra()
             end
         end)
         
-        -- Loop di backup extra sicuro
         task.spawn(function()
             while task.wait(1) do
                 if #Players:GetPlayers() > 1 then
@@ -317,10 +295,9 @@ task.spawn(function()
 					["title"] = "✅ Auto-Farm avviato (EARTH)!",
 					["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",
 					["type"] = "rich",
-					["color"] = 65280, 
-					["fields"] = {
-						{ ["name"] = "Rebirths", ["value"] = rebs, ["inline"] = true },
-						{ ["name"] = "Defense", ["value"] = statz, ["inline"] = true }
+					["color"] = 65280,["fields"] = {
+						{ ["name"] = "Rebirths", ["value"] = rebs,["inline"] = true },
+						{ ["name"] = "Defense", ["value"] = statz,["inline"] = true }
 					}
 				}}
 			})
@@ -329,493 +306,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- GUI SETUP (STATS & HEALTH/ENERGY)
--- ==============================================================================
-local Converted = {
-	["_HealthAndEnergy"] = Instance.new("ScreenGui");
-	["_Frame"] = Instance.new("Frame");
-	["_UICorner"] = Instance.new("UICorner");
-	["_UIStroke"] = Instance.new("UIStroke");
-	["_UIGradient"] = Instance.new("UIGradient");
-	["_TextLabel"] = Instance.new("TextLabel");
-	["_UIStroke1"] = Instance.new("UIStroke");
-	["_UIGradient1"] = Instance.new("UIGradient");
-	["_health"] = Instance.new("TextLabel");
-	["_UIStroke2"] = Instance.new("UIStroke");
-	["_/"] = Instance.new("TextLabel");
-	["_UIStroke3"] = Instance.new("UIStroke");
-	["_maxhealth"] = Instance.new("TextLabel");
-	["_UIStroke4"] = Instance.new("UIStroke");
-	["_freim"] = Instance.new("Frame");
-	["_UICorner1"] = Instance.new("UICorner");
-	["_UIStroke5"] = Instance.new("UIStroke");
-	["_Uigraddd"] = Instance.new("UIGradient");
-	["_TextLabel1"] = Instance.new("TextLabel");
-	["_UIStroke6"] = Instance.new("UIStroke");
-	["_Uigrad"] = Instance.new("UIGradient");
-	["_energy"] = Instance.new("TextLabel");
-	["_UIStroke7"] = Instance.new("UIStroke");
-	["_/1"] = Instance.new("TextLabel");
-	["_UIStroke8"] = Instance.new("UIStroke");
-	["_maxenergy"] = Instance.new("TextLabel");
-	["_UIStroke9"] = Instance.new("UIStroke");
-}
-
-Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
-Converted["_HealthAndEnergy"].Parent = game:GetService("CoreGui")
-
-Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-Converted["_Frame"].BorderSizePixel = 0
-Converted["_Frame"].Position = UDim2.new(0.316506416, 0, 0.00999999978, 0)
-Converted["_Frame"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
-Converted["_Frame"].Parent = Converted["_HealthAndEnergy"]
-
-Converted["_UICorner"].CornerRadius = UDim.new(1, 0)
-Converted["_UICorner"].Parent = Converted["_Frame"]
-Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
-Converted["_UIStroke"].Thickness = 4
-Converted["_UIStroke"].Parent = Converted["_Frame"]
-
-Converted["_UIGradient"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-}
-Converted["_UIGradient"].Parent = Converted["_UIStroke"]
-
-Converted["_TextLabel"].Font = Enum.Font.FredokaOne
-Converted["_TextLabel"].Text = "HEALTH:"
-Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_TextLabel"].TextScaled = true
-Converted["_TextLabel"].BackgroundTransparency = 1
-Converted["_TextLabel"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
-Converted["_TextLabel"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
-Converted["_TextLabel"].Parent = Converted["_Frame"]
-Converted["_UIStroke1"].Parent = Converted["_TextLabel"]
-
-Converted["_UIGradient1"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 255, 0)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 76, 0))
-}
-Converted["_UIGradient1"].Offset = Vector2.new(0.1, 0.1)
-Converted["_UIGradient1"].Rotation = 90
-Converted["_UIGradient1"].Parent = Converted["_Frame"]
-
-Converted["_health"].Font = Enum.Font.FredokaOne
-Converted["_health"].Text = "nil"
-Converted["_health"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_health"].TextScaled = true
-Converted["_health"].BackgroundTransparency = 1
-Converted["_health"].Position = UDim2.new(0.234679773, 0, -0.0192308649, 0)
-Converted["_health"].Size = UDim2.new(0.303816825, 0, 1.00000012, 0)
-Converted["_health"].Parent = Converted["_Frame"]
-Converted["_UIStroke2"].Parent = Converted["_health"]
-
-Converted["_/"].Font = Enum.Font.FredokaOne
-Converted["_/"].Text = "/"
-Converted["_/"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_/"].TextScaled = true
-Converted["_/"].BackgroundTransparency = 1
-Converted["_/"].Position = UDim2.new(0.481177628, 0, -0, 0)
-Converted["_/"].Size = UDim2.new(0.188958243, 0, 1, 0)
-Converted["_/"].Parent = Converted["_Frame"]
-Converted["_UIStroke3"].Parent = Converted["_/"]
-
-Converted["_maxhealth"].Font = Enum.Font.FredokaOne
-Converted["_maxhealth"].Text = "nil"
-Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_maxhealth"].TextScaled = true
-Converted["_maxhealth"].BackgroundTransparency = 1
-Converted["_maxhealth"].Position = UDim2.new(0.612817109, 0, -0, 0)
-Converted["_maxhealth"].Size = UDim2.new(0.387182951, 0, 1, 0)
-Converted["_maxhealth"].Parent = Converted["_Frame"]
-Converted["_UIStroke4"].Parent = Converted["_maxhealth"]
-
-Converted["_freim"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_freim"].Position = UDim2.new(0.316506416, 0, 0.075, 0)
-Converted["_freim"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
-Converted["_freim"].Parent = Converted["_HealthAndEnergy"]
-
-Converted["_UICorner1"].CornerRadius = UDim.new(1, 0)
-Converted["_UICorner1"].Parent = Converted["_freim"]
-Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
-Converted["_UIStroke5"].Thickness = 4
-Converted["_UIStroke5"].Parent = Converted["_freim"]
-
-Converted["_Uigraddd"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-}
-Converted["_Uigraddd"].Parent = Converted["_UIStroke5"]
-
-Converted["_TextLabel1"].Font = Enum.Font.FredokaOne
-Converted["_TextLabel1"].Text = "ENERGY:"
-Converted["_TextLabel1"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_TextLabel1"].TextScaled = true
-Converted["_TextLabel1"].BackgroundTransparency = 1
-Converted["_TextLabel1"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
-Converted["_TextLabel1"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
-Converted["_TextLabel1"].Parent = Converted["_freim"]
-Converted["_UIStroke6"].Parent = Converted["_TextLabel1"]
-
-Converted["_Uigrad"].Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 221, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 67, 57))
-}
-Converted["_Uigrad"].Offset = Vector2.new(0.1, 0.1)
-Converted["_Uigrad"].Rotation = 90
-Converted["_Uigrad"].Parent = Converted["_freim"]
-
-Converted["_energy"].Font = Enum.Font.FredokaOne
-Converted["_energy"].Text = "nil"
-Converted["_energy"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_energy"].TextScaled = true
-Converted["_energy"].BackgroundTransparency = 1
-Converted["_energy"].Position = UDim2.new(0.234679773, 0, -0.0192310419, 0)
-Converted["_energy"].Size = UDim2.new(0.303816825, 0, 1.00000036, 0)
-Converted["_energy"].Parent = Converted["_freim"]
-Converted["_UIStroke7"].Parent = Converted["_energy"]
-
-Converted["_/1"].Font = Enum.Font.FredokaOne
-Converted["_/1"].Text = "/"
-Converted["_/1"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_/1"].TextScaled = true
-Converted["_/1"].BackgroundTransparency = 1
-Converted["_/1"].Position = UDim2.new(0.481177628, 0, -0, 0)
-Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1, 0)
-Converted["_/1"].Parent = Converted["_freim"]
-Converted["_UIStroke8"].Parent = Converted["_/1"]
-
-Converted["_maxenergy"].Font = Enum.Font.FredokaOne
-Converted["_maxenergy"].Text = "nil"
-Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
-Converted["_maxenergy"].TextScaled = true
-Converted["_maxenergy"].BackgroundTransparency = 1
-Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
-Converted["_maxenergy"].Size = UDim2.new(0.387182951, 0, 1, 0)
-Converted["_maxenergy"].Parent = Converted["_freim"]
-Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
-
-task.spawn(function()
-    RunService.RenderStepped:Connect(function()
-        local playerGui = localPlayer:FindFirstChild("PlayerGui")
-        if playerGui then
-            local mainGui = playerGui:FindFirstChild("Main")
-            if mainGui then
-                local mainFrame = mainGui:FindFirstChild("MainFrame")
-                if mainFrame then
-                    local bars = mainFrame:FindFirstChild("Bars")
-                    if bars then bars.Visible = false end
-                end
-            end
-        end
-    end)
-end)
-
-local function formatNumber(number)
-	if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
-	elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
-	elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
-	elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
-	elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
-	else return tostring(number) end
-end
-
-local function setupCharacter(character)
-    local humanoid = character:WaitForChild("Humanoid", 5)
-    if humanoid then
-        Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
-        Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
-        
-        humanoid.HealthChanged:Connect(function(health)
-            Converted["_health"].Text = formatNumber(math.floor(health))
-            Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
-        end)
-    end
-
-    task.spawn(function()
-        local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
-        if wsChar then
-            local statsFolder = wsChar:WaitForChild("Stats", 5)
-            if statsFolder then
-                local ki = statsFolder:WaitForChild("Ki", 5)
-                if ki then
-                    Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-                    Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
-                    
-                    ki.Changed:Connect(function()
-                        Converted["_energy"].Text = formatNumber(math.floor(ki.Value))
-                        Converted["_maxenergy"].Text = formatNumber(math.floor(ki.MaxValue))
-                    end)
-                end
-            end
-        end
-    end)
-end
-
-localPlayer.CharacterAdded:Connect(setupCharacter)
-if localPlayer.Character then setupCharacter(localPlayer.Character) end
-
-RunService.RenderStepped:Connect(function()
-	Converted["_UIGradient1"].Rotation += 2
-	Converted["_UIGradient"].Rotation += 2
-	Converted["_Uigrad"].Rotation += 2
-	Converted["_Uigraddd"].Rotation += 2
-end)
-
--- ==============================================================================
--- GUI MENU STATISTICHE LATERALI
--- ==============================================================================
-local function createGUI()
-	local ConvertedStats = {
-		["_AUTOFARM"] = Instance.new("ScreenGui");
-		["_Frame"] = Instance.new("Frame");
-		["_UICorner"] = Instance.new("UICorner");
-		["_UIStroke"] = Instance.new("UIStroke");
-		["_UIGradient"] = Instance.new("UIGradient");
-		["_UIGradient1"] = Instance.new("UIGradient");
-		["_ImageLabel"] = Instance.new("ImageLabel");
-		["_UICorner1"] = Instance.new("UICorner");
-		["_TextLabel"] = Instance.new("TextLabel");
-		["_UIStroke1"] = Instance.new("UIStroke");
-		["_Fortnait"] = Instance.new("ImageLabel");
-		["_Stren"] = Instance.new("TextLabel");
-		["_UIStroke2"] = Instance.new("UIStroke");
-		["_STRENGTHNUMBER"] = Instance.new("TextLabel");
-		["_UIStroke3"] = Instance.new("UIStroke");
-		["_Sped"] = Instance.new("TextLabel");
-		["_UIStroke4"] = Instance.new("UIStroke");
-		["_SPEEDNUMBER"] = Instance.new("TextLabel");
-		["_UIStroke5"] = Instance.new("UIStroke");
-		["_DEF"] = Instance.new("TextLabel");
-		["_UIStroke6"] = Instance.new("UIStroke");
-		["_DEFENSENUMBER"] = Instance.new("TextLabel");
-		["_UIStroke7"] = Instance.new("UIStroke");
-		["_ENERGY"] = Instance.new("TextLabel");
-		["_UIStroke8"] = Instance.new("UIStroke");
-		["_ENERGYNUMBER"] = Instance.new("TextLabel");
-		["_UIStroke9"] = Instance.new("UIStroke");
-		["_sup"] = Instance.new("ImageLabel");
-		["_UICorner2"] = Instance.new("UICorner");
-		["_DEF1"] = Instance.new("TextLabel");
-		["_UIStroke10"] = Instance.new("UIStroke");
-		["_REBS"] = Instance.new("TextLabel");
-		["_UIStroke11"] = Instance.new("UIStroke");
-		["_REBSNUMBER"] = Instance.new("TextLabel");
-		["_UIStroke12"] = Instance.new("UIStroke");
-	}
-
-	ConvertedStats["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-	ConvertedStats["_AUTOFARM"].Name = "AUTOFARM"
-	ConvertedStats["_AUTOFARM"].Parent = game:GetService("CoreGui")
-
-	ConvertedStats["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
-	ConvertedStats["_Frame"].BorderSizePixel = 0
-	ConvertedStats["_Frame"].Position = UDim2.new(0.0210622549, 0, 0.260050237, 0)
-	ConvertedStats["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
-	ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
-
-	ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
-	ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_UIStroke"].Thickness = 4
-	ConvertedStats["_UIStroke"].Parent = ConvertedStats["_Frame"]
-
-	ConvertedStats["_UIGradient"].Color = ColorSequence.new{
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
-	}
-	ConvertedStats["_UIGradient"].Parent = ConvertedStats["_UIStroke"]
-
-	ConvertedStats["_UIGradient1"].Color = ColorSequence.new{
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 153, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 247))
-	}
-	ConvertedStats["_UIGradient1"].Parent = ConvertedStats["_Frame"]
-
-	ConvertedStats["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(0, 123, 255)
-	ConvertedStats["_ImageLabel"].Position = UDim2.new(0.0438596494, 0, 0.020833334, 0)
-	ConvertedStats["_ImageLabel"].Size = UDim2.new(0.912280679, 0, 0.125628158, 0)
-	ConvertedStats["_ImageLabel"].Parent = ConvertedStats["_Frame"]
-
-	ConvertedStats["_UICorner1"].Parent = ConvertedStats["_ImageLabel"]
-
-	ConvertedStats["_TextLabel"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_TextLabel"].Text = "By Ciab"
-	ConvertedStats["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_TextLabel"].TextScaled = true
-	ConvertedStats["_TextLabel"].BackgroundTransparency = 1
-	ConvertedStats["_TextLabel"].Position = UDim2.new(1.46719131e-07, 0, 0.118450202, 0)
-	ConvertedStats["_TextLabel"].Size = UDim2.new(0.999999881, 0, 0.749835074, 0)
-	ConvertedStats["_TextLabel"].Parent = ConvertedStats["_ImageLabel"]
-	ConvertedStats["_UIStroke1"].Parent = ConvertedStats["_TextLabel"]
-
-	ConvertedStats["_Fortnait"].Image = "rbxassetid://17207994014"
-	ConvertedStats["_Fortnait"].Position = UDim2.new(0.0438596494, 0, 0.196428567, 0)
-	ConvertedStats["_Fortnait"].Size = UDim2.new(0.912280679, 0, 0.774437666, 0)
-	ConvertedStats["_Fortnait"].BackgroundTransparency = 1
-	ConvertedStats["_Fortnait"].Parent = ConvertedStats["_Frame"]
-
-	ConvertedStats["_Stren"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_Stren"].Text = "STRENGTH:"
-	ConvertedStats["_Stren"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_Stren"].TextScaled = true
-	ConvertedStats["_Stren"].BackgroundTransparency = 1
-	ConvertedStats["_Stren"].Position = UDim2.new(0.0257487558, 0, 0.0420393385, 0)
-	ConvertedStats["_Stren"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	ConvertedStats["_Stren"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UIStroke2"].Parent = ConvertedStats["_Stren"]
-
-	ConvertedStats["_STRENGTHNUMBER"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_STRENGTHNUMBER"].Text = "nil"
-	ConvertedStats["_STRENGTHNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_STRENGTHNUMBER"].TextScaled = true
-	ConvertedStats["_STRENGTHNUMBER"].BackgroundTransparency = 1
-	ConvertedStats["_STRENGTHNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	ConvertedStats["_STRENGTHNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	ConvertedStats["_STRENGTHNUMBER"].Parent = ConvertedStats["_Stren"]
-	ConvertedStats["_UIStroke3"].Parent = ConvertedStats["_STRENGTHNUMBER"]
-
-	ConvertedStats["_Sped"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_Sped"].Text = "SPEED:"
-	ConvertedStats["_Sped"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_Sped"].TextScaled = true
-	ConvertedStats["_Sped"].BackgroundTransparency = 1
-	ConvertedStats["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
-	ConvertedStats["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	ConvertedStats["_Sped"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UIStroke4"].Parent = ConvertedStats["_Sped"]
-
-	ConvertedStats["_SPEEDNUMBER"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_SPEEDNUMBER"].Text = "nil"
-	ConvertedStats["_SPEEDNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_SPEEDNUMBER"].TextScaled = true
-	ConvertedStats["_SPEEDNUMBER"].BackgroundTransparency = 1
-	ConvertedStats["_SPEEDNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	ConvertedStats["_SPEEDNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	ConvertedStats["_SPEEDNUMBER"].Parent = ConvertedStats["_Sped"]
-	ConvertedStats["_UIStroke5"].Parent = ConvertedStats["_SPEEDNUMBER"]
-
-	ConvertedStats["_DEF"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_DEF"].Text = "DEFENSE:"
-	ConvertedStats["_DEF"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_DEF"].TextScaled = true
-	ConvertedStats["_DEF"].BackgroundTransparency = 1
-	ConvertedStats["_DEF"].Position = UDim2.new(0.0257487558, 0, 0.38976115, 0)
-	ConvertedStats["_DEF"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	ConvertedStats["_DEF"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UIStroke6"].Parent = ConvertedStats["_DEF"]
-
-	ConvertedStats["_DEFENSENUMBER"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_DEFENSENUMBER"].Text = "nil"
-	ConvertedStats["_DEFENSENUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_DEFENSENUMBER"].TextScaled = true
-	ConvertedStats["_DEFENSENUMBER"].BackgroundTransparency = 1
-	ConvertedStats["_DEFENSENUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	ConvertedStats["_DEFENSENUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	ConvertedStats["_DEFENSENUMBER"].Parent = ConvertedStats["_DEF"]
-	ConvertedStats["_UIStroke7"].Parent = ConvertedStats["_DEFENSENUMBER"]
-
-	ConvertedStats["_ENERGY"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_ENERGY"].Text = "ENERGY:"
-	ConvertedStats["_ENERGY"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_ENERGY"].TextScaled = true
-	ConvertedStats["_ENERGY"].BackgroundTransparency = 1
-	ConvertedStats["_ENERGY"].Position = UDim2.new(0.0257487558, 0, 0.552013576, 0)
-	ConvertedStats["_ENERGY"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	ConvertedStats["_ENERGY"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UIStroke8"].Parent = ConvertedStats["_ENERGY"]
-
-	ConvertedStats["_ENERGYNUMBER"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_ENERGYNUMBER"].Text = "nil"
-	ConvertedStats["_ENERGYNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_ENERGYNUMBER"].TextScaled = true
-	ConvertedStats["_ENERGYNUMBER"].BackgroundTransparency = 1
-	ConvertedStats["_ENERGYNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	ConvertedStats["_ENERGYNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	ConvertedStats["_ENERGYNUMBER"].Parent = ConvertedStats["_ENERGY"]
-	ConvertedStats["_UIStroke9"].Parent = ConvertedStats["_ENERGYNUMBER"]
-
-	ConvertedStats["_sup"].BackgroundColor3 = Color3.fromRGB(0, 255, 204)
-	ConvertedStats["_sup"].Position = UDim2.new(-0.0260067098, 0, 0.872107267, 0)
-	ConvertedStats["_sup"].Size = UDim2.new(1.05175519, 0, 0.127892867, 0)
-	ConvertedStats["_sup"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UICorner2"].Parent = ConvertedStats["_sup"]
-
-	ConvertedStats["_DEF1"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_DEF1"].Text = "sup " .. localPlayer.DisplayName
-	ConvertedStats["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_DEF1"].TextScaled = true
-	ConvertedStats["_DEF1"].BackgroundTransparency = 1
-	ConvertedStats["_DEF1"].Position = UDim2.new(0, 0, 0.105724856, 0)
-	ConvertedStats["_DEF1"].Size = UDim2.new(1, 0, 0.742611945, 0)
-	ConvertedStats["_DEF1"].Parent = ConvertedStats["_sup"]
-	ConvertedStats["_UIStroke10"].Parent = ConvertedStats["_DEF1"]
-
-	ConvertedStats["_REBS"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_REBS"].Text = "REBIRTHS"
-	ConvertedStats["_REBS"].TextColor3 = Color3.fromRGB(255, 234, 0)
-	ConvertedStats["_REBS"].TextScaled = true
-	ConvertedStats["_REBS"].BackgroundTransparency = 1
-	ConvertedStats["_REBS"].Position = UDim2.new(0.0257487558, 0, 0.706855357, 0)
-	ConvertedStats["_REBS"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
-	ConvertedStats["_REBS"].Parent = ConvertedStats["_Fortnait"]
-	ConvertedStats["_UIStroke11"].Parent = ConvertedStats["_REBS"]
-
-	ConvertedStats["_REBSNUMBER"].Font = Enum.Font.FredokaOne
-	ConvertedStats["_REBSNUMBER"].Text = "nil"
-	ConvertedStats["_REBSNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
-	ConvertedStats["_REBSNUMBER"].TextScaled = true
-	ConvertedStats["_REBSNUMBER"].BackgroundTransparency = 1
-	ConvertedStats["_REBSNUMBER"].Position = UDim2.new(1, 0, 0, 0)
-	ConvertedStats["_REBSNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
-	ConvertedStats["_REBSNUMBER"].Parent = ConvertedStats["_REBS"]
-	ConvertedStats["_UIStroke12"].Parent = ConvertedStats["_REBSNUMBER"]
-
-	local playerid = localPlayer.UserId
-	local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(playerid))
-
-	local function formatNumberForTheStats(number)
-		if number >= 1_000_000_000_000_000 then return string.format("%.2fQd", number / 1_000_000_000_000_000) 
-		elseif number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000) 
-		elseif number >= 1_000_000_000 then return string.format("%.2fB", number / 1_000_000_000)
-		elseif number >= 1_000_000 then return string.format("%.2fM", number / 1_000_000)
-		elseif number >= 1_000 then return string.format("%.2fK", number / 1_000)
-		else return tostring(number) end
-	end
-
-	task.spawn(function()
-		while true do
-			if playerStats then
-				ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
-				ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
-				ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
-				ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
-				ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
-			end
-			task.wait(0.5)
-		end
-	end)
-
-	RunService.RenderStepped:Connect(function()
-        if ConvertedStats["_UIGradient"].Parent then
-		    ConvertedStats["_UIGradient"].Rotation += 2
-		    ConvertedStats["_UIGradient1"].Rotation += 2
-        end
-	end)
-end
-
-if game:GetService("CoreGui"):FindFirstChild("AUTOFARM") then
-	game:GetService("CoreGui").AUTOFARM:Destroy()
-end
-createGUI()
-
--- ==============================================================================
--- ANTIAFK, GODMODE & UNIVERSAL COMBAT FEATURES
+-- ANTIAFK, FLOAT & AUTO CHARGE (SENZA PARATA)
 -- ==============================================================================
 local function ANTIAFK()
 	local vu = game:GetService("VirtualUser")
@@ -848,23 +339,16 @@ end
 localPlayer.CharacterAdded:Connect(ApplyFloat)
 if localPlayer.Character then ApplyFloat(localPlayer.Character) end
 
+-- AUTO RICARICA CONTINUA (Senza Auto Block)
 task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
-    local blockEvent = Events:WaitForChild("block")
     local chaEvent = Events:WaitForChild("cha")
     
     while true do
         pcall(function()
-            task.spawn(function() blockEvent:InvokeServer(true) end)
             task.spawn(function() chaEvent:InvokeServer("Blacknwhite27") end)
         end)
         task.wait(0.15)
-    end
-end)
-
-task.spawn(function()
-    while true and task.wait() do
-        pcall(function() localPlayer.Status.Blocking.Value = true end)
     end
 end)
 
@@ -872,7 +356,6 @@ end)
 -- AUTO DIMENSION RAY (SPARA SOLO QUANDO SEI DAL BOSS)
 -- ==============================================================================
 task.spawn(function()
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
     local Events = ReplicatedStorage:WaitForChild("Package", 10):WaitForChild("Events", 10)
     local equipSkillEvent = Events:WaitForChild("equipskill", 10)
     
@@ -881,15 +364,13 @@ task.spawn(function()
             local char = localPlayer.Character
             if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 and char:FindFirstChild("HumanoidRootPart") then
                 
-                -- 1. Controlla se stiamo effettivamente combattendo un boss
                 local isFighting = false
                 for bossName, isTargeted in pairs(getgenv().BossTargets) do
                     if isTargeted then
                         local boss = workspace.Living:FindFirstChild(bossName)
-                        -- Se il boss esiste, è vivo, ed è vicino a noi (siamo teletrasportati da lui)
                         if boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
                             local distance = (boss.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
-                            if distance < 30 then -- Il teleport ti mette a 3 stud, 30 è un margine sicuro
+                            if distance < 30 then 
                                 isFighting = true
                                 break
                             end
@@ -897,26 +378,22 @@ task.spawn(function()
                     end
                 end
 
-                -- 2. Se siamo in combattimento ravvicinato con il boss, spara!
                 if isFighting then
-                    -- Equippa in background per non causare lag
                     task.spawn(function()
                         equipSkillEvent:InvokeServer("Dimension Ray")
                     end)
                     
                     local dsliceFolder = ReplicatedStorage:FindFirstChild("DimensionSlicer")
                     if dsliceFolder and dsliceFolder:FindFirstChild("dslice") then
-                        -- Inizia l'attacco
                         dsliceFolder.dslice:FireServer(true)
                         task.wait(4) 
-                        -- Rilascia l'attacco
                         dsliceFolder.dslice:FireServer(false)
                     end
                 end
 
             end
         end)
-        task.wait(0.25) -- Tempo di attesa tra un colpo e l'altro (abbassa a 0.1 se lo vuoi istantaneo)
+        task.wait(0.25)
     end
 end)
 
@@ -1001,14 +478,14 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE - CON O SENZA QUEST)
+-- SISTEMA DI COMBATTIMENTO AVANZATO (PUNZI + SKILLS)
 -- ==============================================================================
 local BossConfig = {
 	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -3},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -3},
 	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -3},
 	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -3},
-    ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
+	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -3},
 	["Vekuta (SSJBUI)"] = {QuestNPC = "Vekuta (SSJBUI)", BossName = "Vekuta (SSJBUI)", Distance = -3},
 	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -3}
 }
@@ -1047,12 +524,23 @@ local function TeleportAndFight(bossData)
 			hrp.CFrame = CFrame.new(behindPosition, bossHRP.Position)
 		end)
 
+        -- INIZIO DELLE SKILLS E DEI PUGNI (Presi dal secondo script)
 		pcall(function()
             local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+            local letsplayagame = Events:WaitForChild("FaFa")
+            
+            -- Basic Punches
             Events.p:FireServer("Blacknwhite27", 1)
+            
+            -- Spam Skills
+            coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Timeskip Domain", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
 		end)
 
-		task.wait() 
+		task.wait(0.1) 
 	end
 
 	pcall(function()
@@ -1092,36 +580,29 @@ local function CheckAndFightBoss(bossName)
     local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     if not playerData or not hrp then return end
 
-    -- Controlla se il boss richiede una quest (QuestNPC non è nil)
     if bossData.QuestNPC then
         local questVal = playerData:WaitForChild("Quest")
         local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
         
-        -- Se l'NPC esiste, continua a teleportarsi dietro di lui finché non prende la quest
         if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
             while questVal.Value ~= bossData.BossName do
-                -- Controlli di sicurezza per fermare il loop se disabiliti il boss o muori
                 if not getgenv().BossTargets[bossName] then return end
                 if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
 
-                -- Teletrasporto continuo dietro l'NPC della quest
                 localPlayer.Character.HumanoidRootPart.CFrame = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
                 
-                -- Forza la richiesta della quest
                 pcall(function() 
                     ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc) 
                 end)
                 
-                task.wait(0.2) -- Attende un istante breve e riprova se non ha ancora la quest
+                task.wait(0.2) 
             end
         end
 
-        -- Va dal boss SOLO E UNICAMENTE se la quest è stata presa con successo
         if questVal.Value == bossData.BossName then
             WaitForBossToSpawn(bossData, 5) 
         end
     else
-        -- IL BOSS NON HA UNA QUEST: Vai dritto a combattere senza cercare l'NPC
         WaitForBossToSpawn(bossData, 5)
     end
 end
