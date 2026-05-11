@@ -985,52 +985,55 @@ end
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
 -- ==============================================================================
 local BossConfig = {
-	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
+	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong", Distance = -5},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
-	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},
-	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},
-	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
+	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister", Distance = -5},
+	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata", Distance = -5},["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta", Distance = -5},
 	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
-	["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable (GoD in-training)", Distance = -5},
+	["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable", Distance = -5},
 	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
 }
 
-local function TeleportAndFight(bossData)
-    local camera = workspace.CurrentCamera
-	local function getValidBoss()
-        local character = localPlayer.Character
-		if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
+-- Messa qui fuori, così sia l'attesa che il combattimento usano la ricerca intelligente!
+local function getValidBoss(bossData)
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
 
-        for _, obj in pairs(workspace.Living:GetChildren()) do
-            if obj.Name and string.find(obj.Name, bossData.BossName, 1, true) then
-                local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
-                local bossHRP = obj:FindFirstChild("HumanoidRootPart")
+    for _, obj in pairs(workspace.Living:GetChildren()) do
+        if obj.Name and string.find(obj.Name, bossData.BossName, 1, true) then
+            local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+            local bossHRP = obj:FindFirstChild("HumanoidRootPart")
 
-                if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
-                    return obj -- Restituisce il primo boss trovato che corrisponde al nome e che ha vita
-                end
+            if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+                return obj 
             end
         end
-		return nil
-	end
+    end
+    return nil
+end
 
-	while true do
-        if not getgenv().BossTargets[bossData.BossName] then break end
-		local currentBoss = getValidBoss()
-		if not currentBoss then break end
+local function TeleportAndFight(bossData, toggleName)
+    local camera = workspace.CurrentCamera
 
-		local bossHRP = currentBoss.HumanoidRootPart 
+    while true do
+        -- Adesso controlla il pulsante CORRETTO ("X Fighter Trainer")
+        if not getgenv().BossTargets[toggleName] then break end
+        
+        local currentBoss = getValidBoss(bossData)
+        if not currentBoss then break end
+
+        local bossHRP = currentBoss.HumanoidRootPart 
         local character = localPlayer.Character
         local hrp = character:FindFirstChild("HumanoidRootPart")
 
-		pcall(function()
-			camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
-			local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
-			local behindPosition = bossHRP.Position + behindOffset
-			hrp.CFrame = CFrame.new(behindPosition, bossHRP.Position)
-		end)
+        pcall(function()
+            camera.CFrame = CFrame.new(camera.CFrame.Position, bossHRP.Position)
+            local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
+            local behindPosition = bossHRP.Position + behindOffset
+            hrp.CFrame = CFrame.new(behindPosition, bossHRP.Position)
+        end)
 
-		pcall(function()
+        pcall(function()
             local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
             local letsplayagame = Events:WaitForChild("FaFa")
 
@@ -1040,42 +1043,44 @@ local function TeleportAndFight(bossData)
             coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
             coroutine.wrap(function() letsplayagame:InvokeServer("God Slicer", "Blacknwhite27") end)()
             coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
-		end)
+        end)
 
-		task.wait(0.1) 
-	end
+        task.wait(0.1) 
+    end
 
-	pcall(function()
-		camera.CameraType = Enum.CameraType.Custom
-		camera.CameraSubject = localPlayer.Character.Humanoid
-	end)
+    pcall(function()
+        camera.CameraType = Enum.CameraType.Custom
+        camera.CameraSubject = localPlayer.Character.Humanoid
+    end)
 end
 
-local function WaitForBossToSpawn(bossData, timeLimit)
-	local startTime = os.time()
-	local bossReady = false
+local function WaitForBossToSpawn(bossData, timeLimit, toggleName)
+    local startTime = os.time()
+    local bossReady = false
  
-	repeat
+    repeat
         local char = localPlayer.Character
         if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-        if not getgenv().BossTargets[bossData.BossName] then return end 
+        
+        -- Controllo del pulsante aggiornato!
+        if not getgenv().BossTargets[toggleName] then return end 
 
-		task.wait(0.2) 
-		local boss = workspace.Living:FindFirstChild(bossData.BossName)
-		bossReady = boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0
-	until bossReady or os.time() - startTime > timeLimit 
+        task.wait(0.2) 
+        -- Ora usa la funzione intelligente anche per controllare se è spawnato!
+        local currentBoss = getValidBoss(bossData)
+        bossReady = (currentBoss ~= nil)
+    until bossReady or os.time() - startTime > timeLimit 
  
-	if bossReady then
+    if bossReady then
         task.wait(0.2)
-		TeleportAndFight(bossData)
-	end
+        TeleportAndFight(bossData, toggleName)
+    end
 end
 
 local function CheckAndFightBoss(bossName)
     local bossData = BossConfig[bossName]
     if not bossData then return end
     
-    -- PRIMA COSA: Mettiti in pausa e aspetta la trasformazione
     WaitForTransformation()
     
     local character = localPlayer.Character
@@ -1088,12 +1093,9 @@ local function CheckAndFightBoss(bossName)
     if bossData.QuestNPC then
         local questVal = playerData:WaitForChild("Quest")
         local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
-        
-        -- Risolve il problema dello spam! La quest di solito ha lo stesso nome dell'NPC.
         local expectedQuestName = bossData.QuestNPC
         
         if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-            -- Adesso controlla se ha preso la quest chiamata "X Fighter Trainer" (o "X Fighter")
             while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
                 if not getgenv().BossTargets[bossName] then return end
                 if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
@@ -1108,12 +1110,12 @@ local function CheckAndFightBoss(bossName)
             end
         end
 
-        -- Se ha la quest giusta, inizia a combattere
         if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
-            WaitForBossToSpawn(bossData, 5) 
+            -- Passiamo il bossName originale ("X Fighter Trainer") per mantenere i controlli attivi
+            WaitForBossToSpawn(bossData, 5, bossName) 
         end
     else
-        WaitForBossToSpawn(bossData, 5)
+        WaitForBossToSpawn(bossData, 5, bossName)
     end
 end
 
