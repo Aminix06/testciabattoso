@@ -1089,8 +1089,12 @@ local function CheckAndFightBoss(bossName)
         local questVal = playerData:WaitForChild("Quest")
         local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
         
+        -- Risolve il problema dello spam! La quest di solito ha lo stesso nome dell'NPC.
+        local expectedQuestName = bossData.QuestNPC
+        
         if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-            while questVal.Value ~= bossData.BossName do
+            -- Adesso controlla se ha preso la quest chiamata "X Fighter Trainer" (o "X Fighter")
+            while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
                 if not getgenv().BossTargets[bossName] then return end
                 if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
 
@@ -1104,7 +1108,8 @@ local function CheckAndFightBoss(bossName)
             end
         end
 
-        if questVal.Value == bossData.BossName then
+        -- Se ha la quest giusta, inizia a combattere
+        if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
             WaitForBossToSpawn(bossData, 5) 
         end
     else
