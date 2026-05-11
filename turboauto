@@ -992,7 +992,7 @@ local BossConfig = {
 	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
 	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
 	["Vegetable God in Training"] = {QuestNPC = "Vegetable God in Training", BossName = "Vegetable God in Training", Distance = -5},
-	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter Trainer", Distance = -5}
+	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
 }
 
 local function TeleportAndFight(bossData)
