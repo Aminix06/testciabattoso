@@ -985,22 +985,24 @@ end
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
 -- ==============================================================================
 local BossConfig = {
-	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong", Distance = -5},
+	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
-	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister", Distance = -5},
-	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata", Distance = -5},["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta", Distance = -5},
+	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},
+	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},
+	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
 	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
-	["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable", Distance = -5},
+	["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable (GoD in-training)", Distance = -5},
 	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
 }
 
--- Messa qui fuori, così sia l'attesa che il combattimento usano la ricerca intelligente!
+-- 1. CERCA SOLO IL NOME ESATTO AL 100%
 local function getValidBoss(bossData)
     local character = localPlayer.Character
     if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
 
     for _, obj in pairs(workspace.Living:GetChildren()) do
-        if obj.Name and string.find(obj.Name, bossData.BossName, 1, true) then
+        -- Adesso cerca SOLO chi si chiama in modo identico (es. "X Fighter" esatto, senza lettere o numeri extra)
+        if obj.Name == bossData.BossName then
             local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
             local bossHRP = obj:FindFirstChild("HumanoidRootPart")
 
@@ -1014,13 +1016,22 @@ end
 
 local function TeleportAndFight(bossData, toggleName)
     local camera = workspace.CurrentCamera
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    local questVal = playerData and playerData:FindFirstChild("Quest")
 
     while true do
-        -- Adesso controlla il pulsante CORRETTO ("X Fighter Trainer")
         if not getgenv().BossTargets[toggleName] then break end
         
+        -- FIX IMPORTANTE: Se è un boss da quest, e hai completato la quest, FERMATI SUBITO!
+        if bossData.QuestNPC and questVal then
+            if questVal.Value ~= bossData.QuestNPC and questVal.Value ~= bossData.BossName then
+                -- Esci dal combattimento per tornare a prendere la quest
+                break 
+            end
+        end
+
         local currentBoss = getValidBoss(bossData)
-        if not currentBoss then break end
+        if not currentBoss then break end -- Se non ci sono boss vivi, esci
 
         local bossHRP = currentBoss.HumanoidRootPart 
         local character = localPlayer.Character
@@ -1061,12 +1072,9 @@ local function WaitForBossToSpawn(bossData, timeLimit, toggleName)
     repeat
         local char = localPlayer.Character
         if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
-        
-        -- Controllo del pulsante aggiornato!
         if not getgenv().BossTargets[toggleName] then return end 
 
         task.wait(0.2) 
-        -- Ora usa la funzione intelligente anche per controllare se è spawnato!
         local currentBoss = getValidBoss(bossData)
         bossReady = (currentBoss ~= nil)
     until bossReady or os.time() - startTime > timeLimit 
@@ -1095,6 +1103,7 @@ local function CheckAndFightBoss(bossName)
         local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
         local expectedQuestName = bossData.QuestNPC
         
+        -- PRENDE LA QUEST SOLO SE NON CE L'HA
         if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
             while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
                 if not getgenv().BossTargets[bossName] then return end
@@ -1110,8 +1119,8 @@ local function CheckAndFightBoss(bossName)
             end
         end
 
+        -- SE HA PRESO LA QUEST (o se l'aveva già), VA A COMBATTERE
         if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
-            -- Passiamo il bossName originale ("X Fighter Trainer") per mantenere i controlli attivi
             WaitForBossToSpawn(bossData, 5, bossName) 
         end
     else
