@@ -18,8 +18,15 @@ local TeleportService = game:GetService("TeleportService")
 -- ==============================================================================
 local ConfigName = "CiabTurboConfig.json"
 
-local DefaultBosses = {["Wukong (TUI)"] = true,["Ultra Super Villain Vegetable"] = true,["Grand Minister (1% power)"] = true,["Kakata (Ego Instinct)"] = true,["Goheta (Base - SSJB)"] = true,
-	["Vekuta (SSJBUI)"] = true,["Universal Vegito"] = true
+local DefaultBosses = {
+	["Wukong (TUI)"] = true,
+	["Ultra Super Villain Vegetable"] = true,
+	["Grand Minister (1% power)"] = true,
+	["Kakata (Ego Instinct)"] = true,
+	["Goheta (Base - SSJB)"] = true,
+	["Universal Vegito"] = true,
+	["Vegetable God in Training"] = true,
+	["X Fighter Trainer"] = true
 }
 
 if isfile and isfile(ConfigName) then
@@ -128,7 +135,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Vekuta (SSJBUI)", "Universal Vegito"}
+    local bossNamesList = {"Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Universal Vegito", Vegetable God in Training, X Fighter Trainer}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -977,7 +984,15 @@ end
 -- ==============================================================================
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
 -- ==============================================================================
-local BossConfig = {["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},["Vekuta (SSJBUI)"] = {QuestNPC = "Vekuta (SSJBUI)", BossName = "Vekuta (SSJBUI)", Distance = -5},["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5}
+local BossConfig = {
+	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
+	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
+	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},
+	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},
+	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
+	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
+	["Vegetable God in Training"] = {QuestNPC = "Vegetable God in Training", BossName = "Vegetable God in Training", Distance = -5},
+	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter Trainer", Distance = -5}
 }
 
 local function TeleportAndFight(bossData)
