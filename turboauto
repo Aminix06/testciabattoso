@@ -1001,15 +1001,16 @@ local function TeleportAndFight(bossData)
         local character = localPlayer.Character
 		if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
 
-		local bossModel = workspace.Living:FindFirstChild(bossData.BossName)
-		if not (bossModel and bossModel.Parent) then return nil end
+        for _, obj in pairs(workspace.Living:GetChildren()) do
+            if obj.Name and string.find(obj.Name, bossData.BossName, 1, true) then
+                local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+                local bossHRP = obj:FindFirstChild("HumanoidRootPart")
 
-		local bossHumanoid = bossModel:FindFirstChildOfClass("Humanoid")
-		local bossHRP = bossModel:FindFirstChild("HumanoidRootPart")
-
-		if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
-			return bossModel 
-		end
+                if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+                    return obj -- Restituisce il primo boss trovato che corrisponde al nome e che ha vita
+                end
+            end
+        end
 		return nil
 	end
 
