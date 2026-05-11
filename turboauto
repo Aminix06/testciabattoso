@@ -866,9 +866,8 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- AUTO TRANSFORMATION LOGIC
+-- AUTO TRANSFORMATION LOGIC (SMART CHECK - SALTA GAMEPASS/ALLINEAMENTI NON POSSEDUTI)
 -- ==============================================================================
--- Tabella dichiarata globale/esterna così può essere letta da più funzioni
 local transformaciones = {
     {name = "Ultra Super Villain", forza = 4000000000000000},
     {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
@@ -900,22 +899,12 @@ task.spawn(function()
     local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
     local equipRemote = Events:WaitForChild("equipskill", 10)
     local transformRemote = Events:WaitForChild("Fa", 10)
-    local currentCharacter = nil
-
-    local function getStatusFolder()
-        return localPlayer:FindFirstChild("Status") or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
-    end
 
     while true do
         local char = localPlayer.Character
         if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
-            if char ~= currentCharacter then
-                currentCharacter = char
-                task.wait(2.5)
-            end
-
             local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-            local status = getStatusFolder()
+            local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
             
             if folderData and status then
                 local strength = folderData:FindFirstChild("Strength")
@@ -927,15 +916,27 @@ task.spawn(function()
                     
                     for _, v in ipairs(transformaciones) do
                         if numStrength >= v.forza then
+                            -- Se abbiamo già questa forma attiva, siamo a posto! Ferma la ricerca.
+                            if actual.Value == v.name then
+                                break
+                            end
+
+                            -- Proviamo ad equipaggiare questa forma
                             if selected.Value ~= v.name then
                                 task.spawn(function() equipRemote:InvokeServer(v.name) end)
-                                task.wait(0.5)
+                                task.wait(0.4) -- Diamo tempo al server di dirci se possiamo averla
                             end
-                            if actual.Value ~= v.name then
+                            
+                            -- VERIFICA: Il gioco ce l'ha fatta equipaggiare?
+                            if selected.Value == v.name then
+                                -- SÌ! Abbiamo il gamepass/lato giusto. Trasformiamoci.
                                 task.spawn(function() transformRemote:InvokeServer() end)
                                 task.wait(2)
+                                break -- Esci dal ciclo for per non provare quelle più deboli
+                            else
+                                -- NO! Il gioco l'ha rifiutata. Lo script passerà in automatico
+                                -- alla prossima forma della lista ignorando questa.
                             end
-                            break
                         end
                     end
                 end
@@ -951,32 +952,22 @@ local function WaitForTransformation()
     if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
     
     local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
-    local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
     
-    if status and folderData then
-        local strength = folderData:FindFirstChild("Strength")
+    if status then
+        local selected = status:FindFirstChild("SelectedTransformation")
         local actual = status:FindFirstChild("Transformation")
         
-        if strength and actual then
-            local numStrength = tonumber(strength.Value) or 0
-            local targetForm = ""
-            
-            -- Calcola quale dovrebbe essere la trasformazione
-            for _, v in ipairs(transformaciones) do
-                if numStrength >= v.forza then
-                    targetForm = v.name
-                    break
-                end
+        if selected and actual then
+            -- Mettiamo un timer massimo di 8 secondi, così se qualcosa va storto non si blocca per sempre
+            local timeout = 16 
+            -- Aspetta che la trasformazione attiva (actual) sia uguale a quella scelta dallo script (selected)
+            -- e che non sia "Base" (non trasformato)
+            while actual.Value ~= selected.Value and actual.Value == "Base" and timeout > 0 do
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+                task.wait(0.5)
+                timeout = timeout - 1
             end
-            
-            -- Aspetta che diventi attiva
-            if targetForm ~= "" then
-                while actual.Value ~= targetForm do
-                    if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
-                    task.wait(0.5)
-                end
-                task.wait(1) -- Pausa di sicurezza per l'animazione
-            end
+            task.wait(0.5) -- Piccola pausa extra per far finire l'animazione dell'aura
         end
     end
 end
