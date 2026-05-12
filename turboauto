@@ -580,6 +580,9 @@ local function createGUI()
 	ConvertedStats["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
 	ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
 
+	ConvertedStats["_Frame"].Active = true
+	ConvertedStats["_Frame"].Draggable = true
+
 	ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
 	ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
 	ConvertedStats["_UIStroke"].Thickness = 4
