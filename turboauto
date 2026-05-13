@@ -237,7 +237,7 @@ task.spawn(function()
             end)
 		end
 
-        if #Players:GetPlayers() > 2 then
+        if #Players:GetPlayers() > 1 then
             FugaSullaTerra()
         end
         
@@ -249,7 +249,7 @@ task.spawn(function()
         
         task.spawn(function()
             while task.wait(1) do
-                if #Players:GetPlayers() > 2 then
+                if #Players:GetPlayers() > 1 then
                     FugaSullaTerra()
                 end
             end
