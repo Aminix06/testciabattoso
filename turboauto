@@ -19,6 +19,7 @@ local TeleportService = game:GetService("TeleportService")
 local ConfigName = "CiabTurboConfig.json"
 
 local DefaultBosses = {
+	["Ultra Super Villain Rose Wukong Black"] = true,
 	["Wukong (TUI)"] = true,
 	["Ultra Super Villain Vegetable"] = true,
 	["Grand Minister (1% power)"] = true,
@@ -136,7 +137,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu", "Vegetable (GoD in-training)", "X Fighter Trainer"}
+    local bossNamesList = {"Ultra Super Villain Rose Wukong Black", "Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu", "Vegetable (GoD in-training)", "X Fighter Trainer"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -980,6 +981,7 @@ end
 -- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
 -- ==============================================================================
 local BossConfig = {
+	["Ultra Super Villain Rose Wukong Black"] = {QuestNPC = "Ultra Super Villain Rose Wukong Black", BossName = "Ultra Super Villain Rose Wukong Black", Distance = -5},
 	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
 	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},
