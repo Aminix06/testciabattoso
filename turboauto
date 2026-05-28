@@ -22,8 +22,8 @@ local DefaultBosses = {
 	["Ultra Super Villain Rose Wukong Black"] = true,
 	["Wukong (TUI)"] = true,
 	["Ultra Super Villain Vegetable"] = true,
-	["Grand Minister (1% power)"] = true,
-	["Kakata (Ego Instinct)"] = true,
+	["Wukong (MUI) TOP"] = true,
+	["Hit"] = true,
 	["Goheta (Base - SSJB)"] = true,
 	["Universal Vegito"] = true,
 	["Fused Zamasu"] = true,
@@ -137,7 +137,7 @@ local function CreateUnifiedGUI()
     listLayout.Padding = UDim.new(0, 8)
     listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local bossNamesList = {"Ultra Super Villain Rose Wukong Black", "Wukong (TUI)", "Ultra Super Villain Vegetable", "Grand Minister (1% power)", "Kakata (Ego Instinct)", "Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu", "Vegetable (GoD in-training)", "X Fighter Trainer"}
+    local bossNamesList = {"Ultra Super Villain Rose Wukong Black", "Wukong (TUI)", "Ultra Super Villain Vegetable", "Wukong (MUI) TOP", "Hit", "Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu", "Vegetable (GoD in-training)", "X Fighter Trainer"}
     
     for _, bossName in ipairs(bossNamesList) do
         local btn = Instance.new("TextButton", scroll)
@@ -984,8 +984,8 @@ local BossConfig = {
 	["Ultra Super Villain Rose Wukong Black"] = {QuestNPC = "Ultra Super Villain Rose Wukong Black", BossName = "Ultra Super Villain Rose Wukong Black", Distance = -5},
 	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
 	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
-	["Grand Minister (1% power)"] = {QuestNPC = nil, BossName = "Grand Minister (1% power)", Distance = -5},
-	["Kakata (Ego Instinct)"] = {QuestNPC = nil, BossName = "Kakata (Ego Instinct)", Distance = -5},
+	["Wukong (MUI) TOP"] = {QuestNPC = nil, BossName = "Wukong (MUI) TOP", Distance = -5},
+	["Hit"] = {QuestNPC = nil, BossName = "Hit", Distance = -5},
 	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
 	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
 	["Fused Zamasu"] = {QuestNPC = nil, BossName = "Fused Zamasu", Distance = -5},
