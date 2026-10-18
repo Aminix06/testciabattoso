@@ -1,0 +1,1400 @@
+--[[
+    CIAB TURBO — PREMIUM EDITION
+    --------------------------------
+    Sections:
+      1. Runtime guards, services and movement configuration
+      2. Persistent boss configuration
+      3. Boss selection GUI
+      4. Private-server guard and zone-change handling
+      5. Startup, webhook and status displays
+      6. Health/energy and player-stat interfaces
+      7. Anti-AFK, floating and combat helpers
+      8. Transformation automation
+      9. Boss/quest movement and combat loop
+
+    Movement rule:
+      - Character movement within the current zone uses TweenService.
+      - Zone/dimension changes continue to use the game's own TP event.
+]]
+
+if getgenv().ScriptAlreadyRunning then
+    local rebuildGUI = getgenv().CIABTurboRebuildGUI
+    if type(rebuildGUI) == "function" then
+        local ok, err = pcall(rebuildGUI)
+        if ok then
+            warn("CIAB TURBO: interfacce ricostruite senza avviare un secondo auto-farm.")
+        else
+            warn("CIAB TURBO: impossibile ricostruire le interfacce: " .. tostring(err))
+        end
+    else
+        warn("CIAB TURBO: è ancora attiva una vecchia versione. Rientra nel server una volta e poi esegui questa versione.")
+    end
+    return
+end
+getgenv().ScriptAlreadyRunning = true
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+-- Configurazione opzionale: inserisci qui un NUOVO webhook se vuoi mantenere la notifica.
+local WEBHOOK_URL = ""
+
+-- ============================================================================
+-- MOVIMENTO INTERNO: TWEEN RAPIDO, CON ANTI-RIAVVIO
+-- ============================================================================
+local MovementConfig = {
+    Speed = 850,                   -- studs/secondo: valori alti = movimento rapido
+    MinDuration = 0.035,           -- evita tween a durata zero
+    MaxDuration = 0.45,            -- limite per tragitti lunghi
+    TargetRefreshDistance = 2.5,   -- aggiorna il target se si sposta oltre questa soglia
+    ArrivalDistance = 0.85,        -- considera raggiunto un target molto vicino
+}
+
+local activeMovementTween = nil
+local activeMovementTarget = nil
+
+local function CancelCharacterTween()
+    if activeMovementTween then
+        activeMovementTween:Cancel()
+    end
+
+    activeMovementTween = nil
+    activeMovementTarget = nil
+end
+
+local function TweenCharacterTo(targetCFrame, speed)
+    if typeof(targetCFrame) ~= "CFrame" then
+        return false
+    end
+
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root or root.Anchored then
+        CancelCharacterTween()
+        return false
+    end
+
+    local distance = (targetCFrame.Position - root.Position).Magnitude
+    if distance <= MovementConfig.ArrivalDistance then
+        CancelCharacterTween()
+        return true
+    end
+
+    -- Non ricreare il tween ogni tick: evita vibrazioni e movimenti interrotti.
+    if activeMovementTween
+        and activeMovementTween.PlaybackState == Enum.PlaybackState.Playing
+        and activeMovementTarget
+    then
+        local targetDrift = (activeMovementTarget.Position - targetCFrame.Position).Magnitude
+        if targetDrift <= MovementConfig.TargetRefreshDistance then
+            return true
+        end
+
+        activeMovementTween:Cancel()
+    end
+
+    local movementSpeed = math.max(1, tonumber(speed) or MovementConfig.Speed)
+    local duration = math.clamp(
+        distance / movementSpeed,
+        MovementConfig.MinDuration,
+        MovementConfig.MaxDuration
+    )
+
+    local tween = TweenService:Create(
+        root,
+        TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+        { CFrame = targetCFrame }
+    )
+
+    activeMovementTween = tween
+    activeMovementTarget = targetCFrame
+
+    tween.Completed:Connect(function()
+        -- Un tween vecchio non deve azzerare i riferimenti di quello nuovo.
+        if activeMovementTween == tween then
+            activeMovementTween = nil
+            activeMovementTarget = nil
+        end
+    end)
+
+    tween:Play()
+    return true
+end
+
+localPlayer.CharacterAdded:Connect(function()
+    CancelCharacterTween()
+end)
+
+-- ==============================================================================
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES
+-- ==============================================================================
+local ConfigName = "CiabTurboConfig.json"
+
+local DefaultBosses = {
+    ["Ultra Super Villain Rose Wukong Black"] = true,
+    ["Wukong (TUI)"] = true,
+    ["Ultra Super Villain Vegetable"] = true,
+    ["Wukong (MUI) TOP"] = true,
+    ["Hit"] = true,
+    ["Goheta (Base - SSJB)"] = true,
+    ["Universal Vegito"] = true,
+    ["Fused Zamasu"] = true,
+    ["Vegetable (GoD in-training)"] = true,
+    ["X Fighter Trainer"] = true
+}
+
+if isfile and isfile(ConfigName) then
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(ConfigName))
+    end)
+    if success and data then
+        getgenv().BossTargets = data.BossTargets or {}
+        for boss, val in pairs(DefaultBosses) do
+            if getgenv().BossTargets[boss] == nil then
+                getgenv().BossTargets[boss] = val
+            end
+        end
+    else
+        getgenv().BossTargets = DefaultBosses
+    end
+else
+    getgenv().BossTargets = DefaultBosses
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({BossTargets = DefaultBosses}))
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({
+            BossTargets = getgenv().BossTargets
+        }))
+    end
+end
+
+-- ==============================================================================
+-- UI KIT CONDIVISO: TEMA, CREAZIONE COMPONENTI E DRAG
+-- ==============================================================================
+local UITheme = {
+    Background = Color3.fromRGB(10, 14, 25),
+    Panel = Color3.fromRGB(18, 24, 40),
+    Surface = Color3.fromRGB(25, 33, 53),
+    SurfaceRaised = Color3.fromRGB(31, 42, 65),
+    Border = Color3.fromRGB(51, 68, 96),
+    Text = Color3.fromRGB(242, 247, 255),
+    Muted = Color3.fromRGB(150, 165, 190),
+    Accent = Color3.fromRGB(65, 231, 196),
+    Blue = Color3.fromRGB(73, 147, 255),
+    Green = Color3.fromRGB(42, 201, 133),
+    Red = Color3.fromRGB(242, 91, 111),
+    Gold = Color3.fromRGB(255, 202, 92),
+}
+
+local function NewUI(className, parent, properties)
+    local object = Instance.new(className)
+    for property, value in pairs(properties or {}) do
+        object[property] = value
+    end
+    object.Parent = parent
+    return object
+end
+
+local function AddCorner(object, radius)
+    return NewUI("UICorner", object, {CornerRadius = UDim.new(0, radius or 12)})
+end
+
+local function AddStroke(object, color, thickness, transparency)
+    return NewUI("UIStroke", object, {
+        Color = color or UITheme.Border,
+        Thickness = thickness or 1,
+        Transparency = transparency or 0,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    })
+end
+
+local function AddGradient(object, colorA, colorB, rotation)
+    local gradient = NewUI("UIGradient", object, {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, colorA),
+            ColorSequenceKeypoint.new(1, colorB),
+        }),
+        Rotation = rotation or 0,
+    })
+    return gradient
+end
+
+local function RemoveGuiEverywhere(guiName)
+    local playerGui = localPlayer:FindFirstChildOfClass("PlayerGui")
+    if playerGui then
+        local existing = playerGui:FindFirstChild(guiName)
+        if existing then existing:Destroy() end
+    end
+    pcall(function()
+        local coreGui = game:GetService("CoreGui")
+        local existing = coreGui:FindFirstChild(guiName)
+        if existing then existing:Destroy() end
+    end)
+end
+
+local function NewScreenGui(guiName, displayOrder)
+    RemoveGuiEverywhere(guiName)
+    local screenGui = NewUI("ScreenGui", localPlayer:WaitForChild("PlayerGui"), {
+        Name = guiName,
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = displayOrder or 50,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    })
+    return screenGui
+end
+
+local function MakeDraggable(handle, target)
+    local dragging = false
+    local dragInput
+    local dragStart
+    local startPosition
+    local changedConnection
+
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPosition = target.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    handle.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement
+            or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    changedConnection = UserInputService.InputChanged:Connect(function(input)
+        if not target.Parent then
+            if changedConnection then changedConnection:Disconnect() end
+            return
+        end
+        if dragging and input == dragInput then
+            local delta = input.Position - dragStart
+            target.Position = UDim2.new(
+                startPosition.X.Scale,
+                startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale,
+                startPosition.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    target.AncestryChanged:Connect(function(_, parent)
+        if parent == nil and changedConnection then
+            changedConnection:Disconnect()
+        end
+    end)
+end
+
+local function NewText(parent, name, text, position, size, font, textSize, color, alignment)
+    return NewUI("TextLabel", parent, {
+        Name = name,
+        BackgroundTransparency = 1,
+        Position = position,
+        Size = size,
+        Font = font or Enum.Font.Gotham,
+        Text = text or "",
+        TextSize = textSize or 14,
+        TextColor3 = color or UITheme.Text,
+        TextXAlignment = alignment or Enum.TextXAlignment.Left,
+        TextYAlignment = Enum.TextYAlignment.Center,
+        TextWrapped = false,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        RichText = false,
+    })
+end
+
+
+-- ==============================================================================
+-- GUI PRINCIPALE: CIAB TURBO / SELEZIONE BOSS
+-- ==============================================================================
+local function CreateUnifiedGUI()
+    local screenGui = NewScreenGui("UnifiedFarmGUI", 70)
+
+    local mainFrame = NewUI("Frame", screenGui, {
+        Name = "MainPanel",
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -22, 0.5, 0),
+        Size = UDim2.fromOffset(326, 492),
+        BackgroundColor3 = UITheme.Panel,
+        BorderSizePixel = 0,
+    })
+    AddCorner(mainFrame, 18)
+    local outline = AddStroke(mainFrame, UITheme.Border, 1.25, 0.08)
+
+    local topAccent = NewUI("Frame", mainFrame, {
+        Name = "TopAccent",
+        Position = UDim2.new(0, 0, 0, 0),
+        Size = UDim2.new(1, 0, 0, 4),
+        BorderSizePixel = 0,
+        BackgroundColor3 = UITheme.Accent,
+    })
+    AddCorner(topAccent, 18)
+    AddGradient(topAccent, UITheme.Accent, UITheme.Blue, 0)
+
+    local header = NewUI("Frame", mainFrame, {
+        Name = "Header",
+        Position = UDim2.fromOffset(0, 4),
+        Size = UDim2.new(1, 0, 0, 80),
+        BackgroundTransparency = 1,
+        Active = true,
+    })
+    NewText(header, "Eyebrow", "CIAB  /  TURBO", UDim2.fromOffset(18, 10), UDim2.fromOffset(220, 17), Enum.Font.GothamBold, 11, UITheme.Accent)
+    NewText(header, "Title", "Boss Control", UDim2.fromOffset(18, 28), UDim2.fromOffset(220, 28), Enum.Font.GothamBold, 22, UITheme.Text)
+    NewText(header, "Subtitle", "AUTO-FARM CONFIGURATION", UDim2.fromOffset(19, 56), UDim2.fromOffset(220, 15), Enum.Font.GothamMedium, 9, UITheme.Muted)
+
+    local collapseButton = NewUI("TextButton", header, {
+        Name = "CollapseButton",
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -14, 0, 15),
+        Size = UDim2.fromOffset(30, 30),
+        BackgroundColor3 = UITheme.SurfaceRaised,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        Text = "−",
+        TextSize = 21,
+        TextColor3 = UITheme.Text,
+        AutoButtonColor = false,
+    })
+    AddCorner(collapseButton, 10)
+
+    local livePill = NewUI("Frame", header, {
+        Name = "LivePill",
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -51, 0, 15),
+        Size = UDim2.fromOffset(61, 30),
+        BackgroundColor3 = Color3.fromRGB(22, 55, 52),
+        BorderSizePixel = 0,
+    })
+    AddCorner(livePill, 10)
+    NewUI("Frame", livePill, {
+        Name = "LiveDot",
+        Position = UDim2.fromOffset(8, 12),
+        Size = UDim2.fromOffset(6, 6),
+        BackgroundColor3 = UITheme.Accent,
+        BorderSizePixel = 0,
+    })
+    NewText(livePill, "LiveText", "LIVE", UDim2.fromOffset(19, 0), UDim2.fromOffset(36, 30), Enum.Font.GothamBold, 10, UITheme.Accent)
+
+    local separator = NewUI("Frame", mainFrame, {
+        Position = UDim2.fromOffset(16, 85),
+        Size = UDim2.new(1, -32, 0, 1),
+        BackgroundColor3 = UITheme.Border,
+        BackgroundTransparency = 0.25,
+        BorderSizePixel = 0,
+    })
+
+    local summary = NewUI("Frame", mainFrame, {
+        Name = "Summary",
+        Position = UDim2.fromOffset(16, 98),
+        Size = UDim2.new(1, -32, 0, 48),
+        BackgroundColor3 = UITheme.Surface,
+        BorderSizePixel = 0,
+    })
+    AddCorner(summary, 12)
+    NewText(summary, "SectionTitle", "BOSS TARGETS", UDim2.fromOffset(12, 5), UDim2.fromOffset(165, 16), Enum.Font.GothamBold, 10, UITheme.Muted)
+    NewText(summary, "SectionHint", "Toggle the targets you want", UDim2.fromOffset(12, 22), UDim2.fromOffset(150, 16), Enum.Font.Gotham, 10, UITheme.Text)
+    local activeCount = NewText(summary, "ActiveCount", "0 / 10 ON", UDim2.new(1, -105, 0, 8), UDim2.fromOffset(91, 30), Enum.Font.GothamBold, 10, UITheme.Accent, Enum.TextXAlignment.Right)
+
+    local scroll = NewUI("ScrollingFrame", mainFrame, {
+        Name = "BossList",
+        Position = UDim2.fromOffset(16, 157),
+        Size = UDim2.new(1, -32, 1, -204),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = UITheme.Accent,
+        AutomaticCanvasSize = Enum.AutomaticSize.None,
+        ScrollingDirection = Enum.ScrollingDirection.Y,
+    })
+    local listLayout = NewUI("UIListLayout", scroll, {
+        Padding = UDim.new(0, 7),
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    })
+
+    local bossNamesList = {
+        "Ultra Super Villain Rose Wukong Black",
+        "Wukong (TUI)",
+        "Ultra Super Villain Vegetable",
+        "Wukong (MUI) TOP",
+        "Hit",
+        "Goheta (Base - SSJB)",
+        "Universal Vegito",
+        "Fused Zamasu",
+        "Vegetable (GoD in-training)",
+        "X Fighter Trainer",
+    }
+
+    local function refreshActiveCount()
+        local active = 0
+        for _, bossName in ipairs(bossNamesList) do
+            if getgenv().BossTargets[bossName] then active += 1 end
+        end
+        activeCount.Text = string.format("%d / %d ON", active, #bossNamesList)
+        activeCount.TextColor3 = active > 0 and UITheme.Accent or UITheme.Muted
+    end
+
+    for index, bossName in ipairs(bossNamesList) do
+        local row = NewUI("Frame", scroll, {
+            Name = "BossRow_" .. tostring(index),
+            LayoutOrder = index,
+            Size = UDim2.new(1, -2, 0, 43),
+            BackgroundColor3 = UITheme.Surface,
+            BorderSizePixel = 0,
+        })
+        AddCorner(row, 11)
+        local rowStroke = AddStroke(row, UITheme.Border, 1, 0.5)
+
+        local dot = NewUI("Frame", row, {
+            Name = "StatusDot",
+            Position = UDim2.fromOffset(11, 17),
+            Size = UDim2.fromOffset(8, 8),
+            BackgroundColor3 = UITheme.Muted,
+            BorderSizePixel = 0,
+        })
+        AddCorner(dot, 5)
+
+        NewText(row, "BossName", bossName, UDim2.fromOffset(27, 3), UDim2.new(1, -112, 1, -6), Enum.Font.GothamMedium, 11, UITheme.Text)
+        local toggle = NewUI("TextButton", row, {
+            Name = "Toggle",
+            AnchorPoint = Vector2.new(1, 0.5),
+            Position = UDim2.new(1, -8, 0.5, 0),
+            Size = UDim2.fromOffset(62, 27),
+            BackgroundColor3 = UITheme.SurfaceRaised,
+            BorderSizePixel = 0,
+            Font = Enum.Font.GothamBold,
+            Text = "OFF",
+            TextSize = 10,
+            TextColor3 = UITheme.Muted,
+            AutoButtonColor = false,
+        })
+        AddCorner(toggle, 9)
+
+        local function updateRow(animate)
+            local enabled = getgenv().BossTargets[bossName] == true
+            local color = enabled and UITheme.Green or UITheme.SurfaceRaised
+            local textColor = enabled and Color3.fromRGB(7, 30, 25) or UITheme.Muted
+            local dotColor = enabled and UITheme.Accent or UITheme.Muted
+            toggle.Text = enabled and "ON" or "OFF"
+            dot.BackgroundColor3 = dotColor
+            rowStroke.Color = enabled and Color3.fromRGB(52, 120, 105) or UITheme.Border
+            if animate then
+                TweenService:Create(toggle, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = color}):Play()
+                TweenService:Create(row, TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {BackgroundColor3 = enabled and Color3.fromRGB(25, 45, 57) or UITheme.Surface}):Play()
+            else
+                toggle.BackgroundColor3 = color
+                row.BackgroundColor3 = enabled and Color3.fromRGB(25, 45, 57) or UITheme.Surface
+            end
+            toggle.TextColor3 = textColor
+        end
+
+        updateRow(false)
+        toggle.Activated:Connect(function()
+            getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
+            updateRow(true)
+            refreshActiveCount()
+            SaveConfig()
+        end)
+    end
+
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 4)
+    end)
+
+    local footer = NewText(mainFrame, "Footer", "Config saved automatically", UDim2.new(0, 18, 1, -34), UDim2.new(1, -36, 0, 20), Enum.Font.Gotham, 10, UITheme.Muted)
+    refreshActiveCount()
+    MakeDraggable(header, mainFrame)
+
+    local collapsed = false
+    collapseButton.Activated:Connect(function()
+        collapsed = not collapsed
+        scroll.Visible = not collapsed
+        summary.Visible = not collapsed
+        separator.Visible = not collapsed
+        footer.Visible = not collapsed
+        local targetSize = collapsed and UDim2.fromOffset(326, 89) or UDim2.fromOffset(326, 492)
+        collapseButton.Text = collapsed and "+" or "−"
+        TweenService:Create(mainFrame, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+    end)
+
+    return screenGui
+end
+CreateUnifiedGUI()
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT
+-- ==============================================================================
+task.spawn(function()
+    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+    if queue_on_teleport then
+        queue_on_teleport([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
+        ]])
+    end
+end)
+
+-- ==============================================================================
+-- SISTEMA ANTI-INTRUSO (CAMBIO ZONA VERSO EARTH)
+-- ==============================================================================
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+
+    local function IsPublicServer()
+        local jobId = game.JobId
+        local placeId = game.PlaceId
+        local cursor = ""
+        while true do
+            local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+            local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+            if not requestFunc then return true end
+            local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+            if not success or not response or response.StatusCode ~= 200 then
+                task.wait(1)
+            else
+                local data = HttpService:JSONDecode(response.Body)
+                for _, server in ipairs(data.data) do
+                    if server.id == jobId then return true end
+                end
+                cursor = data.nextPageCursor
+                if not cursor then break end
+            end
+            task.wait(0.1)
+        end
+        return false
+    end
+
+    if IsPublicServer() then
+        localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+    else
+        print("🔒 Server Privato confermato. Sensori attivati.")
+
+        -- Cambio di zona: mantiene il TP nativo del gioco (non è movimento locale via CFrame).
+        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+        local isEscaping = false
+
+        local function FugaSullaTerra()
+            if isEscaping then return end
+            isEscaping = true
+            warn("⚠️ Intruso rilevato! Cambio zona verso Earth...")
+
+            pcall(function()
+                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    localPlayer.Character.HumanoidRootPart.Anchored = true
+                end
+            end)
+
+            pcall(function()
+                TPEvent:InvokeServer("Earth")
+            end)
+
+            task.delay(5, function()
+                localPlayer:Kick("⚠️ Il cambio zona non è riuscito e l'intruso è ancora qui. Disconnessione di emergenza.")
+            end)
+        end
+
+        if #Players:GetPlayers() > 1 then
+            FugaSullaTerra()
+        end
+
+        Players.PlayerAdded:Connect(function(player)
+            if player.UserId ~= localPlayer.UserId then
+                FugaSullaTerra()
+            end
+        end)
+
+        task.spawn(function()
+            while task.wait(1) do
+                if #Players:GetPlayers() > 1 then
+                    FugaSullaTerra()
+                end
+            end
+        end)
+    end
+end)
+
+-- ==============================================================================
+-- START THE GAME
+-- ==============================================================================
+task.spawn(function()
+    local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+    if not playerGui then return end
+    local mainGui = playerGui:WaitForChild("Main", 10)
+    if not mainGui then return end
+
+    task.wait(1)
+    local Event = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start")
+    pcall(function()
+        Event:InvokeServer()
+        task.wait()
+        Event:InvokeServer()
+    end)
+
+    task.wait()
+    local bruhButton = mainGui:FindFirstChild("bruh")
+    if bruhButton then
+        bruhButton.Disabled = true
+        bruhButton.Disabled = false
+    end
+    task.wait()
+    pcall(function() Event:InvokeServer() end)
+end)
+
+-- ==============================================================================
+-- WEBHOOK
+-- ==============================================================================
+task.spawn(function()
+    local PlaceId = game.PlaceId
+    if PlaceId ~= 3311165597 then return end
+
+    local Webhook_URL = WEBHOOK_URL
+    if type(Webhook_URL) ~= "string" or not Webhook_URL:match("^https://discord%.com/api/webhooks/") then
+        warn("[CIAB] Webhook non configurato: imposta WEBHOOK_URL nella configurazione iniziale con un nuovo URL.")
+        return
+    end
+    local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
+    if not playerStats then return end
+
+    local statz = tostring(playerStats.Defense.Value)
+    local rebs = tostring(playerStats.Rebirth.Value)
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+
+    if requestFunc then
+        requestFunc({
+            Url = Webhook_URL,
+            Method = 'POST',
+            Headers = {['Content-Type'] = 'application/json' },
+            Body = HttpService:JSONEncode({["content"] = "",
+                ["embeds"] = {{
+                    ["title"] = "✅ Auto-Farm avviato (EARTH)!",
+                    ["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",["type"] = "rich",
+                    ["color"] = 65280,["fields"] = {
+                        {["name"] = "Rebirths", ["value"] = rebs,["inline"] = true },
+                        {["name"] = "Defense", ["value"] = statz, ["inline"] = true }
+                    }
+                }}
+            })
+        })
+    end
+end)
+
+-- ==============================================================================
+-- HUD VITALS: HEALTH + ENERGY
+-- ==============================================================================
+local function CreateHealthGUI()
+    local screenGui = NewScreenGui("HealthAndEnergy", 65)
+    local panel = NewUI("Frame", screenGui, {
+        Name = "VitalsPanel",
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, 16),
+        Size = UDim2.fromOffset(390, 139),
+        BackgroundColor3 = UITheme.Panel,
+        BackgroundTransparency = 0.03,
+        BorderSizePixel = 0,
+    })
+    AddCorner(panel, 17)
+    AddStroke(panel, UITheme.Border, 1.25, 0.12)
+
+    local topLine = NewUI("Frame", panel, {
+        Name = "TopAccent",
+        Size = UDim2.new(1, 0, 0, 3),
+        BackgroundColor3 = UITheme.Accent,
+        BorderSizePixel = 0,
+    })
+    AddCorner(topLine, 17)
+    AddGradient(topLine, UITheme.Accent, UITheme.Blue, 0)
+
+    NewText(panel, "Title", "VITALS", UDim2.fromOffset(16, 8), UDim2.fromOffset(170, 21), Enum.Font.GothamBold, 12, UITheme.Text)
+    NewText(panel, "Subtitle", "LIVE CHARACTER STATUS", UDim2.fromOffset(16, 28), UDim2.fromOffset(190, 14), Enum.Font.GothamMedium, 9, UITheme.Muted)
+    local live = NewText(panel, "Live", "●  LIVE", UDim2.new(1, -90, 0, 13), UDim2.fromOffset(73, 20), Enum.Font.GothamBold, 10, UITheme.Accent, Enum.TextXAlignment.Right)
+
+    local converted = {}
+    local healthLabel = NewText(panel, "HealthLabel", "HEALTH", UDim2.fromOffset(16, 49), UDim2.fromOffset(74, 18), Enum.Font.GothamBold, 10, UITheme.Muted)
+    converted["_health"] = NewText(panel, "HealthValue", "0", UDim2.new(1, -132, 0, 47), UDim2.fromOffset(50, 20), Enum.Font.GothamBold, 13, UITheme.Text, Enum.TextXAlignment.Right)
+    NewText(panel, "HealthSlash", "/", UDim2.new(1, -78, 0, 47), UDim2.fromOffset(12, 20), Enum.Font.Gotham, 12, UITheme.Muted, Enum.TextXAlignment.Center)
+    converted["_maxhealth"] = NewText(panel, "MaxHealthValue", "0", UDim2.new(1, -63, 0, 47), UDim2.fromOffset(47, 20), Enum.Font.GothamMedium, 12, UITheme.Muted, Enum.TextXAlignment.Right)
+
+    local healthTrack = NewUI("Frame", panel, {
+        Name = "HealthTrack",
+        Position = UDim2.fromOffset(16, 69),
+        Size = UDim2.new(1, -32, 0, 9),
+        BackgroundColor3 = Color3.fromRGB(35, 45, 64),
+        BorderSizePixel = 0,
+    })
+    AddCorner(healthTrack, 6)
+    local healthStroke = AddStroke(healthTrack, UITheme.Border, 1, 0.3)
+    local healthFill = NewUI("Frame", healthTrack, {
+        Name = "Fill",
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = UITheme.Green,
+        BorderSizePixel = 0,
+    })
+    AddCorner(healthFill, 6)
+    converted["_UIGradient1"] = AddGradient(healthFill, UITheme.Green, UITheme.Accent, 0)
+    converted["_UIGradient"] = AddGradient(healthStroke, UITheme.Accent, UITheme.Blue, 0)
+
+    converted["_Frame"] = healthTrack
+    converted["_HealthFill"] = healthFill
+
+    NewText(panel, "EnergyLabel", "ENERGY", UDim2.fromOffset(16, 85), UDim2.fromOffset(74, 18), Enum.Font.GothamBold, 10, UITheme.Muted)
+    converted["_energy"] = NewText(panel, "EnergyValue", "0", UDim2.new(1, -132, 0, 83), UDim2.fromOffset(50, 20), Enum.Font.GothamBold, 13, UITheme.Text, Enum.TextXAlignment.Right)
+    NewText(panel, "EnergySlash", "/", UDim2.new(1, -78, 0, 83), UDim2.fromOffset(12, 20), Enum.Font.Gotham, 12, UITheme.Muted, Enum.TextXAlignment.Center)
+    converted["_maxenergy"] = NewText(panel, "MaxEnergyValue", "100", UDim2.new(1, -63, 0, 83), UDim2.fromOffset(47, 20), Enum.Font.GothamMedium, 12, UITheme.Muted, Enum.TextXAlignment.Right)
+
+    local energyTrack = NewUI("Frame", panel, {
+        Name = "EnergyTrack",
+        Position = UDim2.fromOffset(16, 105),
+        Size = UDim2.new(1, -32, 0, 9),
+        BackgroundColor3 = Color3.fromRGB(35, 45, 64),
+        BorderSizePixel = 0,
+    })
+    AddCorner(energyTrack, 6)
+    local energyStroke = AddStroke(energyTrack, UITheme.Border, 1, 0.3)
+    local energyFill = NewUI("Frame", energyTrack, {
+        Name = "Fill",
+        Size = UDim2.new(1, 0, 1, 0),
+        BackgroundColor3 = UITheme.Blue,
+        BorderSizePixel = 0,
+    })
+    AddCorner(energyFill, 6)
+    converted["_Uigrad"] = AddGradient(energyFill, UITheme.Blue, UITheme.Accent, 0)
+    converted["_Uigraddd"] = AddGradient(energyStroke, UITheme.Blue, UITheme.Accent, 0)
+
+    converted["_freim"] = energyTrack
+    converted["_EnergyFill"] = energyFill
+    converted["_HealthAndEnergy"] = screenGui
+    return converted
+end
+
+local Converted = CreateHealthGUI()
+
+local function formatNumber(number)
+    if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
+    elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
+    elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
+    elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
+    elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
+    else return tostring(number) end
+end
+
+-- ==============================================================================
+-- NUOVO SISTEMA VITA E ENERGIA (FIXATO GRAZIE AGLI SCREENSHOT!)
+-- ==============================================================================
+local function setupCharacter(character)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        local function updateHealth(health)
+            local maxHealth = math.max(1, humanoid.MaxHealth)
+            Converted["_health"].Text = formatNumber(math.floor(health))
+            Converted["_maxhealth"].Text = formatNumber(math.floor(maxHealth))
+            local fill = Converted["_HealthFill"]
+            if fill then
+                local ratio = math.clamp(health / maxHealth, 0, 1)
+                TweenService:Create(fill, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(ratio, 0, 1, 0)
+                }):Play()
+            end
+        end
+        updateHealth(humanoid.Health)
+        humanoid.HealthChanged:Connect(updateHealth)
+        humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(function()
+            updateHealth(humanoid.Health)
+        end)
+    end
+
+    task.spawn(function()
+        local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
+        if wsChar then
+            local statsFolder = wsChar:WaitForChild("Stats", 5)
+            if statsFolder then
+                -- currentKi è l'energia che scende (quella che cambia)
+                local currentKi = statsFolder:WaitForChild("Ki", 5)
+
+                local function updateEnergy()
+                    local val = 0
+                    pcall(function()
+                        val = tonumber(currentKi.Value) or 0
+                        Converted["_energy"].Text = formatNumber(math.floor(val))
+                    end)
+
+                    -- In questa interfaccia il massimo visualizzato resta 100, come nella versione precedente.
+                    Converted["_maxenergy"].Text = "100"
+                    local fill = Converted["_EnergyFill"]
+                    if fill then
+                        local ratio = math.clamp(val / 100, 0, 1)
+                        TweenService:Create(fill, TweenInfo.new(0.12, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                            Size = UDim2.new(ratio, 0, 1, 0)
+                        }):Play()
+                    end
+                end
+
+                updateEnergy()
+
+                -- Aggiorna quando il valore del Ki cambia
+                if currentKi then
+                    currentKi.Changed:Connect(updateEnergy)
+                end
+            end
+        end
+    end)
+end
+
+localPlayer.CharacterAdded:Connect(setupCharacter)
+if localPlayer.Character then setupCharacter(localPlayer.Character) end
+
+RunService.RenderStepped:Connect(function()
+    Converted["_UIGradient1"].Rotation += 2
+    Converted["_UIGradient"].Rotation += 2
+    Converted["_Uigrad"].Rotation += 2
+    Converted["_Uigraddd"].Rotation += 2
+end)
+
+-- ==============================================================================
+-- GUI STATISTICHE: PLAYER CARD + LIVE STATS
+-- ==============================================================================
+local function createGUI()
+    local screenGui = NewScreenGui("AUTOFARM", 60)
+    local convertedStats = {
+        ["_AUTOFARM"] = screenGui,
+    }
+
+    local frame = NewUI("Frame", screenGui, {
+        Name = "StatsPanel",
+        Position = UDim2.new(0, 20, 0.24, 0),
+        Size = UDim2.fromOffset(300, 356),
+        BackgroundColor3 = UITheme.Panel,
+        BorderSizePixel = 0,
+    })
+    AddCorner(frame, 18)
+    local frameStroke = AddStroke(frame, UITheme.Border, 1.25, 0.08)
+    convertedStats["_Frame"] = frame
+    convertedStats["_UIGradient"] = AddGradient(frameStroke, UITheme.Accent, UITheme.Blue, 20)
+
+    local header = NewUI("Frame", frame, {
+        Name = "PlayerHeader",
+        Position = UDim2.fromOffset(1, 1),
+        Size = UDim2.new(1, -2, 0, 72),
+        BackgroundColor3 = UITheme.Surface,
+        BorderSizePixel = 0,
+    })
+    AddCorner(header, 17)
+    convertedStats["_UIGradient1"] = AddGradient(header, Color3.fromRGB(31, 45, 70), Color3.fromRGB(18, 58, 67), 0)
+
+    local avatar = NewUI("Frame", header, {
+        Name = "AvatarMark",
+        Position = UDim2.fromOffset(14, 15),
+        Size = UDim2.fromOffset(42, 42),
+        BackgroundColor3 = UITheme.SurfaceRaised,
+        BorderSizePixel = 0,
+    })
+    AddCorner(avatar, 13)
+    AddStroke(avatar, UITheme.Accent, 1.25, 0.15)
+    NewText(avatar, "AvatarLetter", string.upper(string.sub(localPlayer.DisplayName or localPlayer.Name, 1, 1)), UDim2.new(0, 0, 0, 0), UDim2.new(1, 0, 1, 0), Enum.Font.GothamBold, 20, UITheme.Accent, Enum.TextXAlignment.Center)
+
+    NewText(header, "DisplayName", localPlayer.DisplayName, UDim2.fromOffset(66, 14), UDim2.new(1, -80, 0, 24), Enum.Font.GothamBold, 16, UITheme.Text)
+    NewText(header, "Username", "@" .. localPlayer.Name, UDim2.fromOffset(67, 37), UDim2.new(1, -80, 0, 17), Enum.Font.Gotham, 10, UITheme.Muted)
+    local dot = NewUI("Frame", header, {
+        Name = "OnlineDot",
+        Position = UDim2.new(1, -18, 0, 12),
+        Size = UDim2.fromOffset(6, 6),
+        BackgroundColor3 = UITheme.Accent,
+        BorderSizePixel = 0,
+    })
+    AddCorner(dot, 4)
+
+    NewText(frame, "SectionTitle", "PLAYER OVERVIEW", UDim2.fromOffset(15, 82), UDim2.fromOffset(180, 18), Enum.Font.GothamBold, 10, UITheme.Muted)
+    NewText(frame, "LiveTag", "LIVE DATA", UDim2.new(1, -95, 0, 82), UDim2.fromOffset(80, 18), Enum.Font.GothamBold, 9, UITheme.Accent, Enum.TextXAlignment.Right)
+
+    local grid = NewUI("Frame", frame, {
+        Name = "StatsGrid",
+        Position = UDim2.fromOffset(14, 106),
+        Size = UDim2.new(1, -28, 0, 220),
+        BackgroundTransparency = 1,
+    })
+    local gridLayout = NewUI("UIGridLayout", grid, {
+        CellSize = UDim2.fromOffset(132, 66),
+        CellPadding = UDim2.fromOffset(8, 8),
+        FillDirection = Enum.FillDirection.Horizontal,
+        FillDirectionMaxCells = 2,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        VerticalAlignment = Enum.VerticalAlignment.Top,
+    })
+
+    local stats = {
+        {key = "_STRENGTHNUMBER", title = "STRENGTH", value = "0", accent = UITheme.Accent},
+        {key = "_SPEEDNUMBER", title = "SPEED", value = "0", accent = UITheme.Blue},
+        {key = "_DEFENSENUMBER", title = "DEFENSE", value = "0", accent = UITheme.Green},
+        {key = "_ENERGYNUMBER", title = "ENERGY", value = "0", accent = Color3.fromRGB(170, 124, 255)},
+        {key = "_REBSNUMBER", title = "REBIRTHS", value = "0", accent = UITheme.Gold},
+    }
+
+    for index, stat in ipairs(stats) do
+        local card = NewUI("Frame", grid, {
+            Name = stat.title .. "Card",
+            LayoutOrder = index,
+            BackgroundColor3 = UITheme.Surface,
+            BorderSizePixel = 0,
+        })
+        AddCorner(card, 12)
+        AddStroke(card, UITheme.Border, 1, 0.35)
+        local mark = NewUI("Frame", card, {
+            Name = "AccentMark",
+            Position = UDim2.fromOffset(10, 13),
+            Size = UDim2.fromOffset(3, 39),
+            BackgroundColor3 = stat.accent,
+            BorderSizePixel = 0,
+        })
+        AddCorner(mark, 3)
+        NewText(card, "Caption", stat.title, UDim2.fromOffset(21, 8), UDim2.new(1, -28, 0, 17), Enum.Font.GothamBold, 9, UITheme.Muted)
+        convertedStats[stat.key] = NewText(card, "Value", stat.value, UDim2.fromOffset(21, 26), UDim2.new(1, -28, 0, 29), Enum.Font.GothamBold, 17, UITheme.Text)
+    end
+
+    NewText(frame, "Footer", "CIAB TURBO  •  STATISTICS", UDim2.new(0, 15, 1, -24), UDim2.new(1, -30, 0, 15), Enum.Font.GothamMedium, 9, UITheme.Muted)
+
+    local function formatStat(value)
+        value = tonumber(value) or 0
+        if value >= 1_000_000_000_000_000 then return string.format("%.2fQd", value / 1_000_000_000_000_000)
+        elseif value >= 1_000_000_000_000 then return string.format("%.2fT", value / 1_000_000_000_000)
+        elseif value >= 1_000_000_000 then return string.format("%.2fB", value / 1_000_000_000)
+        elseif value >= 1_000_000 then return string.format("%.2fM", value / 1_000_000)
+        elseif value >= 1_000 then return string.format("%.2fK", value / 1_000)
+        else return tostring(math.floor(value)) end
+    end
+
+    task.spawn(function()
+        local datas = ReplicatedStorage:WaitForChild("Datas", 10)
+        local playerStats = datas and datas:WaitForChild(tostring(localPlayer.UserId), 10)
+        while screenGui.Parent do
+            if playerStats then
+                local mapping = {
+                    {"Strength", "_STRENGTHNUMBER"},
+                    {"Speed", "_SPEEDNUMBER"},
+                    {"Defense", "_DEFENSENUMBER"},
+                    {"Energy", "_ENERGYNUMBER"},
+                    {"Rebirth", "_REBSNUMBER"},
+                }
+                for _, entry in ipairs(mapping) do
+                    local valueObject = playerStats:FindFirstChild(entry[1])
+                    local label = convertedStats[entry[2]]
+                    if valueObject and label and label.Parent then
+                        label.Text = entry[1] == "Rebirth" and tostring(valueObject.Value) or formatStat(valueObject.Value)
+                    end
+                end
+            end
+            task.wait(0.5)
+        end
+    end)
+
+    local gradientConnection
+    gradientConnection = RunService.RenderStepped:Connect(function()
+        if not screenGui.Parent then
+            if gradientConnection then gradientConnection:Disconnect() end
+            return
+        end
+        convertedStats["_UIGradient"].Rotation = (convertedStats["_UIGradient"].Rotation + 0.6) % 360
+        convertedStats["_UIGradient1"].Rotation = (convertedStats["_UIGradient1"].Rotation + 0.4) % 360
+    end)
+
+    return convertedStats
+end
+
+if localPlayer:FindFirstChildOfClass("PlayerGui") and localPlayer.PlayerGui:FindFirstChild("AUTOFARM") then
+    localPlayer.PlayerGui.AUTOFARM:Destroy()
+end
+createGUI()
+
+-- ==============================================================================
+-- ANTIAFK, GODMODE & AUTO-CHARGE
+-- ==============================================================================
+local function ANTIAFK()
+    local vu = game:GetService("VirtualUser")
+    localPlayer.Idled:connect(function()
+        vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end)
+end
+coroutine.wrap(ANTIAFK)()
+
+local function ApplyFloat(char)
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        for _, child in pairs(root:GetChildren()) do
+            if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then child:Destroy() end
+        end
+        local att = Instance.new("Attachment", root)
+        att.Name = "FloatAttachment"
+        local lv = Instance.new("LinearVelocity", root)
+        lv.Name = "FloatVelocity"
+        lv.Attachment0 = att
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.new(0, 0, 0)
+        lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+        lv.MaxAxesForce = Vector3.new(0, math.huge, 0)
+    end
+end
+localPlayer.CharacterAdded:Connect(ApplyFloat)
+if localPlayer.Character then ApplyFloat(localPlayer.Character) end
+
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local chaEvent = Events:WaitForChild("cha")
+
+    while true do
+        pcall(function()
+            task.spawn(function() chaEvent:InvokeServer("Blacknwhite27") end)
+        end)
+        task.wait(0.15)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO DIMENSION RAY (SPARA SOLO QUANDO SEI DAL BOSS)
+-- ==============================================================================
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package", 10):WaitForChild("Events", 10)
+    local equipSkillEvent = Events:WaitForChild("equipskill", 10)
+
+    while true do
+        pcall(function()
+            local char = localPlayer.Character
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 and char:FindFirstChild("HumanoidRootPart") then
+
+                local isFighting = false
+                for bossName, isTargeted in pairs(getgenv().BossTargets) do
+                    if isTargeted then
+                        local boss = workspace.Living:FindFirstChild(bossName)
+                        if boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                            local distance = (boss.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                            if distance < 30 then
+                                isFighting = true
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if isFighting then
+                    task.spawn(function()
+                        equipSkillEvent:InvokeServer("Dimension Ray")
+                    end)
+
+                    local dsliceFolder = ReplicatedStorage:FindFirstChild("DimensionSlicer")
+                    if dsliceFolder and dsliceFolder:FindFirstChild("dslice") then
+                        dsliceFolder.dslice:FireServer(true)
+                        task.wait(4)
+                        dsliceFolder.dslice:FireServer(false)
+                    end
+                end
+            end
+        end)
+        task.wait(0.25)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO TRANSFORMATION LOGIC (SMART CHECK - SALTA GAMEPASS/ALLINEAMENTI NON POSSEDUTI)
+-- ==============================================================================
+local transformaciones = {
+    {name = "Ultra Super Villain", forza = 4000000000000000},
+    {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
+    {name = "Ego Instinct", forza = 4500000000}, {name = "Krampus", forza = 4000000000},
+    {name = "Primal Ruin", forza = 2000000000}, {name = "True Jui", forza = 750000000},
+    {name = "Time Breaker", forza = 630000000},	{name = "Corrupt Astral", forza = 250000000},
+    {name = "Beast", forza = 120000000}, {name = "LBSSJ4", forza = 100000000},
+    {name = "SSJB4", forza = 50000000}, {name = "SSJR3", forza = 50000000},
+    {name = "True God of Creation", forza = 30000000}, {name = "True God of Destruction", forza = 30000000},
+    {name = "God of Creation", forza = 30000000}, {name = "God of Destruction", forza = 30000000},
+    {name = "Jiren Ultra Instinct", forza = 14000000}, {name = "Mastered Ultra Instinct", forza = 14000000},
+    {name = "Godly SSJ2", forza = 8000000}, {name = "Ultra Instinct Omen", forza = 5000000},
+    {name = "Super Broly", forza = 4000000}, {name = "Evil SSJ", forza = 4000000},
+    {name = "Blue Evolution", forza = 3500000}, {name = "Dark Rose", forza = 3500000},
+    {name = "LSSJG", forza = 3000000}, {name = "SSJ Berseker", forza = 3000000},
+    {name = "Kefla SSJ2", forza = 3000000}, {name = "True Rose", forza = 2400000},
+    {name = "SSJ Blue Kaioken", forza = 2200000}, {name = "SSJ Rose", forza = 1400000},
+    {name = "SSJ Blue", forza = 1200000}, {name = "SSJG4", forza = 1000000},
+    {name = "LSSJ3", forza = 800000}, {name = "Corrupt SSJ", forza = 700000},
+    {name = "SSJ Rage", forza = 700000}, {name = "SSJ5", forza = 550000},
+    {name = "SSJ4", forza = 300000}, {name = "Mystic Kaioken", forza = 250000},
+    {name = "Mystic", forza = 200000}, {name = "LSSJ Kaioken", forza = 160000},
+    {name = "LSSJ", forza = 140000}, {name = "SSJ3", forza = 95000},
+    {name = "SSJ2 Majin", forza = 65000}, {name = "Spirit SSJ", forza = 65000},
+    {name = "SSJ2 Kaioken", forza = 50000},	{name = "SSJ Kaioken", forza = 16000},
+}
+
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local equipRemote = Events:WaitForChild("equipskill", 10)
+    local transformRemote = Events:WaitForChild("Fa", 10)
+
+    while true do
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+            local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+            if folderData and status then
+                local strength = folderData:FindFirstChild("Strength")
+                local selected = status:FindFirstChild("SelectedTransformation")
+                local actual = status:FindFirstChild("Transformation")
+
+                if strength and selected and actual then
+                    local numStrength = tonumber(strength.Value) or 0
+
+                    for _, v in ipairs(transformaciones) do
+                        if numStrength >= v.forza then
+                            -- Se abbiamo già questa forma attiva, siamo a posto! Ferma la ricerca.
+                            if actual.Value == v.name then
+                                break
+                            end
+
+                            -- Proviamo ad equipaggiare questa forma
+                            if selected.Value ~= v.name then
+                                task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                                task.wait(0.4) -- Diamo tempo al server di dirci se possiamo averla
+                            end
+
+                            -- VERIFICA: Il gioco ce l'ha fatta equipaggiare?
+                            if selected.Value == v.name then
+                                -- SÌ! Abbiamo il gamepass/lato giusto. Trasformiamoci.
+                                task.spawn(function() transformRemote:InvokeServer() end)
+                                task.wait(2)
+                                break -- Esci dal ciclo for per non provare quelle più deboli
+                            else
+                                -- NO! Il gioco l'ha rifiutata. Lo script passerà in automatico
+                                -- alla prossima forma della lista ignorando questa.
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(1.5)
+    end
+end)
+
+-- Funzione che mette in pausa il farm finché il personaggio non ha attivato la trasformazione
+local function WaitForTransformation()
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+
+    local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+    if status then
+        local selected = status:FindFirstChild("SelectedTransformation")
+        local actual = status:FindFirstChild("Transformation")
+
+        if selected and actual then
+            -- Mettiamo un timer massimo di 8 secondi, così se qualcosa va storto non si blocca per sempre
+            local timeout = 16
+            -- Aspetta che la trasformazione attiva (actual) sia uguale a quella scelta dallo script (selected)
+            -- e che non sia "Base" (non trasformato)
+            while actual.Value ~= selected.Value and actual.Value == "Base" and timeout > 0 do
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+                task.wait(0.5)
+                timeout = timeout - 1
+            end
+            task.wait(0.5) -- Piccola pausa extra per far finire l'animazione dell'aura
+        end
+    end
+end
+
+-- ==============================================================================
+-- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
+-- ==============================================================================
+local BossConfig = {
+    ["Ultra Super Villain Rose Wukong Black"] = {QuestNPC = "Ultra Super Villain Rose Wukong Black", BossName = "Ultra Super Villain Rose Wukong Black", Distance = -5},
+    ["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
+    ["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
+    ["Wukong (MUI) TOP"] = {QuestNPC = nil, BossName = "Wukong (MUI) TOP", Distance = -5},
+    ["Hit"] = {QuestNPC = nil, BossName = "Hit", Distance = -5},
+    ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
+    ["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
+    ["Fused Zamasu"] = {QuestNPC = nil, BossName = "Fused Zamasu", Distance = -5},
+    ["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable (GoD in-training)", Distance = -5},
+    ["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
+}
+
+-- 1. CERCA SOLO IL NOME ESATTO AL 100%
+local function getValidBoss(bossData)
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
+
+    for _, obj in pairs(workspace.Living:GetChildren()) do
+        -- Adesso cerca SOLO chi si chiama in modo identico (es. "X Fighter" esatto, senza lettere o numeri extra)
+        if obj.Name == bossData.BossName then
+            local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+            local bossHRP = obj:FindFirstChild("HumanoidRootPart")
+
+            if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+local function MoveAndFight(bossData, toggleName)
+    local camera = workspace.CurrentCamera
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    local questVal = playerData and playerData:FindFirstChild("Quest")
+
+    while true do
+        if not getgenv().BossTargets[toggleName] then break end
+
+        -- FIX IMPORTANTE: Se è un boss da quest, e hai completato la quest, FERMATI SUBITO!
+        if bossData.QuestNPC and questVal then
+            if questVal.Value ~= bossData.QuestNPC and questVal.Value ~= bossData.BossName then
+                -- Esci dal combattimento per tornare a prendere la quest
+                break
+            end
+        end
+
+        local currentBoss = getValidBoss(bossData)
+        if not currentBoss then break end -- Se non ci sono boss vivi, esci
+
+        local bossHRP = currentBoss.HumanoidRootPart
+
+        pcall(function()
+            camera.CFrame = CFrame.lookAt(camera.CFrame.Position, bossHRP.Position)
+
+            local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
+            local behindPosition = bossHRP.Position + behindOffset
+            local targetCFrame = CFrame.lookAt(behindPosition, bossHRP.Position)
+
+            TweenCharacterTo(targetCFrame, MovementConfig.Speed)
+        end)
+
+        pcall(function()
+            local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+            local letsplayagame = Events:WaitForChild("FaFa")
+
+            Events.p:FireServer("Blacknwhite27", 1)
+            coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("God Slicer", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+        end)
+
+        task.wait(0.1)
+    end
+
+    pcall(function()
+        camera.CameraType = Enum.CameraType.Custom
+        camera.CameraSubject = localPlayer.Character.Humanoid
+    end)
+end
+
+local function WaitForBossToSpawn(bossData, timeLimit, toggleName)
+    local startTime = os.time()
+    local bossReady = false
+
+    repeat
+        local char = localPlayer.Character
+        if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+        if not getgenv().BossTargets[toggleName] then return end
+
+        task.wait(0.2)
+        local currentBoss = getValidBoss(bossData)
+        bossReady = (currentBoss ~= nil)
+    until bossReady or os.time() - startTime > timeLimit
+
+    if bossReady then
+        task.wait(0.2)
+        MoveAndFight(bossData, toggleName)
+    end
+end
+
+local function CheckAndFightBoss(bossName)
+    local bossData = BossConfig[bossName]
+    if not bossData then return end
+
+    WaitForTransformation()
+
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return end
+
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    if not playerData or not hrp then return end
+
+    if bossData.QuestNPC then
+        local questVal = playerData:WaitForChild("Quest")
+        local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
+        local expectedQuestName = bossData.QuestNPC
+
+        -- PRENDE LA QUEST SOLO SE NON CE L'HA
+        if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+            while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
+                if not getgenv().BossTargets[bossName] then return end
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+
+                local npcRoot = bossNpc:FindFirstChild("HumanoidRootPart")
+                if not npcRoot then
+                    break
+                end
+
+                local questPosition = npcRoot.CFrame * CFrame.new(0, 0, -3)
+                TweenCharacterTo(questPosition, MovementConfig.Speed)
+
+                pcall(function()
+                    ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+                end)
+
+                task.wait(0.2)
+            end
+        end
+
+        -- SE HA PRESO LA QUEST (o se l'aveva già), VA A COMBATTERE
+        if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
+            WaitForBossToSpawn(bossData, 5, bossName)
+        end
+    else
+        WaitForBossToSpawn(bossData, 5, bossName)
+    end
+end
+
+-- Main Farm Loop
+task.spawn(function()
+    while true do
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+            for bossName, isToggled in pairs(getgenv().BossTargets) do
+                if isToggled then
+                    CheckAndFightBoss(bossName)
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
+
+-- GUI rebuild callback: if this file is executed again, the guard at the top rebuilds only the interfaces.
+getgenv().CIABTurboRebuildGUI = function()
+    CreateUnifiedGUI()
+    Converted = CreateHealthGUI()
+    createGUI()
+end
+
