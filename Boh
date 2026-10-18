@@ -1,0 +1,192 @@
+    local character = localPlayer.Character
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root or root.Anchored then
+        CancelCharacterTween()
+        return false
+    end
+
+    local distance = (targetCFrame.Position - root.Position).Magnitude
+    if distance <= MovementConfig.ArrivalDistance then
+        CancelCharacterTween()
+        return true
+    end
+
+    -- Non ricreare il tween ogni tick: evita vibrazioni e movimenti interrotti.
+    if activeMovementTween
+        and activeMovementTween.PlaybackState == Enum.PlaybackState.Playing
+        and activeMovementTarget
+    then
+        local targetDrift = (activeMovementTarget.Position - targetCFrame.Position).Magnitude
+        if targetDrift <= MovementConfig.TargetRefreshDistance then
+            return true
+        end
+
+        activeMovementTween:Cancel()
+    end
+
+    local movementSpeed = math.max(1, tonumber(speed) or MovementConfig.Speed)
+    local duration = math.clamp(
+        distance / movementSpeed,
+        MovementConfig.MinDuration,
+        MovementConfig.MaxDuration
+    )
+
+    local tween = TweenService:Create(
+        root,
+        TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+        { CFrame = targetCFrame }
+    )
+
+    activeMovementTween = tween
+    activeMovementTarget = targetCFrame
+
+    tween.Completed:Connect(function()
+        -- Un tween vecchio non deve azzerare i riferimenti di quello nuovo.
+        if activeMovementTween == tween then
+            activeMovementTween = nil
+            activeMovementTarget = nil
+        end
+    end)
+
+    tween:Play()
+    return true
+end
+
+localPlayer.CharacterAdded:Connect(function()
+    CancelCharacterTween()
+end)
+
+-- ==============================================================================
+-- 💾 SISTEMA DI SALVATAGGIO CONFIGURAZIONE (.JSON) + BOSSES
+-- ==============================================================================
+local ConfigName = "CiabTurboConfig.json"
+
+local DefaultBosses = {
+    ["Ultra Super Villain Rose Wukong Black"] = true,
+    ["Wukong (TUI)"] = true,
+    ["Ultra Super Villain Vegetable"] = true,
+    ["Wukong (MUI) TOP"] = true,
+    ["Hit"] = true,
+    ["Goheta (Base - SSJB)"] = true,
+    ["Universal Vegito"] = true,
+    ["Fused Zamasu"] = true,
+    ["Vegetable (GoD in-training)"] = true,
+    ["X Fighter Trainer"] = true
+}
+
+if isfile and isfile(ConfigName) then
+    local success, data = pcall(function()
+        return HttpService:JSONDecode(readfile(ConfigName))
+    end)
+    if success and data then
+        getgenv().BossTargets = data.BossTargets or {}
+        for boss, val in pairs(DefaultBosses) do
+            if getgenv().BossTargets[boss] == nil then
+                getgenv().BossTargets[boss] = val
+            end
+        end
+    else
+        getgenv().BossTargets = DefaultBosses
+    end
+else
+    getgenv().BossTargets = DefaultBosses
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({BossTargets = DefaultBosses}))
+    end
+end
+
+local function SaveConfig()
+    if writefile then
+        writefile(ConfigName, HttpService:JSONEncode({
+            BossTargets = getgenv().BossTargets
+        }))
+    end
+end
+
+-- ==============================================================================
+-- 🗂️ GUI PREMIUM (BOSS PANEL - LATO DESTRO)
+-- ==============================================================================
+local function CreateUnifiedGUI()
+    if game:GetService("CoreGui"):FindFirstChild("UnifiedFarmGUI") then
+        game:GetService("CoreGui").UnifiedFarmGUI:Destroy()
+    end
+
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "UnifiedFarmGUI"
+    sg.Parent = game:GetService("CoreGui")
+    sg.ResetOnSpawn = false
+    sg.DisplayOrder = 1000
+
+    local MainFrame = Instance.new("Frame", sg)
+    MainFrame.Size = UDim2.new(0, 240, 0, 280)
+    MainFrame.Position = UDim2.new(1, -260, 0.5, -140)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+    MainFrame.BackgroundTransparency = 0.15
+    MainFrame.Active = true
+
+    local mainCorner = Instance.new("UICorner", MainFrame)
+    mainCorner.CornerRadius = UDim.new(0, 12)
+
+    local mainStroke = Instance.new("UIStroke", MainFrame)
+    mainStroke.Color = Color3.fromRGB(255, 255, 255)
+    mainStroke.Thickness = 2
+    local strokeGradient = Instance.new("UIGradient", mainStroke)
+    strokeGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 204)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 150, 255))
+    }
+
+    local dragging, dragInput, mousePos, framePos
+    MainFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            mousePos = input.Position
+            framePos = MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    MainFrame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - mousePos
+            MainFrame.Position = UDim2.new(framePos.X.Scale, framePos.X.Offset + delta.X, framePos.Y.Scale, framePos.Y.Offset + delta.Y)
+        end
+    end)
+
+    local Title = Instance.new("TextLabel", MainFrame)
+    Title.Size = UDim2.new(1, 0, 0, 45)
+    Title.BackgroundTransparency = 1
+    Title.Font = Enum.Font.FredokaOne
+    Title.Text = "⚡ CIAB PANEL ⚡"
+    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Title.TextScaled = true
+
+    local BossContainer = Instance.new("Frame", MainFrame)
+    BossContainer.Size = UDim2.new(1, -20, 1, -55)
+    BossContainer.Position = UDim2.new(0, 10, 0, 45)
+    BossContainer.BackgroundTransparency = 1
+
+    local scroll = Instance.new("ScrollingFrame", BossContainer)
+    scroll.Size = UDim2.new(1, 0, 1, 0)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 3
+    scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 255, 204)
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.BorderSizePixel = 0
+
+    local listLayout = Instance.new("UIListLayout", scroll)
+    listLayout.Padding = UDim.new(0, 8)
+    listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    local bossNamesList = {"Ultra Super Villain Rose Wukong Black", "Wukong (TUI)", "Ultra Super Villain Vegetable", "Wukong (MUI) TOP", "Hit", "Goheta (Base - SSJB)", "Universal Vegito", "Fused Zamasu", "Vegetable (GoD in-training)", "X Fighter Trainer"}
+
+    for _, bossName in ipairs(bossNamesList) do
+        local btn = Instance.new("TextButton", scroll)
+        btn.Size = UDim2.new(1, -10, 0, 42)
+        btn.Font = Enum.Font.FredokaOne
+        btn.Text = bossName
+        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        btn.TextScaled = true
+        Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
