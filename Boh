@@ -1,3 +1,67 @@
+--[[
+    CIAB TURBO — REFACTORED EDITION
+    --------------------------------
+    Sections:
+      1. Runtime guards, services and movement configuration
+      2. Persistent boss configuration
+      3. Boss selection GUI
+      4. Private-server guard and zone-change handling
+      5. Startup, webhook and status displays
+      6. Health/energy and player-stat interfaces
+      7. Anti-AFK, floating and combat helpers
+      8. Transformation automation
+      9. Boss/quest movement and combat loop
+
+    Movement rule:
+      - Character movement within the current zone uses TweenService.
+      - Zone/dimension changes continue to use the game's own TP event.
+]]
+
+if getgenv().ScriptAlreadyRunning then
+    warn("Lo script è già in esecuzione! Ignoro questa esecuzione.")
+    return
+end
+getgenv().ScriptAlreadyRunning = true
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+-- Configurazione opzionale: inserisci qui un NUOVO webhook se vuoi mantenere la notifica.
+local WEBHOOK_URL = ""
+
+-- ============================================================================
+-- MOVIMENTO INTERNO: TWEEN RAPIDO, CON ANTI-RIAVVIO
+-- ============================================================================
+local MovementConfig = {
+    Speed = 850,                   -- studs/secondo: valori alti = movimento rapido
+    MinDuration = 0.035,           -- evita tween a durata zero
+    MaxDuration = 0.45,            -- limite per tragitti lunghi
+    TargetRefreshDistance = 2.5,   -- aggiorna il target se si sposta oltre questa soglia
+    ArrivalDistance = 0.85,        -- considera raggiunto un target molto vicino
+}
+
+local activeMovementTween = nil
+local activeMovementTarget = nil
+
+local function CancelCharacterTween()
+    if activeMovementTween then
+        activeMovementTween:Cancel()
+    end
+
+    activeMovementTween = nil
+    activeMovementTarget = nil
+end
+
+local function TweenCharacterTo(targetCFrame, speed)
+    if typeof(targetCFrame) ~= "CFrame" then
+        return false
+    end
+
     local character = localPlayer.Character
     local root = character and character:FindFirstChild("HumanoidRootPart")
     if not root or root.Anchored then
@@ -190,3 +254,1007 @@ local function CreateUnifiedGUI()
         btn.TextColor3 = Color3.fromRGB(255, 255, 255)
         btn.TextScaled = true
         Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+
+        local function UpdateColor()
+            local targetColor = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
+            TweenService:Create(btn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play()
+        end
+
+        btn.BackgroundColor3 = getgenv().BossTargets[bossName] and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(180, 40, 40)
+
+        btn.MouseButton1Click:Connect(function()
+            getgenv().BossTargets[bossName] = not getgenv().BossTargets[bossName]
+            UpdateColor()
+            SaveConfig()
+        end)
+    end
+
+    listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        scroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end)
+end
+CreateUnifiedGUI()
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT
+-- ==============================================================================
+task.spawn(function()
+    local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+    if queue_on_teleport then
+        queue_on_teleport([[
+            repeat task.wait() until game:IsLoaded()
+            loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
+        ]])
+    end
+end)
+
+-- ==============================================================================
+-- SISTEMA ANTI-INTRUSO (CAMBIO ZONA VERSO EARTH)
+-- ==============================================================================
+task.spawn(function()
+    repeat task.wait() until game:IsLoaded()
+
+    local function IsPublicServer()
+        local jobId = game.JobId
+        local placeId = game.PlaceId
+        local cursor = ""
+        while true do
+            local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+            local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+            if not requestFunc then return true end
+            local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+            if not success or not response or response.StatusCode ~= 200 then
+                task.wait(1)
+            else
+                local data = HttpService:JSONDecode(response.Body)
+                for _, server in ipairs(data.data) do
+                    if server.id == jobId then return true end
+                end
+                cursor = data.nextPageCursor
+                if not cursor then break end
+            end
+            task.wait(0.1)
+        end
+        return false
+    end
+
+    if IsPublicServer() then
+        localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+    else
+        print("🔒 Server Privato confermato. Sensori attivati.")
+
+        -- Cambio di zona: mantiene il TP nativo del gioco (non è movimento locale via CFrame).
+        local TPEvent = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("TP")
+        local isEscaping = false
+
+        local function FugaSullaTerra()
+            if isEscaping then return end
+            isEscaping = true
+            warn("⚠️ Intruso rilevato! Cambio zona verso Earth...")
+
+            pcall(function()
+                if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+                    localPlayer.Character.HumanoidRootPart.Anchored = true
+                end
+            end)
+
+            pcall(function()
+                TPEvent:InvokeServer("Earth")
+            end)
+
+            task.delay(5, function()
+                localPlayer:Kick("⚠️ Il cambio zona non è riuscito e l'intruso è ancora qui. Disconnessione di emergenza.")
+            end)
+        end
+
+        if #Players:GetPlayers() > 1 then
+            FugaSullaTerra()
+        end
+
+        Players.PlayerAdded:Connect(function(player)
+            if player.UserId ~= localPlayer.UserId then
+                FugaSullaTerra()
+            end
+        end)
+
+        task.spawn(function()
+            while task.wait(1) do
+                if #Players:GetPlayers() > 1 then
+                    FugaSullaTerra()
+                end
+            end
+        end)
+    end
+end)
+
+-- ==============================================================================
+-- START THE GAME
+-- ==============================================================================
+task.spawn(function()
+    local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+    if not playerGui then return end
+    local mainGui = playerGui:WaitForChild("Main", 10)
+    if not mainGui then return end
+
+    task.wait(1)
+    local Event = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events"):WaitForChild("Start")
+    pcall(function()
+        Event:InvokeServer()
+        task.wait()
+        Event:InvokeServer()
+    end)
+
+    task.wait()
+    local bruhButton = mainGui:FindFirstChild("bruh")
+    if bruhButton then
+        bruhButton.Disabled = true
+        bruhButton.Disabled = false
+    end
+    task.wait()
+    pcall(function() Event:InvokeServer() end)
+end)
+
+-- ==============================================================================
+-- WEBHOOK
+-- ==============================================================================
+task.spawn(function()
+    local PlaceId = game.PlaceId
+    if PlaceId ~= 3311165597 then return end
+
+    local Webhook_URL = WEBHOOK_URL
+    if type(Webhook_URL) ~= "string" or not Webhook_URL:match("^https://discord%.com/api/webhooks/") then
+        warn("[CIAB] Webhook non configurato: imposta WEBHOOK_URL nella configurazione iniziale con un nuovo URL.")
+        return
+    end
+    local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(localPlayer.UserId), 5)
+    if not playerStats then return end
+
+    local statz = tostring(playerStats.Defense.Value)
+    local rebs = tostring(playerStats.Rebirth.Value)
+    local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+
+    if requestFunc then
+        requestFunc({
+            Url = Webhook_URL,
+            Method = 'POST',
+            Headers = {['Content-Type'] = 'application/json' },
+            Body = HttpService:JSONEncode({["content"] = "",
+                ["embeds"] = {{
+                    ["title"] = "✅ Auto-Farm avviato (EARTH)!",
+                    ["description"] = localPlayer.DisplayName .. " (@" .. localPlayer.Name .. ") ha eseguito lo script.",["type"] = "rich",
+                    ["color"] = 65280,["fields"] = {
+                        {["name"] = "Rebirths", ["value"] = rebs,["inline"] = true },
+                        {["name"] = "Defense", ["value"] = statz, ["inline"] = true }
+                    }
+                }}
+            })
+        })
+    end
+end)
+
+-- ==============================================================================
+-- GUI SETUP (STATS & HEALTH/ENERGY)
+-- ==============================================================================
+local Converted = {["_HealthAndEnergy"] = Instance.new("ScreenGui");
+    ["_Frame"] = Instance.new("Frame");["_UICorner"] = Instance.new("UICorner");["_UIStroke"] = Instance.new("UIStroke");
+    ["_UIGradient"] = Instance.new("UIGradient");["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");["_UIGradient1"] = Instance.new("UIGradient");
+    ["_health"] = Instance.new("TextLabel");["_UIStroke2"] = Instance.new("UIStroke");
+    ["_/"] = Instance.new("TextLabel");
+    ["_UIStroke3"] = Instance.new("UIStroke");["_maxhealth"] = Instance.new("TextLabel");["_UIStroke4"] = Instance.new("UIStroke");["_freim"] = Instance.new("Frame");["_UICorner1"] = Instance.new("UICorner");
+    ["_UIStroke5"] = Instance.new("UIStroke");["_Uigraddd"] = Instance.new("UIGradient");["_TextLabel1"] = Instance.new("TextLabel");
+    ["_UIStroke6"] = Instance.new("UIStroke");["_Uigrad"] = Instance.new("UIGradient");["_energy"] = Instance.new("TextLabel");
+    ["_UIStroke7"] = Instance.new("UIStroke");
+    ["_/1"] = Instance.new("TextLabel");["_UIStroke8"] = Instance.new("UIStroke");
+    ["_maxenergy"] = Instance.new("TextLabel");
+    ["_UIStroke9"] = Instance.new("UIStroke");
+}
+
+Converted["_HealthAndEnergy"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+Converted["_HealthAndEnergy"].Name = "HealthAndEnergy"
+Converted["_HealthAndEnergy"].Parent = game:GetService("CoreGui")
+
+Converted["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+Converted["_Frame"].BorderSizePixel = 0
+Converted["_Frame"].Position = UDim2.new(0.316506416, 0, 0.00999999978, 0)
+Converted["_Frame"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
+Converted["_Frame"].Parent = Converted["_HealthAndEnergy"]
+
+Converted["_UICorner"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner"].Parent = Converted["_Frame"]
+Converted["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke"].Thickness = 4
+Converted["_UIStroke"].Parent = Converted["_Frame"]
+
+Converted["_UIGradient"].Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+}
+Converted["_UIGradient"].Parent = Converted["_UIStroke"]
+
+Converted["_TextLabel"].Font = Enum.Font.FredokaOne
+Converted["_TextLabel"].Text = "HEALTH:"
+Converted["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel"].TextScaled = true
+Converted["_TextLabel"].BackgroundTransparency = 1
+Converted["_TextLabel"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
+Converted["_TextLabel"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
+Converted["_TextLabel"].Parent = Converted["_Frame"]
+Converted["_UIStroke1"].Parent = Converted["_TextLabel"]
+
+Converted["_UIGradient1"].Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 255, 0)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 76, 0))
+}
+Converted["_UIGradient1"].Offset = Vector2.new(0.1, 0.1)
+Converted["_UIGradient1"].Rotation = 90
+Converted["_UIGradient1"].Parent = Converted["_Frame"]
+
+Converted["_health"].Font = Enum.Font.FredokaOne
+Converted["_health"].Text = "nil"
+Converted["_health"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_health"].TextScaled = true
+Converted["_health"].BackgroundTransparency = 1
+Converted["_health"].Position = UDim2.new(0.234679773, 0, -0.0192308649, 0)
+Converted["_health"].Size = UDim2.new(0.303816825, 0, 1.00000012, 0)
+Converted["_health"].Parent = Converted["_Frame"]
+Converted["_UIStroke2"].Parent = Converted["_health"]
+
+Converted["_/"].Font = Enum.Font.FredokaOne
+Converted["_/"].Text = "/"
+Converted["_/"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_/"].TextScaled = true
+Converted["_/"].BackgroundTransparency = 1
+Converted["_/"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/"].Size = UDim2.new(0.188958243, 0, 1, 0)
+Converted["_/"].Parent = Converted["_Frame"]
+Converted["_UIStroke3"].Parent = Converted["_/"]
+
+Converted["_maxhealth"].Font = Enum.Font.FredokaOne
+Converted["_maxhealth"].Text = "nil"
+Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxhealth"].TextScaled = true
+Converted["_maxhealth"].BackgroundTransparency = 1
+Converted["_maxhealth"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxhealth"].Size = UDim2.new(0.387182951, 0, 1, 0)
+Converted["_maxhealth"].Parent = Converted["_Frame"]
+Converted["_UIStroke4"].Parent = Converted["_maxhealth"]
+
+Converted["_freim"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_freim"].Position = UDim2.new(0.316506416, 0, 0.075, 0)
+Converted["_freim"].Size = UDim2.new(0.35921225, 0, 0.0540200993, 0)
+Converted["_freim"].Parent = Converted["_HealthAndEnergy"]
+
+Converted["_UICorner1"].CornerRadius = UDim.new(1, 0)
+Converted["_UICorner1"].Parent = Converted["_freim"]
+Converted["_UIStroke5"].Color = Color3.fromRGB(255, 255, 255)
+Converted["_UIStroke5"].Thickness = 4
+Converted["_UIStroke5"].Parent = Converted["_freim"]
+
+Converted["_Uigraddd"].Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+}
+Converted["_Uigraddd"].Parent = Converted["_UIStroke5"]
+
+Converted["_TextLabel1"].Font = Enum.Font.FredokaOne
+Converted["_TextLabel1"].Text = "ENERGY:"
+Converted["_TextLabel1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_TextLabel1"].TextScaled = true
+Converted["_TextLabel1"].BackgroundTransparency = 1
+Converted["_TextLabel1"].Position = UDim2.new(0.0101300552, 0, -0.0192308798, 0)
+Converted["_TextLabel1"].Size = UDim2.new(0.20260115, 0, 1.00000024, 0)
+Converted["_TextLabel1"].Parent = Converted["_freim"]
+Converted["_UIStroke6"].Parent = Converted["_TextLabel1"]
+
+Converted["_Uigrad"].Color = ColorSequence.new{
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 221, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 67, 57))
+}
+Converted["_Uigrad"].Offset = Vector2.new(0.1, 0.1)
+Converted["_Uigrad"].Rotation = 90
+Converted["_Uigrad"].Parent = Converted["_freim"]
+
+Converted["_energy"].Font = Enum.Font.FredokaOne
+Converted["_energy"].Text = "nil"
+Converted["_energy"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_energy"].TextScaled = true
+Converted["_energy"].BackgroundTransparency = 1
+Converted["_energy"].Position = UDim2.new(0.234679773, 0, -0.0192310419, 0)
+Converted["_energy"].Size = UDim2.new(0.303816825, 0, 1.00000036, 0)
+Converted["_energy"].Parent = Converted["_freim"]
+Converted["_UIStroke7"].Parent = Converted["_energy"]
+
+Converted["_/1"].Font = Enum.Font.FredokaOne
+Converted["_/1"].Text = "/"
+Converted["_/1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_/1"].TextScaled = true
+Converted["_/1"].BackgroundTransparency = 1
+Converted["_/1"].Position = UDim2.new(0.481177628, 0, -0, 0)
+Converted["_/1"].Size = UDim2.new(0.188958243, 0, 1, 0)
+Converted["_/1"].Parent = Converted["_freim"]
+Converted["_UIStroke8"].Parent = Converted["_/1"]
+
+Converted["_maxenergy"].Font = Enum.Font.FredokaOne
+Converted["_maxenergy"].Text = "nil"
+Converted["_maxhealth"].TextColor3 = Color3.fromRGB(255, 255, 255)
+Converted["_maxenergy"].TextScaled = true
+Converted["_maxenergy"].BackgroundTransparency = 1
+Converted["_maxenergy"].Position = UDim2.new(0.612817109, 0, -0, 0)
+Converted["_maxenergy"].Size = UDim2.new(0.387182951, 0, 1, 0)
+Converted["_maxenergy"].Parent = Converted["_freim"]
+Converted["_UIStroke9"].Parent = Converted["_maxenergy"]
+
+task.spawn(function()
+    RunService.RenderStepped:Connect(function()
+        local playerGui = localPlayer:FindFirstChild("PlayerGui")
+        if playerGui then
+            local mainGui = playerGui:FindFirstChild("Main")
+            if mainGui then
+                local mainFrame = mainGui:FindFirstChild("MainFrame")
+                if mainFrame then
+                    local bars = mainFrame:FindFirstChild("Bars")
+                    if bars then bars.Visible = false end
+                end
+            end
+        end
+    end)
+end)
+
+local function formatNumber(number)
+    if number >= 1_000_000_000_000_000 then return string.format("%.1fQd", number / 1_000_000_000_000_000)
+    elseif number >= 1_000_000_000_000 then return string.format("%.1fT", number / 1_000_000_000_000)
+    elseif number >= 1_000_000_000 then return string.format("%.1fB", number / 1_000_000_000)
+    elseif number >= 1_000_000 then return string.format("%.1fM", number / 1_000_000)
+    elseif number >= 1_000 then return string.format("%.1fK", number / 1_000)
+    else return tostring(number) end
+end
+
+-- ==============================================================================
+-- NUOVO SISTEMA VITA E ENERGIA (FIXATO GRAZIE AGLI SCREENSHOT!)
+-- ==============================================================================
+local function setupCharacter(character)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if humanoid then
+        Converted["_health"].Text = formatNumber(math.floor(humanoid.Health))
+        Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+
+        humanoid.HealthChanged:Connect(function(health)
+            Converted["_health"].Text = formatNumber(math.floor(health))
+            Converted["_maxhealth"].Text = formatNumber(math.floor(humanoid.MaxHealth))
+        end)
+    end
+
+    task.spawn(function()
+        local wsChar = game.Workspace:WaitForChild("Living"):WaitForChild(localPlayer.Name, 10)
+        if wsChar then
+            local statsFolder = wsChar:WaitForChild("Stats", 5)
+            if statsFolder then
+                -- currentKi è l'energia che scende (quella che cambia)
+                local currentKi = statsFolder:WaitForChild("Ki", 5)
+
+                local function updateEnergy()
+                    -- Aggiorna il Ki attuale (quello che scende)
+                    pcall(function()
+                        local val = tonumber(currentKi.Value) or 0
+                        Converted["_energy"].Text = formatNumber(math.floor(val))
+                    end)
+
+                    -- Forza il massimo a 100
+                    Converted["_maxenergy"].Text = "100"
+                    Converted["_maxenergy"].TextColor3 = Color3.fromRGB(255, 255, 255) -- Bianco come gli altri
+                    Converted["_maxenergy"].Font = Enum.Font.FredokaOne -- Stesso font degli altri
+                    Converted["_maxenergy"].TextScaled = true -- Assicura che la dimensione sia corretta
+                end
+
+                updateEnergy()
+
+                -- Aggiorna quando il valore del Ki cambia
+                if currentKi then
+                    currentKi.Changed:Connect(updateEnergy)
+                end
+            end
+        end
+    end)
+end
+
+localPlayer.CharacterAdded:Connect(setupCharacter)
+if localPlayer.Character then setupCharacter(localPlayer.Character) end
+
+RunService.RenderStepped:Connect(function()
+    Converted["_UIGradient1"].Rotation += 2
+    Converted["_UIGradient"].Rotation += 2
+    Converted["_Uigrad"].Rotation += 2
+    Converted["_Uigraddd"].Rotation += 2
+end)
+
+-- ==============================================================================
+-- GUI MENU STATISTICHE LATERALI
+-- ==============================================================================
+local function createGUI()
+    local ConvertedStats = {
+        ["_AUTOFARM"] = Instance.new("ScreenGui");["_Frame"] = Instance.new("Frame");["_UICorner"] = Instance.new("UICorner");
+        ["_UIStroke"] = Instance.new("UIStroke");
+        ["_UIGradient"] = Instance.new("UIGradient");["_UIGradient1"] = Instance.new("UIGradient");["_ImageLabel"] = Instance.new("ImageLabel");["_UICorner1"] = Instance.new("UICorner");["_TextLabel"] = Instance.new("TextLabel");["_UIStroke1"] = Instance.new("UIStroke");
+        ["_Fortnait"] = Instance.new("ImageLabel");["_Stren"] = Instance.new("TextLabel");["_UIStroke2"] = Instance.new("UIStroke");["_STRENGTHNUMBER"] = Instance.new("TextLabel");["_UIStroke3"] = Instance.new("UIStroke");["_Sped"] = Instance.new("TextLabel");
+        ["_UIStroke4"] = Instance.new("UIStroke");["_SPEEDNUMBER"] = Instance.new("TextLabel");["_UIStroke5"] = Instance.new("UIStroke");["_DEF"] = Instance.new("TextLabel");["_UIStroke6"] = Instance.new("UIStroke");
+        ["_DEFENSENUMBER"] = Instance.new("TextLabel");["_UIStroke7"] = Instance.new("UIStroke");["_ENERGY"] = Instance.new("TextLabel");["_UIStroke8"] = Instance.new("UIStroke");["_ENERGYNUMBER"] = Instance.new("TextLabel");["_UIStroke9"] = Instance.new("UIStroke");["_sup"] = Instance.new("ImageLabel");["_UICorner2"] = Instance.new("UICorner");["_DEF1"] = Instance.new("TextLabel");["_UIStroke10"] = Instance.new("UIStroke");["_REBS"] = Instance.new("TextLabel");["_UIStroke11"] = Instance.new("UIStroke");["_REBSNUMBER"] = Instance.new("TextLabel");["_UIStroke12"] = Instance.new("UIStroke");
+    }
+
+    ConvertedStats["_AUTOFARM"].ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ConvertedStats["_AUTOFARM"].Name = "AUTOFARM"
+    ConvertedStats["_AUTOFARM"].Parent = game:GetService("CoreGui")
+
+    ConvertedStats["_Frame"].BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_Frame"].BorderColor3 = Color3.fromRGB(0, 0, 0)
+    ConvertedStats["_Frame"].BorderSizePixel = 0
+    ConvertedStats["_Frame"].Position = UDim2.new(0.0210622549, 0, 0.260050237, 0)
+    ConvertedStats["_Frame"].Size = UDim2.new(0.284307986, 0, 0.496231169, 0)
+    ConvertedStats["_Frame"].Parent = ConvertedStats["_AUTOFARM"]
+
+    ConvertedStats["_Frame"].Active = true
+    ConvertedStats["_Frame"].Draggable = true
+
+    ConvertedStats["_UICorner"].Parent = ConvertedStats["_Frame"]
+    ConvertedStats["_UIStroke"].Color = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_UIStroke"].Thickness = 4
+    ConvertedStats["_UIStroke"].Parent = ConvertedStats["_Frame"]
+
+    ConvertedStats["_UIGradient"].Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 252, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+    }
+    ConvertedStats["_UIGradient"].Parent = ConvertedStats["_UIStroke"]
+
+    ConvertedStats["_UIGradient1"].Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 153, 255)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 247))
+    }
+    ConvertedStats["_UIGradient1"].Parent = ConvertedStats["_Frame"]
+
+    ConvertedStats["_ImageLabel"].BackgroundColor3 = Color3.fromRGB(0, 123, 255)
+    ConvertedStats["_ImageLabel"].Position = UDim2.new(0.0438596494, 0, 0.020833334, 0)
+    ConvertedStats["_ImageLabel"].Size = UDim2.new(0.912280679, 0, 0.125628158, 0)
+    ConvertedStats["_ImageLabel"].Parent = ConvertedStats["_Frame"]
+
+    ConvertedStats["_UICorner1"].Parent = ConvertedStats["_ImageLabel"]
+
+    ConvertedStats["_TextLabel"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_TextLabel"].Text = "By Ciab"
+    ConvertedStats["_TextLabel"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_TextLabel"].TextScaled = true
+    ConvertedStats["_TextLabel"].BackgroundTransparency = 1
+    ConvertedStats["_TextLabel"].Position = UDim2.new(1.46719131e-07, 0, 0.118450202, 0)
+    ConvertedStats["_TextLabel"].Size = UDim2.new(0.999999881, 0, 0.749835074, 0)
+    ConvertedStats["_TextLabel"].Parent = ConvertedStats["_ImageLabel"]
+    ConvertedStats["_UIStroke1"].Parent = ConvertedStats["_TextLabel"]
+
+    ConvertedStats["_Fortnait"].Image = "rbxassetid://17207994014"
+    ConvertedStats["_Fortnait"].Position = UDim2.new(0.0438596494, 0, 0.196428567, 0)
+    ConvertedStats["_Fortnait"].Size = UDim2.new(0.912280679, 0, 0.774437666, 0)
+    ConvertedStats["_Fortnait"].BackgroundTransparency = 1
+    ConvertedStats["_Fortnait"].Parent = ConvertedStats["_Frame"]
+
+    ConvertedStats["_Stren"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_Stren"].Text = "STRENGTH:"
+    ConvertedStats["_Stren"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_Stren"].TextScaled = true
+    ConvertedStats["_Stren"].BackgroundTransparency = 1
+    ConvertedStats["_Stren"].Position = UDim2.new(0.0257487558, 0, 0.0420393385, 0)
+    ConvertedStats["_Stren"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+    ConvertedStats["_Stren"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UIStroke2"].Parent = ConvertedStats["_Stren"]
+
+    ConvertedStats["_STRENGTHNUMBER"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_STRENGTHNUMBER"].Text = "nil"
+    ConvertedStats["_STRENGTHNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_STRENGTHNUMBER"].TextScaled = true
+    ConvertedStats["_STRENGTHNUMBER"].BackgroundTransparency = 1
+    ConvertedStats["_STRENGTHNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+    ConvertedStats["_STRENGTHNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+    ConvertedStats["_STRENGTHNUMBER"].Parent = ConvertedStats["_Stren"]
+    ConvertedStats["_UIStroke3"].Parent = ConvertedStats["_STRENGTHNUMBER"]
+
+    ConvertedStats["_Sped"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_Sped"].Text = "SPEED:"
+    ConvertedStats["_Sped"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_Sped"].TextScaled = true
+    ConvertedStats["_Sped"].BackgroundTransparency = 1
+    ConvertedStats["_Sped"].Position = UDim2.new(0.0257487558, 0, 0.20429185, 0)
+    ConvertedStats["_Sped"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+    ConvertedStats["_Sped"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UIStroke4"].Parent = ConvertedStats["_Sped"]
+
+    ConvertedStats["_SPEEDNUMBER"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_SPEEDNUMBER"].Text = "nil"
+    ConvertedStats["_SPEEDNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_SPEEDNUMBER"].TextScaled = true
+    ConvertedStats["_SPEEDNUMBER"].BackgroundTransparency = 1
+    ConvertedStats["_SPEEDNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+    ConvertedStats["_SPEEDNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+    ConvertedStats["_SPEEDNUMBER"].Parent = ConvertedStats["_Sped"]
+    ConvertedStats["_UIStroke5"].Parent = ConvertedStats["_SPEEDNUMBER"]
+
+    ConvertedStats["_DEF"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_DEF"].Text = "DEFENSE:"
+    ConvertedStats["_DEF"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_DEF"].TextScaled = true
+    ConvertedStats["_DEF"].BackgroundTransparency = 1
+    ConvertedStats["_DEF"].Position = UDim2.new(0.0257487558, 0, 0.38976115, 0)
+    ConvertedStats["_DEF"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+    ConvertedStats["_DEF"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UIStroke6"].Parent = ConvertedStats["_DEF"]
+
+    ConvertedStats["_DEFENSENUMBER"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_DEFENSENUMBER"].Text = "nil"
+    ConvertedStats["_DEFENSENUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_DEFENSENUMBER"].TextScaled = true
+    ConvertedStats["_DEFENSENUMBER"].BackgroundTransparency = 1
+    ConvertedStats["_DEFENSENUMBER"].Position = UDim2.new(1, 0, 0, 0)
+    ConvertedStats["_DEFENSENUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+    ConvertedStats["_DEFENSENUMBER"].Parent = ConvertedStats["_DEF"]
+    ConvertedStats["_UIStroke7"].Parent = ConvertedStats["_DEFENSENUMBER"]
+
+    ConvertedStats["_ENERGY"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_ENERGY"].Text = "ENERGY:"
+    ConvertedStats["_ENERGY"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_ENERGY"].TextScaled = true
+    ConvertedStats["_ENERGY"].BackgroundTransparency = 1
+    ConvertedStats["_ENERGY"].Position = UDim2.new(0.0257487558, 0, 0.552013576, 0)
+    ConvertedStats["_ENERGY"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+    ConvertedStats["_ENERGY"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UIStroke8"].Parent = ConvertedStats["_ENERGY"]
+
+    ConvertedStats["_ENERGYNUMBER"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_ENERGYNUMBER"].Text = "nil"
+    ConvertedStats["_ENERGYNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_ENERGYNUMBER"].TextScaled = true
+    ConvertedStats["_ENERGYNUMBER"].BackgroundTransparency = 1
+    ConvertedStats["_ENERGYNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+    ConvertedStats["_ENERGYNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+    ConvertedStats["_ENERGYNUMBER"].Parent = ConvertedStats["_ENERGY"]
+    ConvertedStats["_UIStroke9"].Parent = ConvertedStats["_ENERGYNUMBER"]
+
+    ConvertedStats["_sup"].BackgroundColor3 = Color3.fromRGB(0, 255, 204)
+    ConvertedStats["_sup"].Position = UDim2.new(-0.0260067098, 0, 0.872107267, 0)
+    ConvertedStats["_sup"].Size = UDim2.new(1.05175519, 0, 0.127892867, 0)
+    ConvertedStats["_sup"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UICorner2"].Parent = ConvertedStats["_sup"]
+
+    ConvertedStats["_DEF1"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_DEF1"].Text = "sup " .. localPlayer.DisplayName
+    ConvertedStats["_DEF1"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_DEF1"].TextScaled = true
+    ConvertedStats["_DEF1"].BackgroundTransparency = 1
+    ConvertedStats["_DEF1"].Position = UDim2.new(0, 0, 0.105724856, 0)
+    ConvertedStats["_DEF1"].Size = UDim2.new(1, 0, 0.742611945, 0)
+    ConvertedStats["_DEF1"].Parent = ConvertedStats["_sup"]
+    ConvertedStats["_UIStroke10"].Parent = ConvertedStats["_DEF1"]
+
+    ConvertedStats["_REBS"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_REBS"].Text = "REBIRTHS"
+    ConvertedStats["_REBS"].TextColor3 = Color3.fromRGB(255, 234, 0)
+    ConvertedStats["_REBS"].TextScaled = true
+    ConvertedStats["_REBS"].BackgroundTransparency = 1
+    ConvertedStats["_REBS"].Position = UDim2.new(0.0257487558, 0, 0.706855357, 0)
+    ConvertedStats["_REBS"].Size = UDim2.new(0.437757969, 0, 0.164446443, 0)
+    ConvertedStats["_REBS"].Parent = ConvertedStats["_Fortnait"]
+    ConvertedStats["_UIStroke11"].Parent = ConvertedStats["_REBS"]
+
+    ConvertedStats["_REBSNUMBER"].Font = Enum.Font.FredokaOne
+    ConvertedStats["_REBSNUMBER"].Text = "nil"
+    ConvertedStats["_REBSNUMBER"].TextColor3 = Color3.fromRGB(255, 255, 255)
+    ConvertedStats["_REBSNUMBER"].TextScaled = true
+    ConvertedStats["_REBSNUMBER"].BackgroundTransparency = 1
+    ConvertedStats["_REBSNUMBER"].Position = UDim2.new(1, 0, 0, 0)
+    ConvertedStats["_REBSNUMBER"].Size = UDim2.new(1.13370693, 0, 0.986658394, 0)
+    ConvertedStats["_REBSNUMBER"].Parent = ConvertedStats["_REBS"]
+    ConvertedStats["_UIStroke12"].Parent = ConvertedStats["_REBSNUMBER"]
+
+    local playerid = localPlayer.UserId
+    local playerStats = ReplicatedStorage.Datas:WaitForChild(tostring(playerid))
+
+    local function formatNumberForTheStats(number)
+        if number >= 1_000_000_000_000_000 then return string.format("%.2fQd", number / 1_000_000_000_000_000)
+        elseif number >= 1_000_000_000_000 then return string.format("%.2fT", number / 1_000_000_000_000)
+        elseif number >= 1_000_000_000 then return string.format("%.2fB", number / 1_000_000_000)
+        elseif number >= 1_000_000 then return string.format("%.2fM", number / 1_000_000)
+        elseif number >= 1_000 then return string.format("%.2fK", number / 1_000)
+        else return tostring(number) end
+    end
+
+    task.spawn(function()
+        while true do
+            if playerStats then
+                ConvertedStats["_STRENGTHNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Strength.Value))
+                ConvertedStats["_DEFENSENUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Defense.Value))
+                ConvertedStats["_ENERGYNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Energy.Value))
+                ConvertedStats["_SPEEDNUMBER"].Text = formatNumberForTheStats(math.floor(playerStats.Speed.Value))
+                ConvertedStats["_REBSNUMBER"].Text = tostring(playerStats.Rebirth.Value)
+            end
+            task.wait(0.5)
+        end
+    end)
+
+    RunService.RenderStepped:Connect(function()
+        if ConvertedStats["_UIGradient"].Parent then
+            ConvertedStats["_UIGradient"].Rotation += 2
+            ConvertedStats["_UIGradient1"].Rotation += 2
+        end
+    end)
+end
+
+if game:GetService("CoreGui"):FindFirstChild("AUTOFARM") then
+    game:GetService("CoreGui").AUTOFARM:Destroy()
+end
+createGUI()
+
+-- ==============================================================================
+-- ANTIAFK, GODMODE & AUTO-CHARGE
+-- ==============================================================================
+local function ANTIAFK()
+    local vu = game:GetService("VirtualUser")
+    localPlayer.Idled:connect(function()
+        vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    end)
+end
+coroutine.wrap(ANTIAFK)()
+
+local function ApplyFloat(char)
+    local root = char:WaitForChild("HumanoidRootPart", 5)
+    if root then
+        for _, child in pairs(root:GetChildren()) do
+            if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then child:Destroy() end
+        end
+        local att = Instance.new("Attachment", root)
+        att.Name = "FloatAttachment"
+        local lv = Instance.new("LinearVelocity", root)
+        lv.Name = "FloatVelocity"
+        lv.Attachment0 = att
+        lv.MaxForce = math.huge
+        lv.VectorVelocity = Vector3.new(0, 0, 0)
+        lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+        lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+        lv.MaxAxesForce = Vector3.new(0, math.huge, 0)
+    end
+end
+localPlayer.CharacterAdded:Connect(ApplyFloat)
+if localPlayer.Character then ApplyFloat(localPlayer.Character) end
+
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local chaEvent = Events:WaitForChild("cha")
+
+    while true do
+        pcall(function()
+            task.spawn(function() chaEvent:InvokeServer("Blacknwhite27") end)
+        end)
+        task.wait(0.15)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO DIMENSION RAY (SPARA SOLO QUANDO SEI DAL BOSS)
+-- ==============================================================================
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package", 10):WaitForChild("Events", 10)
+    local equipSkillEvent = Events:WaitForChild("equipskill", 10)
+
+    while true do
+        pcall(function()
+            local char = localPlayer.Character
+            if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 and char:FindFirstChild("HumanoidRootPart") then
+
+                local isFighting = false
+                for bossName, isTargeted in pairs(getgenv().BossTargets) do
+                    if isTargeted then
+                        local boss = workspace.Living:FindFirstChild(bossName)
+                        if boss and boss:FindFirstChild("HumanoidRootPart") and boss:FindFirstChild("Humanoid") and boss.Humanoid.Health > 0 then
+                            local distance = (boss.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                            if distance < 30 then
+                                isFighting = true
+                                break
+                            end
+                        end
+                    end
+                end
+
+                if isFighting then
+                    task.spawn(function()
+                        equipSkillEvent:InvokeServer("Dimension Ray")
+                    end)
+
+                    local dsliceFolder = ReplicatedStorage:FindFirstChild("DimensionSlicer")
+                    if dsliceFolder and dsliceFolder:FindFirstChild("dslice") then
+                        dsliceFolder.dslice:FireServer(true)
+                        task.wait(4)
+                        dsliceFolder.dslice:FireServer(false)
+                    end
+                end
+            end
+        end)
+        task.wait(0.25)
+    end
+end)
+
+-- ==============================================================================
+-- AUTO TRANSFORMATION LOGIC (SMART CHECK - SALTA GAMEPASS/ALLINEAMENTI NON POSSEDUTI)
+-- ==============================================================================
+local transformaciones = {
+    {name = "Ultra Super Villain", forza = 4000000000000000},
+    {name = "Evil Saiyan", forza = 5000000000}, {name = "Angelic Saiyan", forza = 5000000000},
+    {name = "Ego Instinct", forza = 4500000000}, {name = "Krampus", forza = 4000000000},
+    {name = "Primal Ruin", forza = 2000000000}, {name = "True Jui", forza = 750000000},
+    {name = "Time Breaker", forza = 630000000},	{name = "Corrupt Astral", forza = 250000000},
+    {name = "Beast", forza = 120000000}, {name = "LBSSJ4", forza = 100000000},
+    {name = "SSJB4", forza = 50000000}, {name = "SSJR3", forza = 50000000},
+    {name = "True God of Creation", forza = 30000000}, {name = "True God of Destruction", forza = 30000000},
+    {name = "God of Creation", forza = 30000000}, {name = "God of Destruction", forza = 30000000},
+    {name = "Jiren Ultra Instinct", forza = 14000000}, {name = "Mastered Ultra Instinct", forza = 14000000},
+    {name = "Godly SSJ2", forza = 8000000}, {name = "Ultra Instinct Omen", forza = 5000000},
+    {name = "Super Broly", forza = 4000000}, {name = "Evil SSJ", forza = 4000000},
+    {name = "Blue Evolution", forza = 3500000}, {name = "Dark Rose", forza = 3500000},
+    {name = "LSSJG", forza = 3000000}, {name = "SSJ Berseker", forza = 3000000},
+    {name = "Kefla SSJ2", forza = 3000000}, {name = "True Rose", forza = 2400000},
+    {name = "SSJ Blue Kaioken", forza = 2200000}, {name = "SSJ Rose", forza = 1400000},
+    {name = "SSJ Blue", forza = 1200000}, {name = "SSJG4", forza = 1000000},
+    {name = "LSSJ3", forza = 800000}, {name = "Corrupt SSJ", forza = 700000},
+    {name = "SSJ Rage", forza = 700000}, {name = "SSJ5", forza = 550000},
+    {name = "SSJ4", forza = 300000}, {name = "Mystic Kaioken", forza = 250000},
+    {name = "Mystic", forza = 200000}, {name = "LSSJ Kaioken", forza = 160000},
+    {name = "LSSJ", forza = 140000}, {name = "SSJ3", forza = 95000},
+    {name = "SSJ2 Majin", forza = 65000}, {name = "Spirit SSJ", forza = 65000},
+    {name = "SSJ2 Kaioken", forza = 50000},	{name = "SSJ Kaioken", forza = 16000},
+}
+
+task.spawn(function()
+    local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+    local equipRemote = Events:WaitForChild("equipskill", 10)
+    local transformRemote = Events:WaitForChild("Fa", 10)
+
+    while true do
+        local char = localPlayer.Character
+        if char and char:FindFirstChild("Humanoid") and char.Humanoid.Health > 0 then
+            local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+            local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+            if folderData and status then
+                local strength = folderData:FindFirstChild("Strength")
+                local selected = status:FindFirstChild("SelectedTransformation")
+                local actual = status:FindFirstChild("Transformation")
+
+                if strength and selected and actual then
+                    local numStrength = tonumber(strength.Value) or 0
+
+                    for _, v in ipairs(transformaciones) do
+                        if numStrength >= v.forza then
+                            -- Se abbiamo già questa forma attiva, siamo a posto! Ferma la ricerca.
+                            if actual.Value == v.name then
+                                break
+                            end
+
+                            -- Proviamo ad equipaggiare questa forma
+                            if selected.Value ~= v.name then
+                                task.spawn(function() equipRemote:InvokeServer(v.name) end)
+                                task.wait(0.4) -- Diamo tempo al server di dirci se possiamo averla
+                            end
+
+                            -- VERIFICA: Il gioco ce l'ha fatta equipaggiare?
+                            if selected.Value == v.name then
+                                -- SÌ! Abbiamo il gamepass/lato giusto. Trasformiamoci.
+                                task.spawn(function() transformRemote:InvokeServer() end)
+                                task.wait(2)
+                                break -- Esci dal ciclo for per non provare quelle più deboli
+                            else
+                                -- NO! Il gioco l'ha rifiutata. Lo script passerà in automatico
+                                -- alla prossima forma della lista ignorando questa.
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(1.5)
+    end
+end)
+
+-- Funzione che mette in pausa il farm finché il personaggio non ha attivato la trasformazione
+local function WaitForTransformation()
+    local char = localPlayer.Character
+    if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+
+    local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+    if status then
+        local selected = status:FindFirstChild("SelectedTransformation")
+        local actual = status:FindFirstChild("Transformation")
+
+        if selected and actual then
+            -- Mettiamo un timer massimo di 8 secondi, così se qualcosa va storto non si blocca per sempre
+            local timeout = 16
+            -- Aspetta che la trasformazione attiva (actual) sia uguale a quella scelta dallo script (selected)
+            -- e che non sia "Base" (non trasformato)
+            while actual.Value ~= selected.Value and actual.Value == "Base" and timeout > 0 do
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+                task.wait(0.5)
+                timeout = timeout - 1
+            end
+            task.wait(0.5) -- Piccola pausa extra per far finire l'animazione dell'aura
+        end
+    end
+end
+
+-- ==============================================================================
+-- SISTEMA DI COMBATTIMENTO AVANZATO (INTELLIGENTE + SKILLS DA SCRIPT 2)
+-- ==============================================================================
+local BossConfig = {
+    ["Ultra Super Villain Rose Wukong Black"] = {QuestNPC = "Ultra Super Villain Rose Wukong Black", BossName = "Ultra Super Villain Rose Wukong Black", Distance = -5},
+    ["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
+    ["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
+    ["Wukong (MUI) TOP"] = {QuestNPC = nil, BossName = "Wukong (MUI) TOP", Distance = -5},
+    ["Hit"] = {QuestNPC = nil, BossName = "Hit", Distance = -5},
+    ["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
+    ["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
+    ["Fused Zamasu"] = {QuestNPC = nil, BossName = "Fused Zamasu", Distance = -5},
+    ["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable (GoD in-training)", Distance = -5},
+    ["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
+}
+
+-- 1. CERCA SOLO IL NOME ESATTO AL 100%
+local function getValidBoss(bossData)
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return nil end
+
+    for _, obj in pairs(workspace.Living:GetChildren()) do
+        -- Adesso cerca SOLO chi si chiama in modo identico (es. "X Fighter" esatto, senza lettere o numeri extra)
+        if obj.Name == bossData.BossName then
+            local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+            local bossHRP = obj:FindFirstChild("HumanoidRootPart")
+
+            if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+                return obj
+            end
+        end
+    end
+    return nil
+end
+
+local function MoveAndFight(bossData, toggleName)
+    local camera = workspace.CurrentCamera
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    local questVal = playerData and playerData:FindFirstChild("Quest")
+
+    while true do
+        if not getgenv().BossTargets[toggleName] then break end
+
+        -- FIX IMPORTANTE: Se è un boss da quest, e hai completato la quest, FERMATI SUBITO!
+        if bossData.QuestNPC and questVal then
+            if questVal.Value ~= bossData.QuestNPC and questVal.Value ~= bossData.BossName then
+                -- Esci dal combattimento per tornare a prendere la quest
+                break
+            end
+        end
+
+        local currentBoss = getValidBoss(bossData)
+        if not currentBoss then break end -- Se non ci sono boss vivi, esci
+
+        local bossHRP = currentBoss.HumanoidRootPart
+
+        pcall(function()
+            camera.CFrame = CFrame.lookAt(camera.CFrame.Position, bossHRP.Position)
+
+            local behindOffset = bossHRP.CFrame.LookVector * bossData.Distance
+            local behindPosition = bossHRP.Position + behindOffset
+            local targetCFrame = CFrame.lookAt(behindPosition, bossHRP.Position)
+
+            TweenCharacterTo(targetCFrame, MovementConfig.Speed)
+        end)
+
+        pcall(function()
+            local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+            local letsplayagame = Events:WaitForChild("FaFa")
+
+            Events.p:FireServer("Blacknwhite27", 1)
+            coroutine.wrap(function() letsplayagame:InvokeServer("Meteor Crash", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Wolf Fang Fist", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Mach Kick", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("God Slicer", "Blacknwhite27") end)()
+            coroutine.wrap(function() letsplayagame:InvokeServer("Super Dragon Fist", "Blacknwhite27") end)()
+        end)
+
+        task.wait(0.1)
+    end
+
+    pcall(function()
+        camera.CameraType = Enum.CameraType.Custom
+        camera.CameraSubject = localPlayer.Character.Humanoid
+    end)
+end
+
+local function WaitForBossToSpawn(bossData, timeLimit, toggleName)
+    local startTime = os.time()
+    local bossReady = false
+
+    repeat
+        local char = localPlayer.Character
+        if not char or not char:FindFirstChild("Humanoid") or char.Humanoid.Health <= 0 then return end
+        if not getgenv().BossTargets[toggleName] then return end
+
+        task.wait(0.2)
+        local currentBoss = getValidBoss(bossData)
+        bossReady = (currentBoss ~= nil)
+    until bossReady or os.time() - startTime > timeLimit
+
+    if bossReady then
+        task.wait(0.2)
+        MoveAndFight(bossData, toggleName)
+    end
+end
+
+local function CheckAndFightBoss(bossName)
+    local bossData = BossConfig[bossName]
+    if not bossData then return end
+
+    WaitForTransformation()
+
+    local character = localPlayer.Character
+    if not character or not character:FindFirstChild("Humanoid") or character.Humanoid.Health <= 0 then return end
+
+    local hrp = character:FindFirstChild("HumanoidRootPart")
+    local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+    if not playerData or not hrp then return end
+
+    if bossData.QuestNPC then
+        local questVal = playerData:WaitForChild("Quest")
+        local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
+        local expectedQuestName = bossData.QuestNPC
+
+        -- PRENDE LA QUEST SOLO SE NON CE L'HA
+        if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+            while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
+                if not getgenv().BossTargets[bossName] then return end
+                if not localPlayer.Character or localPlayer.Character:FindFirstChild("Humanoid").Health <= 0 then return end
+
+                local npcRoot = bossNpc:FindFirstChild("HumanoidRootPart")
+                if not npcRoot then
+                    break
+                end
+
+                local questPosition = npcRoot.CFrame * CFrame.new(0, 0, -3)
+                TweenCharacterTo(questPosition, MovementConfig.Speed)
+
+                pcall(function()
+                    ReplicatedStorage.Package.Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+                end)
+
+                task.wait(0.2)
+            end
+        end
+
+        -- SE HA PRESO LA QUEST (o se l'aveva già), VA A COMBATTERE
+        if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
+            WaitForBossToSpawn(bossData, 5, bossName)
+        end
+    else
+        WaitForBossToSpawn(bossData, 5, bossName)
+    end
+end
+
+-- Main Farm Loop
+task.spawn(function()
+    while true do
+        if localPlayer.Character and localPlayer.Character:FindFirstChild("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+            for bossName, isToggled in pairs(getgenv().BossTargets) do
+                if isToggled then
+                    CheckAndFightBoss(bossName)
+                end
+            end
+        end
+        task.wait(0.5)
+    end
+end)
