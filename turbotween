@@ -1,0 +1,1042 @@
+-- ==============================================================================
+-- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI (TEST E SCRIPT PRECEDENTI)
+-- ==============================================================================
+if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
+if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
+if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
+if getgenv().CiabCleanup then pcall(getgenv().CiabCleanup) end
+
+local ScriptSessionId = tick()
+getgenv().CiabSessionId = ScriptSessionId
+
+local function IsCurrentSession()
+	return getgenv().CiabSessionId == ScriptSessionId
+end
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local camera = workspace.CurrentCamera
+
+local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+local equipRemote = Events:WaitForChild("equipskill")
+local transformRemote = Events:WaitForChild("Fa")
+local skillRemote = Events:WaitForChild("FaFa")
+local punchRemote = Events:WaitForChild("p")
+local chaRemote = Events:WaitForChild("cha")
+
+-- Lista delle 5 skill da equipaggiare e usare
+local combatSkills = {
+	"God Slicer",
+	"Mach Kick",
+	"Meteor Crash",
+	"Wolf Fang Fist",
+	"Super Dragon Fist"
+}
+
+local function EquipAllSkills()
+	for _, skillName in ipairs(combatSkills) do
+		pcall(function()
+			local args = { skillName }
+			equipRemote:InvokeServer(unpack(args))
+		end)
+		task.wait(0.08)
+	end
+end
+
+-- Equipaggia subito all'avvio
+task.spawn(EquipAllSkills)
+
+-- ==============================================================================
+-- 💾 CONFIGURAZIONE (.JSON) + STATO INIZIALE SPENTO (FALSE)
+-- ==============================================================================
+local ConfigName = "CiabTurboConfig.json"
+
+local bossNamesList = {
+	"Surfs Up Grand Priest",
+	"Ultra Super Villain Rose Wukong Black",
+	"Wukong (TUI)",
+	"Ultra Super Villain Vegetable",
+	"Wukong (MUI) TOP",
+	"Hit",
+	"Goheta (Base - SSJB)",
+	"Universal Vegito",
+	"Fused Zamasu",
+	"Vegetable (GoD in-training)",
+	"X Fighter Trainer"
+}
+
+getgenv().AutoFarmActive = false
+getgenv().TweenSpeed = 300
+getgenv().BossTargets = {}
+
+-- Tutti i boss partono spenti all'esecuzione
+for _, name in ipairs(bossNamesList) do
+	getgenv().BossTargets[name] = false
+end
+
+if isfile and isfile(ConfigName) then
+	local success, data = pcall(function()
+		return HttpService:JSONDecode(readfile(ConfigName))
+	end)
+	if success and type(data) == "table" and tonumber(data.TweenSpeed) then
+		getgenv().TweenSpeed = math.clamp(tonumber(data.TweenSpeed), 10, 10000)
+	end
+end
+
+local function SaveConfig()
+	if writefile then
+		pcall(function()
+			writefile(ConfigName, HttpService:JSONEncode({
+				BossTargets = getgenv().BossTargets,
+				TweenSpeed = getgenv().TweenSpeed
+			}))
+		end)
+	end
+end
+
+-- ==============================================================================
+-- ✈️ SISTEMA TWEEN (PER VIAGGI) + LOCK-ON RAPIDO (SUL BOSS)
+-- ==============================================================================
+local activeTween = nil
+local currentLockedBoss = nil
+local behindDistance = -5
+local connections = {}
+
+local function StopActiveTween()
+	if activeTween then
+		pcall(function() activeTween:Cancel() end)
+		activeTween = nil
+	end
+end
+
+local function UpdateFloatState()
+	local char = localPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not root then return end
+
+	for _, child in ipairs(root:GetChildren()) do
+		if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then
+			child:Destroy()
+		end
+	end
+
+	if hum then
+		hum.AutoRotate = not getgenv().AutoFarmActive
+	end
+
+	if getgenv().AutoFarmActive then
+		local att = Instance.new("Attachment", root)
+		att.Name = "FloatAttachment"
+		local lv = Instance.new("LinearVelocity", root)
+		lv.Name = "FloatVelocity"
+		lv.Attachment0 = att
+		lv.MaxForce = math.huge
+		lv.VectorVelocity = Vector3.zero
+		lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+		lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+		lv.MaxAxesForce = Vector3.new(0, math.huge, 0)
+	end
+end
+
+-- Noclip attivo quando l'Auto-Farm è acceso
+table.insert(connections, RunService.Stepped:Connect(function()
+	if not getgenv().AutoFarmActive then return end
+	local char = localPlayer.Character
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+	end
+end))
+
+-- ⚡ LOCK-ON RAPIDO SU RENDERSTEPPED (Aggancia il Boss entro 25 studs senza tremolio)
+table.insert(connections, RunService.RenderStepped:Connect(function()
+	if not getgenv().AutoFarmActive or not currentLockedBoss then return end
+
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local eHrp = currentLockedBoss:FindFirstChild("HumanoidRootPart")
+	local eHum = currentLockedBoss:FindFirstChildOfClass("Humanoid")
+
+	if not hrp or not hum or hum.Health <= 0 or not eHrp or not eHum or eHum.Health <= 0 then
+		return
+	end
+
+	local dist = (hrp.Position - eHrp.Position).Magnitude
+	if dist <= 25 then
+		StopActiveTween()
+		hum.AutoRotate = false
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * behindDistance)
+		local targetCF = CFrame.new(behindPos, eHrp.Position)
+
+		hrp.CFrame = hrp.CFrame:Lerp(targetCF, 0.88)
+		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
+	end
+end))
+
+-- Movimento Tween per andare dal Quest NPC o avvicinarsi al Boss
+local function MoveToTarget(targetCFrame, waitForCompletion)
+	if not getgenv().AutoFarmActive or not IsCurrentSession() then
+		StopActiveTween()
+		return
+	end
+	if waitForCompletion == nil then waitForCompletion = true end
+
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+
+	local currentSpeed = math.clamp(tonumber(getgenv().TweenSpeed) or 300, 10, 10000)
+	local distance = (hrp.Position - targetCFrame.Position).Magnitude
+	local duration = math.max(distance / currentSpeed, 0.04)
+
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+
+	StopActiveTween()
+	activeTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+	activeTween:Play()
+
+	if not waitForCompletion then return end
+
+	local startClock = os.clock()
+	while activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing do
+		if not IsCurrentSession() or not getgenv().AutoFarmActive then
+			StopActiveTween()
+			break
+		end
+		if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+			StopActiveTween()
+			break
+		end
+
+		local updatedSpeed = math.clamp(tonumber(getgenv().TweenSpeed) or 300, 10, 10000)
+		if math.abs(updatedSpeed - currentSpeed) > 5 then
+			currentSpeed = updatedSpeed
+			local remDist = (hrp.Position - targetCFrame.Position).Magnitude
+			duration = math.max(remDist / currentSpeed, 0.04)
+			StopActiveTween()
+			activeTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+			activeTween:Play()
+			startClock = os.clock()
+		end
+
+		if (hrp.Position - targetCFrame.Position).Magnitude <= 4 or (os.clock() - startClock) > (duration + 0.5) then
+			break
+		end
+		task.wait(0.03)
+	end
+end
+
+getgenv().CiabCleanup = function()
+	getgenv().AutoFarmActive = false
+	currentLockedBoss = nil
+	StopActiveTween()
+	UpdateFloatState()
+	for _, conn in ipairs(connections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	table.clear(connections)
+	if CoreGui:FindFirstChild("CiabCyberHub") then
+		CoreGui.CiabCyberHub:Destroy()
+	end
+end
+
+local function MakeDraggable(dragHandle, targetFrame)
+	local dragging, dragInput, dragStart, startPos
+	table.insert(connections, dragHandle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = targetFrame.Position
+			input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then dragging = false end
+			end)
+		end
+	end))
+	table.insert(connections, dragHandle.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end))
+	table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging and targetFrame and targetFrame.Parent then
+			local delta = input.Position - dragStart
+			targetFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end))
+end
+
+-- ==============================================================================
+-- 🎨 GUI: PANNELLO CONTROLLO BOSS & TWEEN SPEED
+-- ==============================================================================
+local function CreateMasterpieceGUIs()
+	for _, guiName in ipairs({"UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub"}) do
+		if CoreGui:FindFirstChild(guiName) then
+			CoreGui[guiName]:Destroy()
+		end
+	end
+
+	local ScreenGui = Instance.new("ScreenGui")
+	ScreenGui.Name = "CiabCyberHub"
+	ScreenGui.Parent = CoreGui
+	ScreenGui.ResetOnSpawn = false
+	ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	ScreenGui.DisplayOrder = 9999
+
+	local MainWin = Instance.new("Frame")
+	MainWin.Name = "MainWindow"
+	MainWin.Size = UDim2.new(0, 340, 0, 480)
+	MainWin.Position = UDim2.new(1, -360, 0.5, -240)
+	MainWin.BackgroundColor3 = Color3.fromRGB(13, 14, 20)
+	MainWin.BackgroundTransparency = 0.06
+	MainWin.ClipsDescendants = true
+	MainWin.Active = true
+	MainWin.Parent = ScreenGui
+	Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 14)
+
+	local winStroke = Instance.new("UIStroke", MainWin)
+	winStroke.Thickness = 2
+	winStroke.Color = Color3.fromRGB(255, 255, 255)
+	local winGrad = Instance.new("UIGradient", winStroke)
+	winGrad.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 200)),
+		ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 140, 255)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(140, 0, 255))
+	}
+
+	local Header = Instance.new("Frame", MainWin)
+	Header.Size = UDim2.new(1, 0, 0, 44)
+	Header.BackgroundColor3 = Color3.fromRGB(19, 21, 30)
+	Header.BorderSizePixel = 0
+	Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 14)
+	MakeDraggable(Header, MainWin)
+
+	local TitleLbl = Instance.new("TextLabel", Header)
+	TitleLbl.Size = UDim2.new(1, -60, 0, 22)
+	TitleLbl.Position = UDim2.new(0, 14, 0, 5)
+	TitleLbl.BackgroundTransparency = 1
+	TitleLbl.Font = Enum.Font.GothamBlack
+	TitleLbl.Text = "⚡ CIAB BOSS PANEL"
+	TitleLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	TitleLbl.TextSize = 15
+	TitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	local SubTitleLbl = Instance.new("TextLabel", Header)
+	SubTitleLbl.Size = UDim2.new(1, -60, 0, 14)
+	SubTitleLbl.Position = UDim2.new(0, 14, 0, 25)
+	SubTitleLbl.BackgroundTransparency = 1
+	SubTitleLbl.Font = Enum.Font.GothamMedium
+	SubTitleLbl.Text = "True SSJG | Lock-On Rapido + 5 Skill"
+	SubTitleLbl.TextColor3 = Color3.fromRGB(0, 230, 180)
+	SubTitleLbl.TextSize = 11
+	SubTitleLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	local MinBtn = Instance.new("TextButton", Header)
+	MinBtn.Size = UDim2.new(0, 28, 0, 28)
+	MinBtn.Position = UDim2.new(1, -36, 0, 8)
+	MinBtn.BackgroundColor3 = Color3.fromRGB(30, 34, 48)
+	MinBtn.Font = Enum.Font.GothamBold
+	MinBtn.Text = "—"
+	MinBtn.TextColor3 = Color3.fromRGB(200, 210, 230)
+	MinBtn.TextSize = 13
+	Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+
+	local isMinimized = false
+	MinBtn.MouseButton1Click:Connect(function()
+		isMinimized = not isMinimized
+		MinBtn.Text = isMinimized and "+" or "—"
+		local targetSize = isMinimized and UDim2.new(0, 340, 0, 44) or UDim2.new(0, 340, 0, 480)
+		TweenService:Create(MainWin, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = targetSize}):Play()
+	end)
+
+	local MasterBtn = Instance.new("TextButton", MainWin)
+	MasterBtn.Size = UDim2.new(1, -24, 0, 34)
+	MasterBtn.Position = UDim2.new(0, 12, 0, 52)
+	MasterBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
+	MasterBtn.Font = Enum.Font.GothamBlack
+	MasterBtn.Text = "⏹️ AUTO-FARM: DISATTIVATO (CLICCA PER AVVIARE)"
+	MasterBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	MasterBtn.TextSize = 11
+	Instance.new("UICorner", MasterBtn).CornerRadius = UDim.new(0, 8)
+
+	local function RefreshMasterBtn()
+		if getgenv().AutoFarmActive then
+			MasterBtn.BackgroundColor3 = Color3.fromRGB(16, 150, 90)
+			MasterBtn.Text = "▶️ AUTO-FARM: ATTIVO (CLICCA PER FERMARE)"
+		else
+			MasterBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
+			MasterBtn.Text = "⏹️ AUTO-FARM: DISATTIVATO (CLICCA PER AVVIARE)"
+		end
+	end
+
+	local lastMasterClick = 0
+	MasterBtn.MouseButton1Click:Connect(function()
+		if os.clock() - lastMasterClick < 0.2 then return end
+		lastMasterClick = os.clock()
+
+		getgenv().AutoFarmActive = not getgenv().AutoFarmActive
+		RefreshMasterBtn()
+		UpdateFloatState()
+		if not getgenv().AutoFarmActive then
+			currentLockedBoss = nil
+			StopActiveTween()
+			getgenv().UpdateCiabStatus("⏸️ STATO: Disattivato")
+			pcall(function()
+				camera.CameraType = Enum.CameraType.Custom
+				camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+			end)
+		else
+			task.spawn(EquipAllSkills)
+			getgenv().UpdateCiabStatus("🟢 STATO: Avviato!")
+		end
+	end)
+
+	local StatusBanner = Instance.new("Frame", MainWin)
+	StatusBanner.Size = UDim2.new(1, -24, 0, 26)
+	StatusBanner.Position = UDim2.new(0, 12, 0, 92)
+	StatusBanner.BackgroundColor3 = Color3.fromRGB(20, 23, 34)
+	Instance.new("UICorner", StatusBanner).CornerRadius = UDim.new(0, 8)
+
+	local StatusText = Instance.new("TextLabel", StatusBanner)
+	StatusText.Size = UDim2.new(1, -16, 1, 0)
+	StatusText.Position = UDim2.new(0, 8, 0, 0)
+	StatusText.BackgroundTransparency = 1
+	StatusText.Font = Enum.Font.GothamSemibold
+	StatusText.Text = "⏸️ STATO: Disattivato (Scegli i boss e avvia)"
+	StatusText.TextColor3 = Color3.fromRGB(190, 205, 225)
+	StatusText.TextSize = 11
+	StatusText.TextXAlignment = Enum.TextXAlignment.Left
+	getgenv().UpdateCiabStatus = function(txt)
+		if StatusText and StatusText.Parent then
+			StatusText.Text = txt
+		end
+	end
+
+	local SpeedBox = Instance.new("Frame", MainWin)
+	SpeedBox.Size = UDim2.new(1, -24, 0, 54)
+	SpeedBox.Position = UDim2.new(0, 12, 0, 124)
+	SpeedBox.BackgroundColor3 = Color3.fromRGB(20, 23, 34)
+	Instance.new("UICorner", SpeedBox).CornerRadius = UDim.new(0, 10)
+	local sbStroke = Instance.new("UIStroke", SpeedBox)
+	sbStroke.Thickness = 1
+	sbStroke.Color = Color3.fromRGB(0, 180, 255)
+	sbStroke.Transparency = 0.5
+
+	local SpeedTitle = Instance.new("TextLabel", SpeedBox)
+	SpeedTitle.Size = UDim2.new(1, -90, 0, 20)
+	SpeedTitle.Position = UDim2.new(0, 10, 0, 5)
+	SpeedTitle.BackgroundTransparency = 1
+	SpeedTitle.Font = Enum.Font.GothamBold
+	SpeedTitle.Text = "✈️ VELOCITÀ TWEEN (10 - 10000)"
+	SpeedTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
+	SpeedTitle.TextSize = 11
+	SpeedTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+	local SpeedInput = Instance.new("TextBox", SpeedBox)
+	SpeedInput.Size = UDim2.new(0, 64, 0, 20)
+	SpeedInput.Position = UDim2.new(1, -74, 0, 5)
+	SpeedInput.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+	SpeedInput.Font = Enum.Font.GothamBlack
+	SpeedInput.Text = tostring(getgenv().TweenSpeed)
+	SpeedInput.TextColor3 = Color3.fromRGB(0, 255, 190)
+	SpeedInput.TextSize = 12
+	SpeedInput.ClearTextOnFocus = false
+	Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
+
+	local SliderBg = Instance.new("Frame", SpeedBox)
+	SliderBg.Size = UDim2.new(1, -20, 0, 10)
+	SliderBg.Position = UDim2.new(0, 10, 0, 34)
+	SliderBg.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+	Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
+
+	local SliderFill = Instance.new("Frame", SliderBg)
+	local initRatio = (getgenv().TweenSpeed - 10) / (10000 - 10)
+	SliderFill.Size = UDim2.new(initRatio, 0, 1, 0)
+	SliderFill.BackgroundColor3 = Color3.fromRGB(0, 210, 255)
+	Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
+
+	local SliderKnob = Instance.new("Frame", SliderBg)
+	SliderKnob.Size = UDim2.new(0, 16, 0, 16)
+	SliderKnob.Position = UDim2.new(initRatio, -8, 0.5, -8)
+	SliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	Instance.new("UICorner", SliderKnob).CornerRadius = UDim.new(1, 0)
+
+	local function SetTweenSpeed(val)
+		val = math.clamp(math.floor(tonumber(val) or 300), 10, 10000)
+		getgenv().TweenSpeed = val
+		SpeedInput.Text = tostring(val)
+		local ratio = (val - 10) / (10000 - 10)
+		SliderFill.Size = UDim2.new(ratio, 0, 1, 0)
+		SliderKnob.Position = UDim2.new(ratio, -8, 0.5, -8)
+		SaveConfig()
+	end
+
+	local sliding = false
+	local function UpdateFromMouse(input)
+		if not SliderBg or not SliderBg.Parent then return end
+		local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
+		local newVal = math.floor(10 + relX * 9990)
+		SetTweenSpeed(newVal)
+	end
+
+	SliderBg.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			sliding = true
+			UpdateFromMouse(input)
+		end
+	end)
+	table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			sliding = false
+		end
+	end))
+	table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+		if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			UpdateFromMouse(input)
+		end
+	end))
+
+	SpeedInput.FocusLost:Connect(function()
+		SetTweenSpeed(SpeedInput.Text)
+	end)
+
+	local QuickBar = Instance.new("Frame", MainWin)
+	QuickBar.Size = UDim2.new(1, -24, 0, 28)
+	QuickBar.Position = UDim2.new(0, 12, 0, 184)
+	QuickBar.BackgroundTransparency = 1
+
+	local EnableAllBtn = Instance.new("TextButton", QuickBar)
+	EnableAllBtn.Size = UDim2.new(0.49, 0, 1, 0)
+	EnableAllBtn.BackgroundColor3 = Color3.fromRGB(30, 95, 65)
+	EnableAllBtn.Font = Enum.Font.GothamBold
+	EnableAllBtn.Text = "✓ SELEZIONA TUTTI"
+	EnableAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	EnableAllBtn.TextSize = 11
+	Instance.new("UICorner", EnableAllBtn).CornerRadius = UDim.new(0, 6)
+
+	local DisableAllBtn = Instance.new("TextButton", QuickBar)
+	DisableAllBtn.Size = UDim2.new(0.49, 0, 1, 0)
+	DisableAllBtn.Position = UDim2.new(0.51, 0, 0, 0)
+	DisableAllBtn.BackgroundColor3 = Color3.fromRGB(120, 35, 45)
+	DisableAllBtn.Font = Enum.Font.GothamBold
+	DisableAllBtn.Text = "✕ DESELEZIONA TUTTI"
+	DisableAllBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	DisableAllBtn.TextSize = 11
+	Instance.new("UICorner", DisableAllBtn).CornerRadius = UDim.new(0, 6)
+
+	local BossScroll = Instance.new("ScrollingFrame", MainWin)
+	BossScroll.Size = UDim2.new(1, -24, 1, -228)
+	BossScroll.Position = UDim2.new(0, 12, 0, 218)
+	BossScroll.BackgroundTransparency = 1
+	BossScroll.ScrollBarThickness = 3
+	BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 210, 255)
+	BossScroll.BorderSizePixel = 0
+
+	local bossLayout = Instance.new("UIListLayout", BossScroll)
+	bossLayout.Padding = UDim.new(0, 6)
+
+	local toggleRefreshCallbacks = {}
+
+	for _, bossName in ipairs(bossNamesList) do
+		local card = Instance.new("TextButton", BossScroll)
+		card.Size = UDim2.new(1, -6, 0, 38)
+		card.BackgroundColor3 = Color3.fromRGB(22, 25, 36)
+		card.Text = ""
+		card.AutoButtonColor = false
+		Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+		local cardStroke = Instance.new("UIStroke", card)
+		cardStroke.Thickness = 1
+
+		local nameLbl = Instance.new("TextLabel", card)
+		nameLbl.Size = UDim2.new(1, -62, 1, 0)
+		nameLbl.Position = UDim2.new(0, 12, 0, 0)
+		nameLbl.BackgroundTransparency = 1
+		nameLbl.Font = Enum.Font.GothamSemibold
+		nameLbl.Text = bossName
+		nameLbl.TextColor3 = Color3.fromRGB(235, 240, 255)
+		nameLbl.TextSize = 12
+		nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+		nameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+		local switchBg = Instance.new("Frame", card)
+		switchBg.Size = UDim2.new(0, 40, 0, 20)
+		switchBg.Position = UDim2.new(1, -50, 0.5, -10)
+		switchBg.Active = false
+		Instance.new("UICorner", switchBg).CornerRadius = UDim.new(1, 0)
+
+		local switchKnob = Instance.new("Frame", switchBg)
+		switchKnob.Size = UDim2.new(0, 16, 0, 16)
+		switchKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		switchKnob.Active = false
+		Instance.new("UICorner", switchKnob).CornerRadius = UDim.new(1, 0)
+
+		local function RefreshVisual()
+			local active = getgenv().BossTargets[bossName] == true
+			local bgCol = active and Color3.fromRGB(0, 210, 130) or Color3.fromRGB(55, 60, 80)
+			local strokeCol = active and Color3.fromRGB(0, 210, 130) or Color3.fromRGB(35, 40, 55)
+			local knobPos = active and UDim2.new(1, -18, 0.5, -8) or UDim2.new(0, 2, 0.5, -8)
+			TweenService:Create(switchBg, TweenInfo.new(0.18), {BackgroundColor3 = bgCol}):Play()
+			TweenService:Create(cardStroke, TweenInfo.new(0.18), {Color = strokeCol}):Play()
+			TweenService:Create(switchKnob, TweenInfo.new(0.18), {Position = knobPos}):Play()
+		end
+
+		local lastCardClick = 0
+		local function ToggleThisBoss()
+			if os.clock() - lastCardClick < 0.2 then return end
+			lastCardClick = os.clock()
+
+			getgenv().BossTargets[bossName] = not (getgenv().BossTargets[bossName] == true)
+			if not getgenv().BossTargets[bossName] then
+				currentLockedBoss = nil
+				StopActiveTween()
+			end
+			RefreshVisual()
+			SaveConfig()
+		end
+
+		RefreshVisual()
+		table.insert(toggleRefreshCallbacks, RefreshVisual)
+		card.MouseButton1Click:Connect(ToggleThisBoss)
+	end
+
+	EnableAllBtn.MouseButton1Click:Connect(function()
+		for _, name in ipairs(bossNamesList) do getgenv().BossTargets[name] = true end
+		for _, fn in ipairs(toggleRefreshCallbacks) do fn() end
+		SaveConfig()
+	end)
+
+	DisableAllBtn.MouseButton1Click:Connect(function()
+		for _, name in ipairs(bossNamesList) do getgenv().BossTargets[name] = false end
+		currentLockedBoss = nil
+		StopActiveTween()
+		for _, fn in ipairs(toggleRefreshCallbacks) do fn() end
+		SaveConfig()
+	end)
+
+	bossLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		BossScroll.CanvasSize = UDim2.new(0, 0, 0, bossLayout.AbsoluteContentSize.Y + 6)
+	end)
+
+	table.insert(connections, RunService.RenderStepped:Connect(function()
+		if winGrad and winGrad.Parent then
+			winGrad.Rotation = (winGrad.Rotation + 1.5) % 360
+		end
+	end))
+end
+
+CreateMasterpieceGUIs()
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO
+-- ==============================================================================
+task.spawn(function()
+	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+	if queue_on_teleport then
+		queue_on_teleport([[
+			repeat task.wait() until game:IsLoaded()
+			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboauto"))()
+		]])
+	end
+end)
+
+task.spawn(function()
+	repeat task.wait() until game:IsLoaded()
+
+	local function IsPublicServer()
+		if #Players:GetPlayers() > 1 then return false end
+		local jobId = game.JobId
+		local placeId = game.PlaceId
+		local cursor = ""
+		local pages = 0
+		while pages < 8 do
+			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+			if not requestFunc then return false end
+			local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+			if not success or not response or response.StatusCode ~= 200 then break end
+			local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+			if not ok or not data or not data.data then break end
+			for _, server in ipairs(data.data) do
+				if server.id == jobId then return true end
+			end
+			cursor = data.nextPageCursor
+			if not cursor or cursor == "" then break end
+			pages += 1
+			task.wait(0.15)
+		end
+		return false
+	end
+
+	if IsPublicServer() then
+		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+	else
+		local TPEvent = Events:WaitForChild("TP")
+		local isEscaping = false
+
+		local function FugaSullaTerra()
+			if isEscaping then return end
+			isEscaping = true
+			warn("⚠️ Intruso rilevato! Fuga istantanea verso Earth...")
+			StopActiveTween()
+			pcall(function()
+				if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+					localPlayer.Character.HumanoidRootPart.Anchored = true
+				end
+			end)
+			pcall(function() TPEvent:InvokeServer("Earth") end)
+			task.delay(5, function()
+				localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito. Disconnessione di emergenza.")
+			end)
+		end
+
+		if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+		table.insert(connections, Players.PlayerAdded:Connect(function(player)
+			if player.UserId ~= localPlayer.UserId then FugaSullaTerra() end
+		end))
+		task.spawn(function()
+			while IsCurrentSession() and task.wait(1) do
+				if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+			end
+		end)
+	end
+end)
+
+task.spawn(function()
+	local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+	local mainGui = playerGui and playerGui:WaitForChild("Main", 10)
+	if not mainGui then return end
+
+	task.wait(1)
+	local StartEvent = Events:WaitForChild("Start")
+	pcall(function()
+		StartEvent:InvokeServer()
+		task.wait()
+		StartEvent:InvokeServer()
+	end)
+	local bruhButton = mainGui:FindFirstChild("bruh")
+	if bruhButton then
+		bruhButton.Disabled = true
+		bruhButton.Disabled = false
+	end
+	task.wait()
+	pcall(function() StartEvent:InvokeServer() end)
+end)
+
+-- ==============================================================================
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") ULTRA-VELOCIZZATO
+-- ==============================================================================
+table.insert(connections, localPlayer.Idled:Connect(function()
+	local vu = game:GetService("VirtualUser")
+	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+	task.wait(1)
+	vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end))
+
+table.insert(connections, localPlayer.CharacterAdded:Connect(function()
+	task.wait(1)
+	UpdateFloatState()
+	EquipAllSkills()
+end))
+
+-- Ricarica Ki ("cha") ultra-rapida: doppio impulso asincrono ogni 0.03s
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+		end
+		task.wait(0.03)
+	end
+end)
+
+-- ==============================================================================
+-- 🔥 SOLO TRUE SSJG (MINIMO 6Qa / 6Qd DIFESA)
+-- ==============================================================================
+local TARGET_FORM = "True SSJG"
+local MIN_DEFENSE = 6000000000000000 -- 6Qa / 6Qd
+local MIN_REBIRTH = 0
+
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			local char = localPlayer.Character
+			if char and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
+				local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+				local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+				if folderData and status then
+					local defense = folderData:FindFirstChild("Defense")
+					local rebirth = folderData:FindFirstChild("Rebirth")
+					local selected = status:FindFirstChild("SelectedTransformation")
+					local actual = status:FindFirstChild("Transformation")
+
+					if defense and rebirth and selected and actual then
+						local numDefense = tonumber(defense.Value) or 0
+						local numRebirth = tonumber(rebirth.Value) or 0
+
+						if numDefense >= MIN_DEFENSE and numRebirth >= MIN_REBIRTH then
+							if actual.Value ~= TARGET_FORM then
+								if selected.Value ~= TARGET_FORM then
+									pcall(function() equipRemote:InvokeServer(TARGET_FORM) end)
+									task.wait(0.35)
+								end
+								if selected.Value == TARGET_FORM then
+									pcall(function() transformRemote:InvokeServer() end)
+									task.wait(1.2)
+									EquipAllSkills()
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+		task.wait(1.5)
+	end
+end)
+
+local function WaitForTransformation()
+	if not getgenv().AutoFarmActive then return end
+	local char = localPlayer.Character
+	if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return end
+
+	local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+	if folderData and status then
+		local defense = folderData:FindFirstChild("Defense")
+		local rebirth = folderData:FindFirstChild("Rebirth")
+		local actual = status:FindFirstChild("Transformation")
+
+		if defense and rebirth and actual then
+			if (tonumber(defense.Value) or 0) >= MIN_DEFENSE and (tonumber(rebirth.Value) or 0) >= MIN_REBIRTH then
+				local timeout = 16
+				while actual.Value ~= TARGET_FORM and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() do
+					if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return end
+					getgenv().UpdateCiabStatus("⚡ Attivazione " .. TARGET_FORM .. "...")
+					task.wait(0.5)
+					timeout = timeout - 1
+				end
+			end
+		end
+	end
+end
+
+-- ==============================================================================
+-- ⚔️ SISTEMA DI COMBATTIMENTO (IDENTICO AL TEST: EQUIPSKILL + PUGNO + 5 SKILL)
+-- ==============================================================================
+local BossConfig = {
+	["Surfs Up Grand Priest"] = {QuestNPC = nil, BossName = "Surfs Up Grand Priest", Distance = -5},
+	["Ultra Super Villain Rose Wukong Black"] = {QuestNPC = "Ultra Super Villain Rose Wukong Black", BossName = "Ultra Super Villain Rose Wukong Black", Distance = -5},
+	["Wukong (TUI)"] = {QuestNPC = "Wukong (TUI)", BossName = "Wukong (TUI)", Distance = -5},
+	["Ultra Super Villain Vegetable"] = {QuestNPC = "Ultra Super Villain Vegetable", BossName = "Ultra Super Villain Vegetable", Distance = -5},
+	["Wukong (MUI) TOP"] = {QuestNPC = nil, BossName = "Wukong (MUI) TOP", Distance = -5},
+	["Hit"] = {QuestNPC = nil, BossName = "Hit", Distance = -5},
+	["Goheta (Base - SSJB)"] = {QuestNPC = "Goheta (Base - SSJB)", BossName = "Goheta (Base - SSJB)", Distance = -5},
+	["Universal Vegito"] = {QuestNPC = nil, BossName = "Universal Vegito", Distance = -5},
+	["Fused Zamasu"] = {QuestNPC = nil, BossName = "Fused Zamasu", Distance = -5},
+	["Vegetable (GoD in-training)"] = {QuestNPC = "Vegetable (GoD in-training)", BossName = "Vegetable (GoD in-training)", Distance = -5},
+	["X Fighter Trainer"] = {QuestNPC = "X Fighter Trainer", BossName = "X Fighter", Distance = -5}
+}
+
+local function getValidBoss(bossData)
+	local character = localPlayer.Character
+	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
+
+	for _, obj in pairs(workspace.Living:GetChildren()) do
+		if obj.Name == bossData.BossName then
+			local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+			local bossHRP = obj:FindFirstChild("HumanoidRootPart")
+			if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+				return obj
+			end
+		end
+	end
+	return nil
+end
+
+-- Funzione d'attacco esatta del test funzionante
+local function DoFullAttack()
+	pcall(function()
+		punchRemote:FireServer("Blacknwhite27", 1, false)
+		punchRemote:FireServer("Blacknwhite27", 1)
+
+		for _, skillName in ipairs(combatSkills) do
+			coroutine.wrap(function()
+				pcall(function()
+					equipRemote:InvokeServer(skillName)
+					skillRemote:InvokeServer(skillName, "Blacknwhite27")
+				end)
+			end)()
+		end
+	end)
+end
+
+local function TweenAndFight(bossData, toggleName)
+	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	local questVal = playerData and playerData:FindFirstChild("Quest")
+	behindDistance = bossData.Distance or -5
+
+	task.spawn(EquipAllSkills)
+
+	while IsCurrentSession() and getgenv().AutoFarmActive and getgenv().BossTargets[toggleName] do
+		if bossData.QuestNPC and questVal then
+			if questVal.Value ~= bossData.QuestNPC and questVal.Value ~= bossData.BossName then
+				break
+			end
+		end
+
+		local currentBoss = getValidBoss(bossData)
+		if not currentBoss then break end
+
+		local bossHRP = currentBoss:FindFirstChild("HumanoidRootPart")
+		local bossHum = currentBoss:FindFirstChildOfClass("Humanoid")
+		local character = localPlayer.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not bossHRP or not bossHum or not hrp then break end
+
+		currentLockedBoss = currentBoss
+		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
+
+		if distToBoss > 25 then
+			-- Avvicinamento con Tween se lontano
+			getgenv().UpdateCiabStatus("✈️ Tween verso Boss: " .. bossData.BossName)
+			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
+			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
+			pcall(function() MoveToTarget(targetCF, false) end)
+		else
+			-- Entro 25 studs il Lock-On su RenderStepped tiene la schiena e DoFullAttack colpisce
+			local hpPct = math.floor((bossHum.Health / math.max(bossHum.MaxHealth, 1)) * 100)
+			getgenv().UpdateCiabStatus(string.format("⚔️ %s [HP: %d%%]", bossData.BossName, hpPct))
+			DoFullAttack()
+		end
+
+		task.wait(0.12)
+	end
+
+	currentLockedBoss = nil
+	StopActiveTween()
+	pcall(function()
+		camera.CameraType = Enum.CameraType.Custom
+		if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") then
+			localPlayer.Character:FindFirstChildOfClass("Humanoid").AutoRotate = true
+			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+		end
+	end)
+end
+
+local function WaitForBossToSpawn(bossData, timeLimit, toggleName)
+	local startTime = os.time()
+	local bossReady = false
+
+	repeat
+		if not IsCurrentSession() or not getgenv().AutoFarmActive or not getgenv().BossTargets[toggleName] then return end
+		local char = localPlayer.Character
+		if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return end
+
+		task.wait(0.2)
+		local currentBoss = getValidBoss(bossData)
+		bossReady = (currentBoss ~= nil)
+	until bossReady or os.time() - startTime > timeLimit
+
+	if bossReady and getgenv().AutoFarmActive and getgenv().BossTargets[toggleName] then
+		task.wait(0.1)
+		TweenAndFight(bossData, toggleName)
+	end
+end
+
+local function CheckAndFightBoss(bossName)
+	if not getgenv().AutoFarmActive or not getgenv().BossTargets[bossName] then return end
+	local bossData = BossConfig[bossName]
+	if not bossData then return end
+
+	WaitForTransformation()
+
+	local character = localPlayer.Character
+	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return end
+
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not playerData or not hrp then return end
+
+	if bossData.QuestNPC then
+		local questVal = playerData:WaitForChild("Quest")
+		local bossNpc = workspace.Others.NPCs:FindFirstChild(bossData.QuestNPC)
+		local expectedQuestName = bossData.QuestNPC
+
+		if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+			while questVal.Value ~= expectedQuestName and questVal.Value ~= bossData.BossName do
+				if not IsCurrentSession() or not getgenv().AutoFarmActive or not getgenv().BossTargets[bossName] then
+					StopActiveTween()
+					return
+				end
+				if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return end
+
+				currentLockedBoss = nil
+				getgenv().UpdateCiabStatus("✈️ Tween verso Quest: " .. bossData.QuestNPC)
+				local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+				MoveToTarget(npcCF, true)
+
+				if (localPlayer.Character.HumanoidRootPart.Position - npcCF.Position).Magnitude <= 12 then
+					pcall(function()
+						Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+					end)
+				end
+
+				task.wait(0.2)
+			end
+		end
+
+		if questVal.Value == expectedQuestName or questVal.Value == bossData.BossName then
+			WaitForBossToSpawn(bossData, 5, bossName)
+		end
+	else
+		WaitForBossToSpawn(bossData, 5, bossName)
+	end
+end
+
+-- Main Farm Loop
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+				local anySelected = false
+				for _, bossName in ipairs(bossNamesList) do
+					if not getgenv().AutoFarmActive or not IsCurrentSession() then break end
+					if getgenv().BossTargets[bossName] then
+						anySelected = true
+						CheckAndFightBoss(bossName)
+					end
+				end
+				if getgenv().AutoFarmActive then
+					if anySelected then
+						getgenv().UpdateCiabStatus("🔍 Ricerca prossimo Boss attivo...")
+					else
+						getgenv().UpdateCiabStatus("⚠️ Seleziona almeno un Boss dalla lista!")
+					end
+				end
+			end
+		end
+		task.wait(0.4)
+	end
+end)
