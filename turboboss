@@ -193,9 +193,10 @@ end)
 
 -- 🔥 LE 2 FORME RICHIESTE (True SSJG a 6Qa Def | LBSSJ4 a 1T Def + 500k Reb)
 local FormProgression = {
-	{Name = "True SSJG", MinDef = 6e15, MinReb = 0},      -- 6Qa (6Qd) Difesa
-	{Name = "LBSSJ4",    MinDef = 1e12, MinReb = 500000},  -- 1T Difesa + 500k Rebirth
-	{Name = "SSJ Rose",	 MinDef = 3e10, MinReb = 6000}
+	{Name = "True SSJG",	MinDef = 6e15,		MinReb = 0},      -- 6Qa (6Qd) Difesa
+	{Name = "LBSSJ4",		MinDef = 1e12,		MinReb = 500000},  -- 1T Difesa + 500k Rebirth
+	{Name = "True Rose",	MinDef = 5.5e11,	MinReb = 10000},
+	{Name = "SSJ Rose",		MinDef = 3e10,		MinReb = 6000}
 }
 
 -- ==============================================================================
