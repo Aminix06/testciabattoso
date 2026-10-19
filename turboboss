@@ -194,7 +194,8 @@ end)
 -- 🔥 LE 2 FORME RICHIESTE (True SSJG a 6Qa Def | LBSSJ4 a 1T Def + 500k Reb)
 local FormProgression = {
 	{Name = "True SSJG", MinDef = 6e15, MinReb = 0},      -- 6Qa (6Qd) Difesa
-	{Name = "LBSSJ4",    MinDef = 1e12, MinReb = 500000}  -- 1T Difesa + 500k Rebirth
+	{Name = "LBSSJ4",    MinDef = 1e12, MinReb = 500000},  -- 1T Difesa + 500k Rebirth
+	{Name = "SSJ Rose",	 MinDef = 3e10, MinReb = 6000}
 }
 
 -- ==============================================================================
@@ -243,7 +244,7 @@ local BossList = {
 	{Name = "Kall (LSSJ)",                            Boss = "Kall (LSSJ)",                            MinDef = 3.2e9},
 	{Name = "Piclow (Base)",                          Boss = "Piclow (Base)",                          MinDef = 2.1e9},
 	{Name = "Caulla (Base)",                          Boss = "Caulla (Base)",                          MinDef = 1.2e9},
-	{Name = "Kai-Fist Master",                        Boss = "Kai-Fist Master",                        MinDef = 800e6},
+	{Name = "Kai-fist Master",                        Boss = "Kai-fist Master",                        MinDef = 800e6},
 	{Name = "Gotanks",                                Boss = "Gotanks",                                MinDef = 600e6,  NoQuest = true},
 	{Name = "SSJ2 Wukong",                            Boss = "SSJ2 Wukong",                            MinDef = 500e6},
 	{Name = "Perfect Atom",                           Boss = "Perfect Atom",                           MinDef = 300e6},
@@ -1353,7 +1354,7 @@ task.spawn(function()
 	if queue_on_teleport then
 		queue_on_teleport([[
 			repeat task.wait() until game:IsLoaded()
-			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turbotween"))()
+			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboboss"))()
 		]])
 	end
 end)
