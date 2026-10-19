@@ -1,0 +1,981 @@
+-- ==============================================================================
+-- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI
+-- ==============================================================================
+if CoreGui and CoreGui:FindFirstChild("TestOnlyAttackGUI") then CoreGui.TestOnlyAttackGUI:Destroy() end
+if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
+if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
+if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
+if getgenv().CiabCleanup then pcall(getgenv().CiabCleanup) end
+
+local ScriptSessionId = tick()
+getgenv().CiabSessionId = ScriptSessionId
+local function IsCurrentSession()
+	return getgenv().CiabSessionId == ScriptSessionId
+end
+
+local Players = game:GetService("Players")
+local localPlayer = Players.LocalPlayer
+local HttpService = game:GetService("HttpService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+local camera = workspace.CurrentCamera
+
+local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
+local equipRemote = Events:WaitForChild("equipskill")
+local transformRemote = Events:WaitForChild("Fa")
+local skillRemote = Events:WaitForChild("FaFa")
+local punchRemote = Events:WaitForChild("p")
+local chaRemote = Events:WaitForChild("cha")
+
+-- ==============================================================================
+-- ⚙️ CONFIGURAZIONE VELOCITÀ MAX TWEEN, SKILL PER STATS E FORME
+-- ==============================================================================
+local MAX_TWEEN_SPEED = 10000
+local NO_FORM_MAX_DEF = 10e12 -- Fino a 10T può combattere anche senza forma!
+
+getgenv().AutoFarmActive = false
+getgenv().TweenSpeed = 300
+getgenv().ManualBoss = nil -- nil = Automatico in base alla Difesa | "NomeBoss" = Manuale
+
+-- 🗡️ REQUISITI ESATTI DI STRENGTH & SPEED PER EQUIPAGGIARE E USARE LE SKILL
+local SkillRequirements = {
+	{Name = "Wolf Fang Fist",    MinStat = 30000},       -- 30k Str & Speed
+	{Name = "Meteor Crash",      MinStat = 500000},      -- 500k Str & Speed
+	{Name = "Mach Kick",         MinStat = 2100000},     -- 2.1M Str & Speed
+	{Name = "Super Dragon Fist", MinStat = 650000000},   -- 650M Str & Speed
+	{Name = "God Slicer",        MinStat = 15000000000}  -- 15B Str & Speed
+}
+
+local equippedSkills = {}
+
+-- Equipaggia SOLO le skill per cui hai abbastanza Strength e Speed
+local function EquipUnlockedSkills()
+	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not playerData then return end
+
+	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
+	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
+
+	for _, skill in ipairs(SkillRequirements) do
+		if myStr >= skill.MinStat and mySpd >= skill.MinStat then
+			pcall(function()
+				equipRemote:InvokeServer(skill.Name)
+				equippedSkills[skill.Name] = true
+			end)
+			task.wait(0.06)
+		else
+			equippedSkills[skill.Name] = false
+		end
+	end
+end
+
+task.spawn(EquipUnlockedSkills)
+
+-- 🔥 LE 2 FORME RICHIESTE (True SSJG a 6Qa Def | LBSSJ4 a 1T Def + 500k Reb)
+local FormProgression = {
+	{Name = "True SSJG", MinDef = 6e15, MinReb = 0},      -- 6Qa (6Qd) Difesa
+	{Name = "LBSSJ4",    MinDef = 1e12, MinReb = 500000}  -- 1T Difesa + 500k Rebirth
+}
+
+-- ==============================================================================
+-- 🎯 TUTTI I BOSS DELLA GUIDA (ORDINATI DAL PIÙ FORTE AL PIÙ DEBOLE)
+-- ==============================================================================
+local BossList = {
+	{Name = "Lady Aeos",                              Boss = "Lady Aeos",                              MinDef = 700e24},
+	{Name = "LUCIF",                                  Boss = "LUCIF",                                  MinDef = 30e24},
+	{Name = "Hit (PURE PROGRESS)",                    Boss = "Hit (PURE PROGRESS)",                    MinDef = 10e24},
+	{Name = "Full Power Grand Priest",                Boss = "Full Power Grand Priest",                MinDef = 700e21},
+	{Name = "Summer Bulma (Full Power)",              Boss = "Summer Bulma (Full Power)",              MinDef = 600e18},
+	{Name = "Ultra Super Hero Wukong",                Boss = "Ultra Super Hero Wukong",                MinDef = 10e18},
+	{Name = "Surfs Up Grand Priest",                  Boss = "Surfs Up Grand Priest",                  MinDef = 8e18,   NoQuest = true},
+	{Name = "Ultra Super Villain Rose Wukong Black",  Boss = "Ultra Super Villain Rose Wukong Black",  MinDef = 800e15},
+	{Name = "Wukong (TUI)",                           Boss = "Wukong (TUI)",                           MinDef = 200e15},
+	{Name = "Ultra Super Villain Vegetable",          Boss = "Ultra Super Villain Vegetable",          MinDef = 54.5e15},
+	{Name = "Cucumber",                               Boss = "Cucumber",                               MinDef = 5e15,   NoQuest = true},
+	{Name = "Grand Minister",                         Boss = "Grand Minister",                         MinDef = 2.6e15},
+	{Name = "Kakata Ego Instinct",                    Boss = "Kakata Ego Instinct",                    MinDef = 802e12},
+	{Name = "Goheta (Base - SSJB)",                   Boss = "Goheta (Base - SSJB)",                   MinDef = 103e12},
+	{Name = "Vegetable (Ultra Ego)",                  Boss = "Vegetable (Ultra Ego)",                  MinDef = 62.6e12},
+	{Name = "Wukong (MUI)",                           Boss = "Wukong (MUI)",                           MinDef = 42.6e12},
+	{Name = "Vekuta SSJBUI",                          Boss = "Vekuta SSJBUI",                          MinDef = 22.6e12},
+	{Name = "Universal Vegito",                       Boss = "Universal Vegito",                       MinDef = 17.6e12, NoQuest = true},
+	{Name = "Fused Zamasu",                           Boss = "Fused Zamasu",                           MinDef = 17.6e12, NoQuest = true},
+	{Name = "Wukong (MUI) TOP",                       Boss = "Wukong (MUI) TOP",                       MinDef = 12.6e12, NoQuest = true},
+	{Name = "Hit",                                    Boss = "Hit",                                    MinDef = 12.6e12, NoQuest = true},
+	{Name = "Wukong Rose",                            Boss = "Wukong Rose",                            MinDef = 9.6e12},
+	{Name = "Vekuta (LBSSJ4)",                        Boss = "Vekuta (LBSSJ4)",                        MinDef = 7.6e12},
+	{Name = "Wukong (LBSSJ4)",                        Boss = "Wukong (LBSSJ4)",                        MinDef = 4.8e12},
+	{Name = "Vegetable (LBSSJ4)",                     Boss = "Vegetable (LBSSJ4)",                     MinDef = 3.6e12},
+	{Name = "Vis (40%)",                              Boss = "Vis (40%)",                              MinDef = 2.4e12, NoQuest = true},
+	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.2e12},
+	{Name = "Vills 50%",                              Boss = "Vills 50%",                              MinDef = 912e9},
+	{Name = "Nohag (Beast)",                          Boss = "Nohag (Beast)",                          MinDef = 712e9},
+	{Name = "SSJG Kakata",                            Boss = "SSJG Kakata",                            MinDef = 560e9},
+	{Name = "Vegetable (GoD in-training)",            Boss = "Vegetable (GoD in-training)",            MinDef = 280e9},
+	{Name = "Broccoli",                               Boss = "Broccoli",                               MinDef = 140e9},
+	{Name = "Wukong (Omen)",                          Boss = "Wukong (Omen)",                          MinDef = 90e9},
+	{Name = "Niren (Base)",                           Boss = "Niren (Base)",                           MinDef = 75e9},
+	{Name = "SSJBK Wukong",                           Boss = "SSJBK Wukong",                           MinDef = 50e9},
+	{Name = "Toppo",                                  Boss = "Toppo",                                  MinDef = 25e9},
+	{Name = "SSJB Wukong",                            Boss = "SSJB Wukong",                            MinDef = 15e9},
+	{Name = "Nohag (Potential Awoken)",               Boss = "Nohag (Potential Awoken)",               MinDef = 9e9},
+	{Name = "Kafall (LSSJ)",                          Boss = "Kafall (LSSJ)",                          MinDef = 5.4e9},
+	{Name = "Kall (LSSJ)",                            Boss = "Kall (LSSJ)",                            MinDef = 3.2e9},
+	{Name = "Piclow (Base)",                          Boss = "Piclow (Base)",                          MinDef = 2.1e9},
+	{Name = "Caulla (Base)",                          Boss = "Caulla (Base)",                          MinDef = 1.2e9},
+	{Name = "Kai-Fist Master",                        Boss = "Kai-Fist Master",                        MinDef = 800e6},
+	{Name = "Gotanks",                                Boss = "Gotanks",                                MinDef = 600e6,  NoQuest = true},
+	{Name = "SSJ2 Wukong",                            Boss = "SSJ2 Wukong",                            MinDef = 500e6},
+	{Name = "Perfect Atom",                           Boss = "Perfect Atom",                           MinDef = 300e6},
+	{Name = "Super Vegetable",                        Boss = "Super Vegetable",                        MinDef = 150e6},
+	{Name = "Chilly",                                 Boss = "Chilly",                                 MinDef = 70e6},
+	{Name = "Kaio Student",                           Boss = "Kaio Student",                           MinDef = 30e6},
+	{Name = "Piclow fused with Nail",                 Boss = "Piclow fused with Nail",                 MinDef = 15e6},
+	{Name = "Frieza",                                 Boss = "Frieza",                                 MinDef = 9e6},
+	{Name = "Captain Ginyu",                          Boss = "Captain Ginyu",                          MinDef = 6e6},
+	{Name = "Nail",                                   Boss = "Nail",                                   MinDef = 4e6},
+	{Name = "Recoome",                                Boss = "Recoome",                                MinDef = 2.5e6},
+	{Name = "Burter",                                 Boss = "Burter",                                 MinDef = 2.1e6},
+	{Name = "Jiece",                                  Boss = "Jiece",                                  MinDef = 1.7e6},
+	{Name = "Godlo",                                  Boss = "Godlo",                                  MinDef = 1.2e6},
+	{Name = "Zarbon",                                 Boss = "Zarbon",                                 MinDef = 900e3},
+	{Name = "Cui",                                    Boss = "Cui",                                    MinDef = 700e3},
+	{Name = "Mapa",                                   Boss = "Mapa",                                   MinDef = 600e3},
+	{Name = "Radish",                                 Boss = "Radish",                                 MinDef = 500e3},
+	{Name = "Kid Nohag",                              Boss = "Kid Nohag",                              MinDef = 400e3},
+	{Name = "Citizen",                                Boss = "Citizen",                                MinDef = 300e3},
+	{Name = "Top X Fighter",                          Boss = "Top X Fighter",                          MinDef = 250e3},
+	{Name = "Kid Goku",                               Boss = "Kid Goku",                               MinDef = 150e3},
+	{Name = "Mercenary Tao",                          Boss = "Mercenary Tao",                          MinDef = 110e3},
+	{Name = "Turtle Student",                         Boss = "Turtle Student",                         MinDef = 90e3},
+	{Name = "Z Fighter Master",                       Boss = "Z Fighter Master",                       MinDef = 80e3},
+	{Name = "Klirin",                                 Boss = "Klirin",                                 MinDef = 50e3},
+	{Name = "Yamcha",                                 Boss = "Yamcha",                                 MinDef = 30e3},
+	{Name = "Staff Officer Black",                    Boss = "Staff Officer Black",                    MinDef = 20e3},
+	{Name = "General Red",                            Boss = "General Red",                            MinDef = 10e3},
+	{Name = "Z Fighter Trainer",                      Boss = "Z Fighter Trainer",                      MinDef = 6e3},
+	{Name = "X Fighter Trainer",                      Boss = "X Fighter",                              MinDef = 0}
+}
+
+local function FormatStat(n)
+	n = tonumber(n) or 0
+	if n >= 1e24 then return string.format("%.0fSp", n / 1e24)
+	elseif n >= 1e21 then return string.format("%.0fSx", n / 1e21)
+	elseif n >= 1e18 then return string.format("%.1fQi", n / 1e18)
+	elseif n >= 1e15 then return string.format("%.1fQd", n / 1e15)
+	elseif n >= 1e12 then return string.format("%.1fT", n / 1e12)
+	elseif n >= 1e9 then return string.format("%.0fB", n / 1e9)
+	elseif n >= 1e6 then return string.format("%.0fM", n / 1e6)
+	elseif n >= 1e3 then return string.format("%.0fk", n / 1e3)
+	else return tostring(n) end
+end
+
+-- ==============================================================================
+-- ✈️ SISTEMA TWEEN (PER VIAGGI) + LOCK-ON RAPIDO (SUL BOSS)
+-- ==============================================================================
+local activeTween = nil
+local currentLockedBoss = nil
+local behindDistance = -5
+local connections = {}
+
+local function StopActiveTween()
+	if activeTween then
+		pcall(function() activeTween:Cancel() end)
+		activeTween = nil
+	end
+end
+
+local function UpdateFloatState()
+	local char = localPlayer.Character
+	local root = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not root then return end
+
+	for _, child in ipairs(root:GetChildren()) do
+		if child.Name == "FloatAttachment" or child.Name == "FloatVelocity" then
+			child:Destroy()
+		end
+	end
+
+	if hum then
+		hum.AutoRotate = not getgenv().AutoFarmActive
+	end
+
+	if getgenv().AutoFarmActive then
+		local att = Instance.new("Attachment", root)
+		att.Name = "FloatAttachment"
+		local lv = Instance.new("LinearVelocity", root)
+		lv.Name = "FloatVelocity"
+		lv.Attachment0 = att
+		lv.MaxForce = math.huge
+		lv.VectorVelocity = Vector3.zero
+		lv.VelocityConstraintMode = Enum.VelocityConstraintMode.Vector
+		lv.ForceLimitMode = Enum.ForceLimitMode.PerAxis
+		lv.MaxAxesForce = Vector3.new(0, math.huge, 0)
+	end
+end
+
+table.insert(connections, RunService.Stepped:Connect(function()
+	if not getgenv().AutoFarmActive then return end
+	local char = localPlayer.Character
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") and part.CanCollide then
+				part.CanCollide = false
+			end
+		end
+	end
+end))
+
+table.insert(connections, RunService.RenderStepped:Connect(function()
+	if not getgenv().AutoFarmActive or not currentLockedBoss then return end
+
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local eHrp = currentLockedBoss:FindFirstChild("HumanoidRootPart")
+	local eHum = currentLockedBoss:FindFirstChildOfClass("Humanoid")
+
+	if not hrp or not hum or hum.Health <= 0 or not eHrp or not eHum or eHum.Health <= 0 then
+		return
+	end
+
+	local dist = (hrp.Position - eHrp.Position).Magnitude
+	if dist <= 25 then
+		StopActiveTween()
+		hum.AutoRotate = false
+		hrp.AssemblyLinearVelocity = Vector3.zero
+		hrp.AssemblyAngularVelocity = Vector3.zero
+
+		local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * behindDistance)
+		local targetCF = CFrame.new(behindPos, eHrp.Position)
+
+		hrp.CFrame = hrp.CFrame:Lerp(targetCF, 0.88)
+		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
+	end
+end))
+
+local function MoveToTarget(targetCFrame, waitForCompletion)
+	if not getgenv().AutoFarmActive or not IsCurrentSession() then
+		StopActiveTween()
+		return
+	end
+	if waitForCompletion == nil then waitForCompletion = true end
+
+	local char = localPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+
+	local currentSpeed = math.clamp(tonumber(getgenv().TweenSpeed) or 300, 10, MAX_TWEEN_SPEED)
+	local distance = (hrp.Position - targetCFrame.Position).Magnitude
+	local duration = math.max(distance / currentSpeed, 0.04)
+
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+
+	StopActiveTween()
+	activeTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+	activeTween:Play()
+
+	if not waitForCompletion then return end
+
+	local startClock = os.clock()
+	while activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing do
+		if not IsCurrentSession() or not getgenv().AutoFarmActive then
+			StopActiveTween()
+			break
+		end
+		if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+			StopActiveTween()
+			break
+		end
+
+		local updatedSpeed = math.clamp(tonumber(getgenv().TweenSpeed) or 300, 10, MAX_TWEEN_SPEED)
+		if math.abs(updatedSpeed - currentSpeed) > 5 then
+			currentSpeed = updatedSpeed
+			local remDist = (hrp.Position - targetCFrame.Position).Magnitude
+			duration = math.max(remDist / currentSpeed, 0.04)
+			StopActiveTween()
+			activeTween = TweenService:Create(hrp, TweenInfo.new(duration, Enum.EasingStyle.Linear), {CFrame = targetCFrame})
+			activeTween:Play()
+			startClock = os.clock()
+		end
+
+		if (hrp.Position - targetCFrame.Position).Magnitude <= 4 or (os.clock() - startClock) > (duration + 0.5) then
+			break
+		end
+		task.wait(0.03)
+	end
+end
+
+-- ==============================================================================
+-- 🎨 MINI-GUI COMPATTA (START/STOP + TWEEN + AUTO/MANUAL BOSS)
+-- ==============================================================================
+for _, guiName in ipairs({"UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
+	if CoreGui:FindFirstChild(guiName) then
+		CoreGui[guiName]:Destroy()
+	end
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CiabMiniHub"
+ScreenGui.Parent = CoreGui
+ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 9999
+
+getgenv().CiabCleanup = function()
+	getgenv().AutoFarmActive = false
+	currentLockedBoss = nil
+	StopActiveTween()
+	UpdateFloatState()
+	for _, conn in ipairs(connections) do pcall(function() conn:Disconnect() end) end
+	table.clear(connections)
+	if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
+end
+
+local MainWin = Instance.new("Frame", ScreenGui)
+MainWin.Size = UDim2.new(0, 290, 0, 320)
+MainWin.Position = UDim2.new(1, -310, 0.5, -160)
+MainWin.BackgroundColor3 = Color3.fromRGB(14, 16, 24)
+MainWin.Active = true
+MainWin.ClipsDescendants = true
+Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 12)
+local stroke = Instance.new("UIStroke", MainWin)
+stroke.Color = Color3.fromRGB(0, 210, 255)
+stroke.Thickness = 2
+
+local dragging, dragStart, startPos
+MainWin.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = MainWin.Position
+	end
+end)
+table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
+end))
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		MainWin.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end))
+
+local Title = Instance.new("TextLabel", MainWin)
+Title.Size = UDim2.new(1, -45, 0, 28)
+Title.Position = UDim2.new(0, 12, 0, 4)
+Title.BackgroundTransparency = 1
+Title.Font = Enum.Font.GothamBlack
+Title.Text = "MINI HUB"
+Title.TextColor3 = Color3.fromRGB(0, 230, 255)
+Title.TextSize = 14
+Title.TextXAlignment = Enum.TextXAlignment.Left
+
+local MinBtn = Instance.new("TextButton", MainWin)
+MinBtn.Size = UDim2.new(0, 24, 0, 24)
+MinBtn.Position = UDim2.new(1, -32, 0, 6)
+MinBtn.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.Text = "—"
+MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.TextSize = 12
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
+
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	MinBtn.Text = minimized and "+" or "—"
+	TweenService:Create(MainWin, TweenInfo.new(0.25), {Size = minimized and UDim2.new(0, 290, 0, 36) or UDim2.new(0, 290, 0, 320)}):Play()
+end)
+
+local StartBtn = Instance.new("TextButton", MainWin)
+StartBtn.Size = UDim2.new(1, -20, 0, 34)
+StartBtn.Position = UDim2.new(0, 10, 0, 36)
+StartBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
+StartBtn.Font = Enum.Font.GothamBlack
+StartBtn.Text = "⏹️ FARM: SPENTO (CLICCA PER AVVIARE)"
+StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartBtn.TextSize = 11
+Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 8)
+
+local StatusLbl = Instance.new("TextLabel", MainWin)
+StatusLbl.Size = UDim2.new(1, -20, 0, 22)
+StatusLbl.Position = UDim2.new(0, 10, 0, 74)
+StatusLbl.BackgroundColor3 = Color3.fromRGB(22, 26, 38)
+StatusLbl.Font = Enum.Font.GothamSemibold
+StatusLbl.Text = "⏸️ In attesa di avvio..."
+StatusLbl.TextColor3 = Color3.fromRGB(210, 225, 255)
+StatusLbl.TextSize = 10
+Instance.new("UICorner", StatusLbl).CornerRadius = UDim.new(0, 6)
+
+local function SetStatus(txt)
+	if StatusLbl and StatusLbl.Parent then StatusLbl.Text = txt end
+end
+
+local lastStartClick = 0
+StartBtn.MouseButton1Click:Connect(function()
+	if os.clock() - lastStartClick < 0.2 then return end
+	lastStartClick = os.clock()
+
+	getgenv().AutoFarmActive = not getgenv().AutoFarmActive
+	UpdateFloatState()
+	if getgenv().AutoFarmActive then
+		StartBtn.BackgroundColor3 = Color3.fromRGB(16, 150, 90)
+		StartBtn.Text = "▶️ FARM: ATTIVO (CLICCA PER FERMARE)"
+		table.clear(equippedSkills)
+		task.spawn(EquipUnlockedSkills)
+	else
+		currentLockedBoss = nil
+		StopActiveTween()
+		StartBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
+		StartBtn.Text = "⏹️ FARM: SPENTO (CLICCA PER AVVIARE)"
+		SetStatus("⏸️ Farm disattivato.")
+		pcall(function()
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+		end)
+	end
+end)
+
+local SpeedLbl = Instance.new("TextLabel", MainWin)
+SpeedLbl.Size = UDim2.new(0.65, 0, 0, 26)
+SpeedLbl.Position = UDim2.new(0, 12, 0, 102)
+SpeedLbl.BackgroundTransparency = 1
+SpeedLbl.Font = Enum.Font.GothamBold
+SpeedLbl.Text = "✈️ Tween Speed (Max " .. MAX_TWEEN_SPEED .. "):"
+SpeedLbl.TextColor3 = Color3.fromRGB(0, 220, 255)
+SpeedLbl.TextSize = 11
+SpeedLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local SpeedInput = Instance.new("TextBox", MainWin)
+SpeedInput.Size = UDim2.new(0, 75, 0, 24)
+SpeedInput.Position = UDim2.new(1, -85, 0, 103)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(24, 28, 42)
+SpeedInput.Font = Enum.Font.GothamBlack
+SpeedInput.Text = tostring(getgenv().TweenSpeed)
+SpeedInput.TextColor3 = Color3.fromRGB(0, 255, 190)
+SpeedInput.TextSize = 12
+SpeedInput.ClearTextOnFocus = false
+Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
+
+SpeedInput.FocusLost:Connect(function()
+	getgenv().TweenSpeed = math.clamp(math.floor(tonumber(SpeedInput.Text) or 300), 10, MAX_TWEEN_SPEED)
+	SpeedInput.Text = tostring(getgenv().TweenSpeed)
+end)
+
+local ModeBtn = Instance.new("TextButton", MainWin)
+ModeBtn.Size = UDim2.new(1, -20, 0, 28)
+ModeBtn.Position = UDim2.new(0, 10, 0, 132)
+ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 190)
+ModeBtn.Font = Enum.Font.GothamBold
+ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
+ModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ModeBtn.TextSize = 11
+Instance.new("UICorner", ModeBtn).CornerRadius = UDim.new(0, 6)
+
+local BossScroll = Instance.new("ScrollingFrame", MainWin)
+BossScroll.Size = UDim2.new(1, -20, 1, -172)
+BossScroll.Position = UDim2.new(0, 10, 0, 165)
+BossScroll.BackgroundColor3 = Color3.fromRGB(18, 21, 32)
+BossScroll.ScrollBarThickness = 3
+BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 210, 255)
+BossScroll.BorderSizePixel = 0
+Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 8)
+
+local listLayout = Instance.new("UIListLayout", BossScroll)
+listLayout.Padding = UDim.new(0, 4)
+
+local bossButtons = {}
+local function RefreshBossSelectionUI()
+	if getgenv().ManualBoss == nil then
+		ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 190)
+		ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
+	else
+		ModeBtn.BackgroundColor3 = Color3.fromRGB(210, 120, 20)
+		ModeBtn.Text = "🎯 MANUALE: " .. getgenv().ManualBoss .. " (Clicca x Auto)"
+	end
+	for name, btn in pairs(bossButtons) do
+		btn.BackgroundColor3 = (getgenv().ManualBoss == name) and Color3.fromRGB(0, 165, 95) or Color3.fromRGB(28, 32, 46)
+	end
+end
+
+ModeBtn.MouseButton1Click:Connect(function()
+	getgenv().ManualBoss = nil
+	currentLockedBoss = nil
+	StopActiveTween()
+	RefreshBossSelectionUI()
+end)
+
+for _, bData in ipairs(BossList) do
+	local bBtn = Instance.new("TextButton", BossScroll)
+	bBtn.Size = UDim2.new(1, -8, 0, 26)
+	bBtn.BackgroundColor3 = Color3.fromRGB(28, 32, 46)
+	bBtn.Font = Enum.Font.GothamSemibold
+	bBtn.Text = string.format(" [%s] %s", FormatStat(bData.MinDef), bData.Name)
+	bBtn.TextColor3 = Color3.fromRGB(235, 240, 255)
+	bBtn.TextSize = 11
+	bBtn.TextXAlignment = Enum.TextXAlignment.Left
+	bBtn.TextTruncate = Enum.TextTruncate.AtEnd
+	Instance.new("UICorner", bBtn).CornerRadius = UDim.new(0, 6)
+
+	bossButtons[bData.Name] = bBtn
+	bBtn.MouseButton1Click:Connect(function()
+		if getgenv().ManualBoss == bData.Name then
+			getgenv().ManualBoss = nil
+		else
+			getgenv().ManualBoss = bData.Name
+		end
+		currentLockedBoss = nil
+		StopActiveTween()
+		RefreshBossSelectionUI()
+	end)
+end
+
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	BossScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 6)
+end)
+
+-- ==============================================================================
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO
+-- ==============================================================================
+task.spawn(function()
+	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
+	if queue_on_teleport then
+		queue_on_teleport([[
+			repeat task.wait() until game:IsLoaded()
+			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turbotween"))()
+		]])
+	end
+end)
+
+task.spawn(function()
+	repeat task.wait() until game:IsLoaded()
+
+	local function IsPublicServer()
+		if #Players:GetPlayers() > 1 then return false end
+		local jobId = game.JobId
+		local placeId = game.PlaceId
+		local cursor = ""
+		local pages = 0
+		while pages < 8 do
+			local url = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100&cursor=" .. cursor
+			local requestFunc = (syn and syn.request) or (http and http.request) or http_request or request
+			if not requestFunc then return false end
+			local success, response = pcall(function() return requestFunc({Url = url, Method = "GET"}) end)
+			if not success or not response or response.StatusCode ~= 200 then break end
+			local ok, data = pcall(function() return HttpService:JSONDecode(response.Body) end)
+			if not ok or not data or not data.data then break end
+			for _, server in ipairs(data.data) do
+				if server.id == jobId then return true end
+			end
+			cursor = data.nextPageCursor
+			if not cursor or cursor == "" then break end
+			pages += 1
+			task.wait(0.15)
+		end
+		return false
+	end
+
+	if IsPublicServer() then
+		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
+	else
+		local TPEvent = Events:WaitForChild("TP")
+		local isEscaping = false
+
+		local function FugaSullaTerra()
+			if isEscaping then return end
+			isEscaping = true
+			warn("⚠️ Intruso rilevato! Fuga istantanea verso Earth...")
+			StopActiveTween()
+			pcall(function()
+				if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+					localPlayer.Character.HumanoidRootPart.Anchored = true
+				end
+			end)
+			pcall(function() TPEvent:InvokeServer("Earth") end)
+			task.delay(5, function()
+				localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito. Disconnessione di emergenza.")
+			end)
+		end
+
+		if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+		table.insert(connections, Players.PlayerAdded:Connect(function(player)
+			if player.UserId ~= localPlayer.UserId then FugaSullaTerra() end
+		end))
+		task.spawn(function()
+			while IsCurrentSession() and task.wait(1) do
+				if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+			end
+		end)
+	end
+end)
+
+task.spawn(function()
+	local playerGui = localPlayer:WaitForChild("PlayerGui", 10)
+	local mainGui = playerGui and playerGui:WaitForChild("Main", 10)
+	if not mainGui then return end
+
+	task.wait(1)
+	local StartEvent = Events:WaitForChild("Start")
+	pcall(function()
+		StartEvent:InvokeServer()
+		task.wait()
+		StartEvent:InvokeServer()
+	end)
+	local bruhButton = mainGui:FindFirstChild("bruh")
+	if bruhButton then
+		bruhButton.Disabled = true
+		bruhButton.Disabled = false
+	end
+	task.wait()
+	pcall(function() StartEvent:InvokeServer() end)
+end)
+
+-- ==============================================================================
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") ULTRA-VELOCIZZATO
+-- ==============================================================================
+table.insert(connections, localPlayer.Idled:Connect(function()
+	local vu = game:GetService("VirtualUser")
+	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+	task.wait(1)
+	vu:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end))
+
+table.insert(connections, localPlayer.CharacterAdded:Connect(function()
+	task.wait(1)
+	table.clear(equippedSkills)
+	UpdateFloatState()
+	EquipUnlockedSkills()
+end))
+
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+		end
+		task.wait(0.03)
+	end
+end)
+
+-- ==============================================================================
+-- 🔥 CONTROLLO FORMA (TRUE SSJG A 6Qa | LBSSJ4 A 1T+500k REB | SENZA FORMA FINO A 10T)
+-- ==============================================================================
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			local char = localPlayer.Character
+			if char and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
+				local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+				local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+
+				if folderData and status then
+					local defVal = tonumber(folderData:FindFirstChild("Defense") and folderData.Defense.Value) or 0
+					local rebVal = tonumber(folderData:FindFirstChild("Rebirth") and folderData.Rebirth.Value) or 0
+					local selected = status:FindFirstChild("SelectedTransformation")
+					local actual = status:FindFirstChild("Transformation")
+
+					if selected and actual then
+						local targetForm = nil
+						for _, f in ipairs(FormProgression) do
+							if defVal >= f.MinDef and rebVal >= f.MinReb then
+								targetForm = f.Name
+								break
+							end
+						end
+
+						if targetForm and actual.Value ~= targetForm then
+							if selected.Value ~= targetForm then
+								pcall(function() equipRemote:InvokeServer(targetForm) end)
+								task.wait(0.35)
+							end
+							if selected.Value == targetForm then
+								pcall(function() transformRemote:InvokeServer() end)
+								task.wait(1.2)
+								table.clear(equippedSkills)
+								EquipUnlockedSkills()
+							end
+						end
+					end
+				end
+			end
+		end
+		task.wait(1.5)
+	end
+end)
+
+local function WaitForTransformation(bossMinDef)
+	if not getgenv().AutoFarmActive then return false end
+	local char = localPlayer.Character
+	if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
+
+	local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+	if not folderData or not status then return false end
+
+	local defVal = tonumber(folderData:FindFirstChild("Defense") and folderData.Defense.Value) or 0
+	local rebVal = tonumber(folderData:FindFirstChild("Rebirth") and folderData.Rebirth.Value) or 0
+	local actual = status:FindFirstChild("Transformation")
+	if not actual then return false end
+
+	local targetForm = nil
+	for _, f in ipairs(FormProgression) do
+		if defVal >= f.MinDef and rebVal >= f.MinReb then
+			targetForm = f.Name
+			break
+		end
+	end
+
+	if not targetForm then
+		if (bossMinDef or 0) <= NO_FORM_MAX_DEF then
+			return true
+		else
+			SetStatus("⚠️ Oltre 10T serve la Forma (1T+500k Reb o 6Qa)!")
+			return false
+		end
+	end
+
+	local timeout = 16
+	while actual.Value ~= targetForm and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() do
+		if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+		SetStatus("⚡ Attivazione " .. targetForm .. "...")
+		task.wait(0.5)
+		timeout -= 1
+	end
+
+	if (bossMinDef or 0) <= NO_FORM_MAX_DEF then return true end
+	return actual.Value == targetForm
+end
+
+-- ==============================================================================
+-- ⚔️ SISTEMA DI COMBATTIMENTO (PUGNI + SKILL EQUIPAGGIATE IN BASE A STR & SPEED)
+-- ==============================================================================
+local function FindLivingBoss(bossEntry)
+	local character = localPlayer.Character
+	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
+	if not workspace:FindFirstChild("Living") then return nil end
+
+	for _, obj in pairs(workspace.Living:GetChildren()) do
+		if obj.Name == bossEntry.Boss or obj.Name == bossEntry.Name then
+			local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
+			local bossHRP = obj:FindFirstChild("HumanoidRootPart")
+			if bossHumanoid and bossHRP and bossHumanoid.Health > 0 then
+				return obj
+			end
+		end
+	end
+	return nil
+end
+
+-- Funzione d'attacco: usa i Pugni + equipaggia ed esegue SOLO le skill sbloccate per Str & Speed
+local function DoFullAttack()
+	pcall(function()
+		punchRemote:FireServer("Blacknwhite27", 1, false)
+		punchRemote:FireServer("Blacknwhite27", 1)
+
+		local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+		local myStr = tonumber(playerData and playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
+		local mySpd = tonumber(playerData and playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
+
+		for _, skill in ipairs(SkillRequirements) do
+			if myStr >= skill.MinStat and mySpd >= skill.MinStat then
+				coroutine.wrap(function()
+					pcall(function()
+						if not equippedSkills[skill.Name] then
+							equipRemote:InvokeServer(skill.Name)
+							equippedSkills[skill.Name] = true
+						end
+						if equippedSkills[skill.Name] then
+							skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
+						end
+					end)
+				end)()
+			else
+				equippedSkills[skill.Name] = false
+			end
+		end
+	end)
+end
+
+local function TweenAndFight(bossEntry, hasQuestNpc)
+	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	local questVal = playerData and playerData:FindFirstChild("Quest")
+
+	task.spawn(EquipUnlockedSkills)
+
+	while IsCurrentSession() and getgenv().AutoFarmActive do
+		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
+
+		if hasQuestNpc and questVal then
+			if questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss then
+				break
+			end
+		end
+
+		local currentBoss = FindLivingBoss(bossEntry)
+		if not currentBoss then break end
+
+		local bossHRP = currentBoss:FindFirstChild("HumanoidRootPart")
+		local bossHum = currentBoss:FindFirstChildOfClass("Humanoid")
+		local character = localPlayer.Character
+		local hrp = character and character:FindFirstChild("HumanoidRootPart")
+		if not bossHRP or not bossHum or not hrp then break end
+
+		currentLockedBoss = currentBoss
+		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
+
+		if distToBoss > 25 then
+			SetStatus("✈️ Tween verso Boss: " .. bossEntry.Name)
+			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
+			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
+			pcall(function() MoveToTarget(targetCF, false) end)
+		else
+			local hpPct = math.floor((bossHum.Health / math.max(bossHum.MaxHealth, 1)) * 100)
+			SetStatus(string.format("⚔️ %s [HP: %d%%]", bossEntry.Name, hpPct))
+			DoFullAttack()
+		end
+
+		task.wait(0.12)
+	end
+
+	currentLockedBoss = nil
+	StopActiveTween()
+	pcall(function()
+		camera.CameraType = Enum.CameraType.Custom
+		if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") then
+			localPlayer.Character:FindFirstChildOfClass("Humanoid").AutoRotate = true
+			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+		end
+	end)
+end
+
+local function WaitForBossToSpawn(bossEntry, timeLimit, hasQuestNpc)
+	local startTime = os.time()
+	local bossReady = false
+
+	repeat
+		if not IsCurrentSession() or not getgenv().AutoFarmActive then return false end
+		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then return false end
+		local char = localPlayer.Character
+		if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
+
+		task.wait(0.2)
+		local currentBoss = FindLivingBoss(bossEntry)
+		bossReady = (currentBoss ~= nil)
+	until bossReady or os.time() - startTime > timeLimit
+
+	if bossReady and getgenv().AutoFarmActive then
+		task.wait(0.1)
+		TweenAndFight(bossEntry, hasQuestNpc)
+		return true
+	end
+	return false
+end
+
+local function CheckAndFightBoss(bossEntry)
+	if not getgenv().AutoFarmActive then return false end
+	if not WaitForTransformation(bossEntry.MinDef) then return false end
+
+	local character = localPlayer.Character
+	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return false end
+
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not playerData or not hrp then return false end
+
+	local npcFolder = workspace:FindFirstChild("Others") and workspace.Others:FindFirstChild("NPCs")
+	local bossNpc = (not bossEntry.NoQuest and npcFolder) and (npcFolder:FindFirstChild(bossEntry.Name) or npcFolder:FindFirstChild(bossEntry.Boss)) or nil
+
+	if not bossEntry.NoQuest and not bossNpc and not FindLivingBoss(bossEntry) then
+		return false
+	end
+	if bossEntry.NoQuest and not FindLivingBoss(bossEntry) then
+		return false
+	end
+
+	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
+		local questVal = playerData:WaitForChild("Quest")
+		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
+			if not IsCurrentSession() or not getgenv().AutoFarmActive then
+				StopActiveTween()
+				return false
+			end
+			if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then
+				StopActiveTween()
+				return false
+			end
+			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+
+			currentLockedBoss = nil
+			SetStatus("✈️ Tween verso Quest: " .. bossEntry.Name)
+			local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
+			MoveToTarget(npcCF, true)
+
+			if (localPlayer.Character.HumanoidRootPart.Position - npcCF.Position).Magnitude <= 12 then
+				pcall(function()
+					Events:WaitForChild("Qaction"):InvokeServer(bossNpc)
+				end)
+			end
+
+			task.wait(0.2)
+		end
+
+		if questVal.Value == bossEntry.Name or questVal.Value == bossEntry.Boss then
+			return WaitForBossToSpawn(bossEntry, 5, true)
+		end
+	else
+		return WaitForBossToSpawn(bossEntry, 5, false)
+	end
+	return false
+end
+
+-- ==============================================================================
+-- 🔄 MAIN FARM LOOP (AUTO IN BASE ALLA DIFESA OPPURE MANUALE)
+-- ==============================================================================
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive then
+			if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
+				local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+				if playerData then
+					if getgenv().ManualBoss then
+						for _, bEntry in ipairs(BossList) do
+							if bEntry.Name == getgenv().ManualBoss then
+								local fought = CheckAndFightBoss(bEntry)
+								if not fought and getgenv().AutoFarmActive then
+									SetStatus("⏳ Attesa Boss: " .. bEntry.Name)
+								end
+								break
+							end
+						end
+					else
+						local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
+						local foughtAny = false
+						for _, bEntry in ipairs(BossList) do
+							if not getgenv().AutoFarmActive or getgenv().ManualBoss ~= nil or not IsCurrentSession() then break end
+							if myDef >= bEntry.MinDef then
+								if CheckAndFightBoss(bEntry) then
+									foughtAny = true
+									break
+								end
+							end
+						end
+						if not foughtAny and getgenv().AutoFarmActive then
+							SetStatus("🔍 Ricerca Boss (Difesa: " .. FormatStat(myDef) .. ")...")
+						end
+					end
+				end
+			end
+		end
+		task.wait(0.4)
+	end
+end)
