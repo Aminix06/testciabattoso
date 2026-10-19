@@ -143,7 +143,7 @@ local BossList = {
 	{Name = "Kall (LSSJ)",                            Boss = "Kall (LSSJ)",                            MinDef = 3.2e9},
 	{Name = "Piclow (Base)",                          Boss = "Piclow (Base)",                          MinDef = 2.1e9},
 	{Name = "Caulla (Base)",                          Boss = "Caulla (Base)",                          MinDef = 1.2e9},
-	{Name = "Kai-Fist Master",                        Boss = "Kai-Fist Master",                        MinDef = 800e6},
+	{Name = "Kai-fist Master",                        Boss = "Kai-fist Master",                        MinDef = 800e6},
 	{Name = "Gotanks",                                Boss = "Gotanks",                                MinDef = 600e6,  NoQuest = true},
 	{Name = "SSJ2 Wukong",                            Boss = "SSJ2 Wukong",                            MinDef = 500e6},
 	{Name = "Perfect Atom",                           Boss = "Perfect Atom",                           MinDef = 300e6},
