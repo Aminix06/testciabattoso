@@ -2,7 +2,7 @@
 -- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI E SCRIPT DI TEST
 -- ==============================================================================
 local CoreGui = game:GetService("CoreGui")
-for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
+for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScanner", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
 	if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
 end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
@@ -168,7 +168,7 @@ end
 
 local isCurrentlyAttacking = false
 local justRebirthed = false
-local lastFormWithKaioken = nil
+local lastTransformClock = 0 -- Registra il momento esatto in cui è entrata la forma
 local currentPreviewRebs = 0
 local rejectedForms = {}
 local lastCheckedRebForForms = -1
@@ -272,9 +272,9 @@ local BossList = {
 	{Name = "Wukong (TUI)",                           Boss = "Wukong (TUI)",                           MinDef = 200e15},
 	{Name = "Ultra Super Villain Vegetable",          Boss = "Ultra Super Villain Vegetable",          MinDef = 54.5e15},
 	{Name = "Cucumber",                               Boss = "Cucumber",                               MinDef = 15e15,   NoQuest = true},
-	{Name = "Grand Minister (1% Power)",              Boss = "Grand Minister (1% Power)",              MinDef = 9.6e15},
-	{Name = "Kakata (Ego Instinct)",                  Boss = "Kakata (Ego Instinct)",                  MinDef = 7.02e15},
-	{Name = "Goheta (Base - SSJB)",                   Boss = "Goheta (Base - SSJB)",                   MinDef = 5.03e15},
+	{Name = "Grand Minister (1% Power)",              Boss = "Grand Minister (1% Power)",              MinDef = 12.6e15},
+	{Name = "Kakata (Ego Instinct)",                  Boss = "Kakata (Ego Instinct)",                  MinDef = 9.02e15},
+	{Name = "Goheta (Base - SSJB)",                   Boss = "Goheta (Base - SSJB)",                   MinDef = 7.03e15},
 	{Name = "Vegetable (Ultra Ego)",                  Boss = "Vegetable (Ultra Ego)",                  MinDef = 62.6e12},
 	{Name = "Wukong (MUI)",                           Boss = "Wukong (MUI)",                           MinDef = 42.6e12},
 	{Name = "Vekuta SSJBUI",                          Boss = "Vekuta SSJBUI",                          MinDef = 22.6e12},
@@ -303,7 +303,7 @@ local BossList = {
 	{Name = "Kall (LSSJ)",                            Boss = "Kall (LSSJ)",                            MinDef = 3.2e9},
 	{Name = "Piclow (Base)",                          Boss = "Piclow (Base)",                          MinDef = 2.1e9},
 	{Name = "Caulla (Base)",                          Boss = "Caulla (Base)",                          MinDef = 1.2e9},
-	{Name = "Kai-Fist Master",                        Boss = "Kai-Fist Master",                        MinDef = 800e6},
+	{Name = "Kai-fist Master",                        Boss = "Kai-fist Master",                        MinDef = 800e6},
 	{Name = "Gotanks",                                Boss = "Gotanks",                                MinDef = 600e6,  NoQuest = true},
 	{Name = "SSJ2 Wukong",                            Boss = "SSJ2 Wukong",                            MinDef = 500e6},
 	{Name = "Perfect Atom",                           Boss = "Perfect Atom",                           MinDef = 300e6},
@@ -337,12 +337,18 @@ local BossList = {
 	{Name = "X Fighter Trainer",                      Boss = "X Fighter",                              MinDef = 0}
 }
 
+-- Legge lo Status del giocatore (dove ci sono Transformation e KaiokenActive)
 local function GetLiveStatus()
-	local char = localPlayer.Character
-	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-	return (char and char:FindFirstChild("Status"))
-		or (wsChar and wsChar:FindFirstChild("Status"))
-		or localPlayer:FindFirstChild("Status")
+	return localPlayer:FindFirstChild("Status")
+		or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
+		or (workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name) and workspace.Living[localPlayer.Name]:FindFirstChild("Status"))
+end
+
+-- Rileva con certezza al 100% se il Kaioken è attivo (Player.Status.KaiokenActive)
+local function IsKaiokenCurrentlyActive()
+	local st = localPlayer:FindFirstChild("Status") or GetLiveStatus()
+	local kk = st and st:FindFirstChild("KaiokenActive")
+	return (kk and kk.Value == true) or false
 end
 
 -- ==============================================================================
@@ -695,7 +701,7 @@ BentoTitle.TextTruncate = Enum.TextTruncate.AtEnd
 BentoTitle.ZIndex = 11
 
 local FormPill = Instance.new("TextLabel", StatsHeader)
-FormPill.Size = UDim2.new(0, 125, 0, 13)
+FormPill.Size = UDim2.new(0, 160, 0, 13)
 FormPill.Position = UDim2.new(0, 38, 0, 20)
 FormPill.BackgroundTransparency = 1
 FormPill.Font = Enum.Font.GothamBold
@@ -839,8 +845,9 @@ task.spawn(function()
 		local status = GetLiveStatus()
 		local actualForm = status and status:FindFirstChild("Transformation") and status.Transformation.Value or "Base"
 		if actualForm == "" or actualForm == "None" then actualForm = "Base" end
+		local kkTag = IsKaiokenCurrentlyActive() and " + 🔥KK" or ""
 		if FormPill and FormPill.Parent then
-			FormPill.Text = string.format("⚡ %s • %02d:%02d", tostring(actualForm), m, s)
+			FormPill.Text = string.format("⚡ %s%s • %02d:%02d", tostring(actualForm), kkTag, m, s)
 		end
 
 		if pData then
@@ -1441,7 +1448,6 @@ task.spawn(function()
 				isCurrentlyAttacking = false
 				currentLockedBoss = nil
 				justRebirthed = true
-				lastFormWithKaioken = nil
 				table.clear(rejectedForms)
 				StopActiveTween()
 
@@ -1569,7 +1575,7 @@ end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function()
 	isCurrentlyAttacking = false
-	lastFormWithKaioken = nil
+	lastTransformClock = 0
 	table.clear(rejectedForms)
 	task.wait(1.2)
 	UpdateFloatState()
@@ -1591,7 +1597,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- 🔥 SMART BEST-FORM FINDER (CON STATS + REB ESATTI) + ATTESA KAIOKEN + "schtah"
+-- 🔥 CONTROLLO FORMA + LETTURA REALE DI "Player.Status.KaiokenActive"
 -- ==============================================================================
 local function GetBestAvailableCandidate(defVal, rebVal)
 	if rebVal ~= lastCheckedRebForForms then
@@ -1624,7 +1630,8 @@ local function NeedsFormOrKaiokenRightNow()
 
 	local bestCandidate = GetBestAvailableCandidate(defVal, rebVal)
 	if bestCandidate then
-		if actual.Value ~= bestCandidate or lastFormWithKaioken ~= bestCandidate then
+		-- Se non hai la forma migliore attiva OPPURE Status.KaiokenActive è false, deve fermarsi per attivarli!
+		if actual.Value ~= bestCandidate or not IsKaiokenCurrentlyActive() then
 			return true
 		end
 	end
@@ -1655,10 +1662,6 @@ local function EnsureFormAndKaioken()
 		return true
 	end
 
-	if actual.Value ~= targetForm then
-		lastFormWithKaioken = nil
-	end
-
 	-- PASSO 1: Equipaggia e attiva subito la forma migliore per le tue Stats + Rebirth!
 	if actual.Value ~= targetForm then
 		isCurrentlyAttacking = false
@@ -1679,6 +1682,7 @@ local function EnsureFormAndKaioken()
 			end
 
 			if actual.Value == targetForm then
+				lastTransformClock = os.clock()
 				break
 			end
 
@@ -1700,6 +1704,7 @@ local function EnsureFormAndKaioken()
 				end
 
 				if actual.Value == targetForm then
+					lastTransformClock = os.clock()
 					break
 				end
 			else
@@ -1710,46 +1715,58 @@ local function EnsureFormAndKaioken()
 		if not targetForm or actual.Value ~= targetForm then
 			return false
 		end
-		lastFormWithKaioken = nil
 	end
 
-	-- PASSO 2: Ora che la forma migliore è attiva, aspetta i secondi del Kaioken ed esegui "schtah"!
-	if actual.Value == targetForm and lastFormWithKaioken ~= targetForm then
+	-- PASSO 2: Controlla Player.Status.KaiokenActive! Se è false, aspetta i secondi impostati e lo attiva finché non diventa true!
+	if actual.Value == targetForm and not IsKaiokenCurrentlyActive() then
 		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		StopActiveTween()
 
 		local waitDuration = tonumber(getgenv().KaiokenWaitTime) or 10
-		local startWait = os.clock()
+		if lastTransformClock == 0 then
+			lastTransformClock = os.clock()
+		end
 
-		while (os.clock() - startWait) < waitDuration do
+		while not IsKaiokenCurrentlyActive() and (os.clock() - lastTransformClock) < waitDuration do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then return false end
 			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
-			if actual.Value ~= targetForm then
-				return false
-			end
-			local elapsedWait = os.clock() - startWait
+			if actual.Value ~= targetForm then return false end
+
+			local elapsedWait = os.clock() - lastTransformClock
 			local remaining = math.max(0, waitDuration - elapsedWait)
 			local ratio = math.clamp(elapsedWait / math.max(waitDuration, 0.1), 0, 1)
 			SetStatus(string.format("🔥 Attesa Kaioken: %.1fs...", remaining), ratio)
 			task.wait(0.1)
 		end
 
-		SetStatus("🔥 Attivazione Kaioken (schtah)!", 1)
-		pcall(function()
-			kaiokenRemote:InvokeServer()
-		end)
-		task.wait(0.4)
+		-- Esegue schtah e verifica che Status.KaiokenActive diventi effettivamente true!
+		local attempts = 0
+		while not IsKaiokenCurrentlyActive() and attempts < 5 and getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
+			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+			if actual.Value ~= targetForm then return false end
 
-		lastFormWithKaioken = targetForm
+			SetStatus("🔥 Attivazione Kaioken (schtah)...", 1)
+			pcall(function()
+				kaiokenRemote:InvokeServer()
+			end)
+
+			local checkKK = 0
+			while not IsKaiokenCurrentlyActive() and checkKK < 6 do
+				task.wait(0.15)
+				checkKK += 1
+			end
+			attempts += 1
+		end
+
 		CheckAndEquipSkills(true)
 	end
 
-	return (actual.Value == targetForm and lastFormWithKaioken == targetForm)
+	return (actual.Value == targetForm and IsKaiokenCurrentlyActive())
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO PULITO (INTERROMPE SUBITO SE SERVE FORMA + KAIOKEN)
+-- ⚔️ SISTEMA DI COMBATTIMENTO PULITO (INTERROMPE SUBITO SE SERVE FORMA O KAIOKEN)
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
@@ -1904,7 +1921,7 @@ local function CheckAndFightBoss(bossEntry)
 		return false
 	end
 
-	-- PRIMA verifica ed esegue Forma Migliore -> Attesa Kaioken -> schtah, POI va dal Boss!
+	-- PRIMA verifica ed esegue Forma Migliore -> Attesa Kaioken -> KaiokenActive == true, POI va dal Boss!
 	if not EnsureFormAndKaioken() then return false end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
@@ -1949,7 +1966,7 @@ local function CheckAndFightBoss(bossEntry)
 end
 
 -- ==============================================================================
--- 🔄 MAIN FARM LOOP (PRIMA METTE LA FORMA MIGLIORE + KAIOKEN, POI INIZIA A FARMARE)
+-- 🔄 MAIN FARM LOOP (PRIMA METTE LA FORMA MIGLIORE + KAIOKEN ACTIVE, POI INIZIA A FARMARE)
 -- ==============================================================================
 task.spawn(function()
 	while IsCurrentSession() do
