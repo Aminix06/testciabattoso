@@ -1,14 +1,17 @@
 -- ==============================================================================
--- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI
+-- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI E SCRIPT DI TEST
 -- ==============================================================================
 local CoreGui = game:GetService("CoreGui")
-if CoreGui:FindFirstChild("TestOnlyAttackGUI") then CoreGui.TestOnlyAttackGUI:Destroy() end
+for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
+	if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
+end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
 if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
 if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
 if getgenv().CiabCleanup then pcall(getgenv().CiabCleanup) end
 
 local ScriptSessionId = tick()
+local SessionStartTime = os.time()
 getgenv().CiabSessionId = ScriptSessionId
 local function IsCurrentSession()
 	return getgenv().CiabSessionId == ScriptSessionId
@@ -26,21 +29,121 @@ local camera = workspace.CurrentCamera
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
 local equipRemote = Events:WaitForChild("equipskill")
 local transformRemote = Events:WaitForChild("Fa")
+local kaiokenRemote = Events:WaitForChild("schtah")
 local skillRemote = Events:WaitForChild("FaFa")
 local punchRemote = Events:WaitForChild("p")
 local chaRemote = Events:WaitForChild("cha")
+local previewRemote = Events:WaitForChild("GetRebirthPreview")
+local multirebRemote = Events:WaitForChild("Multireb")
 
 -- ==============================================================================
--- ⚙️ CONFIGURAZIONE VELOCITÀ MAX TWEEN, SKILL (STATS + REB) E FORME
+-- 🔢 FUNZIONI DI CONVERSIONE E FORMATTAZIONE ESATTA REBIRTH (1.770 = 1770)
 -- ==============================================================================
+-- Converte "1.770" o "1,770" nel vero numero intero 1770 (non 1.77!)
+local function ParseRebirthInt(res)
+	if type(res) == "number" then
+		return math.floor(res)
+	elseif type(res) == "string" then
+		-- Rimuove punti, virgole e spazi delle migliaia prima di convertire in numero
+		local digitsOnly = string.gsub(res, "[%.,%s]", "")
+		local num = tonumber(string.match(digitsOnly, "%d+"))
+		return num or 0
+	elseif type(res) == "table" then
+		for _, v in pairs(res) do
+			local parsed = ParseRebirthInt(v)
+			if parsed > 0 then return parsed end
+		end
+	end
+	return 0
+end
+
+-- Formatta i Rebirth col punto delle migliaia mantenendo tutti gli zeri (es. 1770 -> "1.770")
+local function FormatReb(n)
+	n = math.floor(tonumber(n) or 0)
+	local s = tostring(n)
+	while true do
+		local k
+		s, k = string.gsub(s, "^(-?%d+)(%d%d%d)", "%1.%2")
+		if k == 0 then break end
+	end
+	return s
+end
+
+local function FormatStat(n)
+	n = tonumber(n) or 0
+	if n >= 1e24 then return string.format("%.2fSp", n / 1e24)
+	elseif n >= 1e21 then return string.format("%.2fSx", n / 1e21)
+	elseif n >= 1e18 then return string.format("%.2fQi", n / 1e18)
+	elseif n >= 1e15 then return string.format("%.2fQd", n / 1e15)
+	elseif n >= 1e12 then return string.format("%.2fT", n / 1e12)
+	elseif n >= 1e9 then return string.format("%.2fB", n / 1e9)
+	elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
+	elseif n >= 1e3 then return string.format("%.1fk", n / 1e3)
+	else return tostring(math.floor(n)) end
+end
+
+-- ==============================================================================
+-- 💾 SISTEMA DI MEMORIA PERMANENTE (.JSON): TWEEN, KAIOKEN, REB E SCALA GUI
+-- ==============================================================================
+local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 10000
 local NO_FORM_MAX_DEF = 10e12 -- Fino a 10T può combattere anche senza forma!
 
 getgenv().AutoFarmActive = false
+getgenv().AutoRebActive = false
+getgenv().TargetRebAmount = 1
+getgenv().KaiokenWaitTime = 10
 getgenv().TweenSpeed = 300
-getgenv().ManualBoss = nil -- nil = Automatico in base alla Difesa | "NomeBoss" = Manuale
+getgenv().StatsUIScale = 1.0
+getgenv().HubUIScale = 1.0
+getgenv().ManualBoss = nil
+
+if isfile and isfile(ConfigFileName) then
+	local ok, decoded = pcall(function()
+		return HttpService:JSONDecode(readfile(ConfigFileName))
+	end)
+	if ok and type(decoded) == "table" then
+		if tonumber(decoded.TweenSpeed) then
+			getgenv().TweenSpeed = math.clamp(math.floor(tonumber(decoded.TweenSpeed)), 10, MAX_TWEEN_SPEED)
+		end
+		if tonumber(decoded.KaiokenWaitTime) then
+			getgenv().KaiokenWaitTime = math.max(0, tonumber(decoded.KaiokenWaitTime))
+		end
+		if decoded.TargetRebAmount ~= nil then
+			local parsedTarget = ParseRebirthInt(decoded.TargetRebAmount)
+			getgenv().TargetRebAmount = math.max(1, parsedTarget)
+		end
+		if tonumber(decoded.StatsUIScale) then
+			getgenv().StatsUIScale = math.clamp(tonumber(decoded.StatsUIScale), 0.65, 1.55)
+		end
+		if tonumber(decoded.HubUIScale) then
+			getgenv().HubUIScale = math.clamp(tonumber(decoded.HubUIScale), 0.65, 1.55)
+		end
+	end
+end
+
+local onConfigSavedCallback = nil
+local function SaveConfig()
+	if writefile then
+		pcall(function()
+			writefile(ConfigFileName, HttpService:JSONEncode({
+				TweenSpeed = getgenv().TweenSpeed,
+				KaiokenWaitTime = getgenv().KaiokenWaitTime,
+				TargetRebAmount = getgenv().TargetRebAmount,
+				StatsUIScale = tonumber(string.format("%.2f", getgenv().StatsUIScale)),
+				HubUIScale = tonumber(string.format("%.2f", getgenv().HubUIScale))
+			}))
+		end)
+		if onConfigSavedCallback then
+			task.spawn(onConfigSavedCallback)
+		end
+	end
+end
 
 local isCurrentlyAttacking = false
+local justRebirthed = false
+local lastFormWithKaioken = nil
+local currentPreviewRebs = 0
 
 -- 🗡️ REQUISITI ESATTI DI STRENGTH, SPEED E REBIRTH PER EQUIPAGGIARE E USARE LE SKILL
 local SkillRequirements = {
@@ -54,10 +157,7 @@ local SkillRequirements = {
 local equippedSkills = {}
 
 local function CheckAndEquipSkills(forceReEquip)
-	if forceReEquip then
-		table.clear(equippedSkills)
-	end
-
+	if forceReEquip then table.clear(equippedSkills) end
 	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not playerData then return end
 
@@ -143,7 +243,7 @@ local BossList = {
 	{Name = "Kall (LSSJ)",                            Boss = "Kall (LSSJ)",                            MinDef = 3.2e9},
 	{Name = "Piclow (Base)",                          Boss = "Piclow (Base)",                          MinDef = 2.1e9},
 	{Name = "Caulla (Base)",                          Boss = "Caulla (Base)",                          MinDef = 1.2e9},
-	{Name = "Kai-fist Master",                        Boss = "Kai-fist Master",                        MinDef = 800e6},
+	{Name = "Kai-Fist Master",                        Boss = "Kai-Fist Master",                        MinDef = 800e6},
 	{Name = "Gotanks",                                Boss = "Gotanks",                                MinDef = 600e6,  NoQuest = true},
 	{Name = "SSJ2 Wukong",                            Boss = "SSJ2 Wukong",                            MinDef = 500e6},
 	{Name = "Perfect Atom",                           Boss = "Perfect Atom",                           MinDef = 300e6},
@@ -177,17 +277,12 @@ local BossList = {
 	{Name = "X Fighter Trainer",                      Boss = "X Fighter",                              MinDef = 0}
 }
 
-local function FormatStat(n)
-	n = tonumber(n) or 0
-	if n >= 1e24 then return string.format("%.2fSp", n / 1e24)
-	elseif n >= 1e21 then return string.format("%.2fSx", n / 1e21)
-	elseif n >= 1e18 then return string.format("%.2fQi", n / 1e18)
-	elseif n >= 1e15 then return string.format("%.2fQd", n / 1e15)
-	elseif n >= 1e12 then return string.format("%.2fT", n / 1e12)
-	elseif n >= 1e9 then return string.format("%.2fB", n / 1e9)
-	elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
-	elseif n >= 1e3 then return string.format("%.1fk", n / 1e3)
-	else return tostring(math.floor(n)) end
+local function GetLiveStatus()
+	local char = localPlayer.Character
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	return (char and char:FindFirstChild("Status"))
+		or (wsChar and wsChar:FindFirstChild("Status"))
+		or localPlayer:FindFirstChild("Status")
 end
 
 -- ==============================================================================
@@ -217,9 +312,7 @@ local function UpdateFloatState()
 		end
 	end
 
-	if hum then
-		hum.AutoRotate = not getgenv().AutoFarmActive
-	end
+	if hum then hum.AutoRotate = not getgenv().AutoFarmActive end
 
 	if getgenv().AutoFarmActive then
 		local att = Instance.new("Attachment", root)
@@ -302,7 +395,7 @@ local function MoveToTarget(targetCFrame, waitForCompletion)
 
 	local startClock = os.clock()
 	while activeTween and activeTween.PlaybackState == Enum.PlaybackState.Playing do
-		if not IsCurrentSession() or not getgenv().AutoFarmActive then
+		if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
 			StopActiveTween()
 			break
 		end
@@ -352,14 +445,91 @@ local function MakeDraggable(dragHandle, targetFrame)
 end
 
 -- ==============================================================================
--- 🌌 ULTRA-PREMIUM CYBER-NEON GUI (STATS A SINISTRA + HUB A DESTRA)
+-- 📐 MANIGLIA ANGOLARE CURVA CONCENTRICA (STESSO RAGGIO ESATTO DEL BORDO 16px!)
 -- ==============================================================================
-for _, guiName in ipairs({"UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
-	if CoreGui:FindFirstChild(guiName) then
-		CoreGui[guiName]:Destroy()
-	end
+local function SetupConcentricCornerResize(winFrame, initialScale, refSize, accentCol, onScaleChanged)
+	local uiScale = Instance.new("UIScale", winFrame)
+	uiScale.Scale = initialScale
+
+	local gripHitbox = Instance.new("TextButton", winFrame)
+	gripHitbox.Name = "ConcentricCornerGrip"
+	gripHitbox.Size = UDim2.new(0, 22, 0, 22)
+	gripHitbox.Position = UDim2.new(1, -22, 1, -22)
+	gripHitbox.BackgroundTransparency = 1
+	gripHitbox.Text = ""
+	gripHitbox.ZIndex = 30
+
+	local arcClip = Instance.new("Frame", winFrame)
+	arcClip.Name = "ArcClipQuadrant"
+	arcClip.Size = UDim2.new(0, 16, 0, 16)
+	arcClip.Position = UDim2.new(1, -16, 1, -16)
+	arcClip.BackgroundTransparency = 1
+	arcClip.ClipsDescendants = true
+	arcClip.ZIndex = 29
+
+	local outerArc = Instance.new("Frame", arcClip)
+	outerArc.Size = UDim2.new(0, 24, 0, 24)
+	outerArc.Position = UDim2.new(0, -12, 0, -12)
+	outerArc.BackgroundTransparency = 1
+	Instance.new("UICorner", outerArc).CornerRadius = UDim.new(0, 12)
+	local stroke1 = Instance.new("UIStroke", outerArc)
+	stroke1.Color = accentCol
+	stroke1.Thickness = 1.8
+	stroke1.Transparency = 0.35
+
+	local innerArc = Instance.new("Frame", arcClip)
+	innerArc.Size = UDim2.new(0, 15, 0, 15)
+	innerArc.Position = UDim2.new(0, -7.5, 0, -7.5)
+	innerArc.BackgroundTransparency = 1
+	Instance.new("UICorner", innerArc).CornerRadius = UDim.new(0, 8)
+	local stroke2 = Instance.new("UIStroke", innerArc)
+	stroke2.Color = accentCol
+	stroke2.Thickness = 1.8
+	stroke2.Transparency = 0.35
+
+	gripHitbox.MouseEnter:Connect(function()
+		TweenService:Create(stroke1, TweenInfo.new(0.15), {Transparency = 0, Thickness = 2.3}):Play()
+		TweenService:Create(stroke2, TweenInfo.new(0.15), {Transparency = 0, Thickness = 2.3}):Play()
+	end)
+	gripHitbox.MouseLeave:Connect(function()
+		TweenService:Create(stroke1, TweenInfo.new(0.15), {Transparency = 0.35, Thickness = 1.8}):Play()
+		TweenService:Create(stroke2, TweenInfo.new(0.15), {Transparency = 0.35, Thickness = 1.8}):Play()
+	end)
+
+	local resizing = false
+	local startPos = Vector2.zero
+	local startScale = initialScale
+
+	gripHitbox.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			resizing = true
+			startPos = Vector2.new(input.Position.X, input.Position.Y)
+			startScale = uiScale.Scale
+		end
+	end)
+	table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+		if resizing and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+			resizing = false
+			SaveConfig()
+		end
+	end))
+	table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+		if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local dx = input.Position.X - startPos.X
+			local dy = input.Position.Y - startPos.Y
+			local combinedDelta = (dx + dy) * 0.5
+			local newScale = math.clamp(startScale + (combinedDelta / refSize), 0.65, 1.55)
+			TweenService:Create(uiScale, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {Scale = newScale}):Play()
+			if onScaleChanged then onScaleChanged(newScale) end
+		end
+	end))
+
+	return uiScale, arcClip
 end
 
+-- ==============================================================================
+-- 🌌 ARCHITETTURA "VISION-OS BENTO & HOLO-DECK" (MINIMAL, COMPATTA E DIVINA)
+-- ==============================================================================
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CiabMiniHub"
 ScreenGui.Parent = CoreGui
@@ -367,8 +537,14 @@ ScreenGui.ResetOnSpawn = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 9999
 
+pcall(function()
+	local bars = localPlayer.PlayerGui.Main.MainFrame.Bars
+	if bars then bars.Visible = true end
+end)
+
 getgenv().CiabCleanup = function()
 	getgenv().AutoFarmActive = false
+	getgenv().AutoRebActive = false
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	StopActiveTween()
@@ -378,170 +554,213 @@ getgenv().CiabCleanup = function()
 	if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
 end
 
+local rotatingGradients = {}
+local function AddAuroraGradient(parent, c1, c2, c3, c4)
+	local grad = Instance.new("UIGradient", parent)
+	grad.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, c1),
+		ColorSequenceKeypoint.new(0.35, c2),
+		ColorSequenceKeypoint.new(0.7, c3),
+		ColorSequenceKeypoint.new(1, c4 or c1)
+	}
+	table.insert(rotatingGradients, grad)
+	return grad
+end
+
 -- ------------------------------------------------------------------------------
--- 📊 1. FINESTRA STATISTICHE ULTRA-NEON (SINISTRA)
--- Ordine esatto: Strength -> Speed -> Defense -> Energy -> Rebirths
+-- 🍱 1. SINISTRA: "HOLO-BENTO STATS" (GRIGLIA 2x2 + CAPSULA REB — 238x218 px!)
+-- Ordine: 1. STR | 2. SPEED | 3. DEF | 4. ENERGY | 5. REBIRTHS
 -- ------------------------------------------------------------------------------
 local StatsWin = Instance.new("Frame", ScreenGui)
-StatsWin.Name = "StatsWindow"
-StatsWin.Size = UDim2.new(0, 265, 0, 330)
-StatsWin.Position = UDim2.new(0, 18, 0.5, -165)
-StatsWin.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+StatsWin.Name = "BentoStats"
+StatsWin.Size = UDim2.new(0, 238, 0, 218)
+StatsWin.Position = UDim2.new(0, 18, 0.5, -109)
+StatsWin.BackgroundColor3 = Color3.fromRGB(11, 13, 22)
 StatsWin.BackgroundTransparency = 0.04
 StatsWin.Active = true
 StatsWin.ClipsDescendants = true
 Instance.new("UICorner", StatsWin).CornerRadius = UDim.new(0, 16)
 
-local statsBgGrad = Instance.new("UIGradient", StatsWin)
-statsBgGrad.Rotation = 45
-statsBgGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 19, 32)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 10, 16))
+local sWinGrad = Instance.new("UIGradient", StatsWin)
+sWinGrad.Rotation = 135
+sWinGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 26, 45)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 16))
 }
 
 local statsStroke = Instance.new("UIStroke", StatsWin)
 statsStroke.Color = Color3.fromRGB(255, 255, 255)
-statsStroke.Thickness = 2.2
-local statsStrokeGrad = Instance.new("UIGradient", statsStroke)
-statsStrokeGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 210, 0)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 230, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 50, 140))
-}
+statsStroke.Thickness = 2
+AddAuroraGradient(statsStroke, Color3.fromRGB(0, 245, 255), Color3.fromRGB(255, 210, 0), Color3.fromRGB(255, 50, 150), Color3.fromRGB(130, 70, 255))
 
--- Header Profilo Giocatore con Avatar
+local _, statsArcGrip = SetupConcentricCornerResize(StatsWin, getgenv().StatsUIScale, 240, Color3.fromRGB(0, 240, 255), function(s)
+	getgenv().StatsUIScale = s
+end)
+
 local StatsHeader = Instance.new("Frame", StatsWin)
-StatsHeader.Size = UDim2.new(1, 0, 0, 56)
-StatsHeader.BackgroundColor3 = Color3.fromRGB(20, 24, 38)
+StatsHeader.Size = UDim2.new(1, 0, 0, 38)
+StatsHeader.BackgroundColor3 = Color3.fromRGB(17, 20, 34)
+StatsHeader.BackgroundTransparency = 0.2
 StatsHeader.BorderSizePixel = 0
 Instance.new("UICorner", StatsHeader).CornerRadius = UDim.new(0, 16)
 MakeDraggable(StatsHeader, StatsWin)
 
-local AvatarFrame = Instance.new("Frame", StatsHeader)
-AvatarFrame.Size = UDim2.new(0, 40, 0, 40)
-AvatarFrame.Position = UDim2.new(0, 10, 0, 8)
-AvatarFrame.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
-Instance.new("UICorner", AvatarFrame).CornerRadius = UDim.new(1, 0)
-local avStroke = Instance.new("UIStroke", AvatarFrame)
-avStroke.Color = Color3.fromRGB(0, 230, 255)
-avStroke.Thickness = 1.5
+local MiniAvatar = Instance.new("ImageLabel", StatsHeader)
+MiniAvatar.Size = UDim2.new(0, 24, 0, 24)
+MiniAvatar.Position = UDim2.new(0, 8, 0.5, -12)
+MiniAvatar.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+MiniAvatar.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(localPlayer.UserId) .. "&w=150&h=150"
+Instance.new("UICorner", MiniAvatar).CornerRadius = UDim.new(1, 0)
+local maStroke = Instance.new("UIStroke", MiniAvatar)
+maStroke.Color = Color3.fromRGB(0, 240, 255)
+maStroke.Thickness = 1.5
 
-local AvatarImg = Instance.new("ImageLabel", AvatarFrame)
-AvatarImg.Size = UDim2.new(1, 0, 1, 0)
-AvatarImg.BackgroundTransparency = 1
-AvatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(localPlayer.UserId) .. "&w=150&h=150"
-Instance.new("UICorner", AvatarImg).CornerRadius = UDim.new(1, 0)
+local BentoTitle = Instance.new("TextLabel", StatsHeader)
+BentoTitle.Size = UDim2.new(0, 90, 0, 15)
+BentoTitle.Position = UDim2.new(0, 38, 0, 5)
+BentoTitle.BackgroundTransparency = 1
+BentoTitle.Font = Enum.Font.GothamBlack
+BentoTitle.Text = string.upper(localPlayer.DisplayName)
+BentoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+BentoTitle.TextSize = 11
+BentoTitle.TextXAlignment = Enum.TextXAlignment.Left
+BentoTitle.TextTruncate = Enum.TextTruncate.AtEnd
 
-local StatsTitle = Instance.new("TextLabel", StatsHeader)
-StatsTitle.Size = UDim2.new(1, -95, 0, 20)
-StatsTitle.Position = UDim2.new(0, 58, 0, 9)
-StatsTitle.BackgroundTransparency = 1
-StatsTitle.Font = Enum.Font.GothamBlack
-StatsTitle.Text = "📊 CIAB LIVE STATS"
-StatsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-StatsTitle.TextSize = 13
-StatsTitle.TextXAlignment = Enum.TextXAlignment.Left
-
-local PlayerSub = Instance.new("TextLabel", StatsHeader)
-PlayerSub.Size = UDim2.new(1, -95, 0, 16)
-PlayerSub.Position = UDim2.new(0, 58, 0, 28)
-PlayerSub.BackgroundTransparency = 1
-PlayerSub.Font = Enum.Font.GothamBold
-PlayerSub.Text = "@" .. localPlayer.Name
-PlayerSub.TextColor3 = Color3.fromRGB(0, 225, 255)
-PlayerSub.TextSize = 11
-PlayerSub.TextXAlignment = Enum.TextXAlignment.Left
+local FormPill = Instance.new("TextLabel", StatsHeader)
+FormPill.Size = UDim2.new(0, 125, 0, 13)
+FormPill.Position = UDim2.new(0, 38, 0, 20)
+FormPill.BackgroundTransparency = 1
+FormPill.Font = Enum.Font.GothamBold
+FormPill.Text = "⚡ Base • 00:00"
+FormPill.TextColor3 = Color3.fromRGB(0, 235, 255)
+FormPill.TextSize = 9
+FormPill.TextXAlignment = Enum.TextXAlignment.Left
 
 local StatsMinBtn = Instance.new("TextButton", StatsHeader)
-StatsMinBtn.Size = UDim2.new(0, 28, 0, 28)
-StatsMinBtn.Position = UDim2.new(1, -36, 0, 14)
-StatsMinBtn.BackgroundColor3 = Color3.fromRGB(32, 38, 56)
+StatsMinBtn.Size = UDim2.new(0, 22, 0, 22)
+StatsMinBtn.Position = UDim2.new(1, -28, 0.5, -11)
+StatsMinBtn.BackgroundColor3 = Color3.fromRGB(26, 31, 48)
 StatsMinBtn.Font = Enum.Font.GothamBlack
 StatsMinBtn.Text = "—"
-StatsMinBtn.TextColor3 = Color3.fromRGB(220, 230, 255)
-StatsMinBtn.TextSize = 12
-Instance.new("UICorner", StatsMinBtn).CornerRadius = UDim.new(0, 8)
+StatsMinBtn.TextColor3 = Color3.fromRGB(200, 220, 255)
+StatsMinBtn.TextSize = 10
+Instance.new("UICorner", StatsMinBtn).CornerRadius = UDim.new(1, 0)
 
 local statsMinimized = false
 StatsMinBtn.MouseButton1Click:Connect(function()
 	statsMinimized = not statsMinimized
 	StatsMinBtn.Text = statsMinimized and "+" or "—"
+	statsArcGrip.Visible = not statsMinimized
 	TweenService:Create(StatsWin, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-		Size = statsMinimized and UDim2.new(0, 265, 0, 56) or UDim2.new(0, 265, 0, 330)
+		Size = statsMinimized and UDim2.new(0, 238, 0, 38) or UDim2.new(0, 238, 0, 218)
 	}):Play()
 end)
 
--- ORDINE ESATTO RICHIESTO: STR -> SPEED -> DEF -> ENERGY -> REB
+-- GRIGLIA BENTO 2x2 (1. STR | 2. SPEED | 3. DEF | 4. ENERGY) + 5. REB CAPSULE
 local StatValueLabels = {}
-local statConfigs = {
-	{Key = "Strength", Title = "STRENGTH", Icon = "💥", Color = Color3.fromRGB(255, 75, 95)},
-	{Key = "Speed",    Title = "SPEED",    Icon = "💨", Color = Color3.fromRGB(0, 240, 160)},
-	{Key = "Defense",  Title = "DEFENSE",  Icon = "🛡️", Color = Color3.fromRGB(0, 195, 255)},
-	{Key = "Energy",   Title = "ENERGY",   Icon = "⚡", Color = Color3.fromRGB(190, 100, 255)},
-	{Key = "Rebirth",  Title = "REBIRTHS", Icon = "👑", Color = Color3.fromRGB(255, 210, 0), IsReb = true}
+local bentoTiles = {
+	{Key = "Strength", Title = "STRENGTH", Icon = "💥", Color = Color3.fromRGB(255, 65, 95),  Pos = UDim2.new(0, 8, 0, 44),    Size = UDim2.new(0.5, -11, 0, 54)},
+	{Key = "Speed",    Title = "SPEED",    Icon = "💨", Color = Color3.fromRGB(0, 245, 165), Pos = UDim2.new(0.5, 3, 0, 44),  Size = UDim2.new(0.5, -11, 0, 54)},
+	{Key = "Defense",  Title = "DEFENSE",  Icon = "🛡️", Color = Color3.fromRGB(0, 205, 255), Pos = UDim2.new(0, 8, 0, 104),   Size = UDim2.new(0.5, -11, 0, 54)},
+	{Key = "Energy",   Title = "ENERGY",   Icon = "⚡", Color = Color3.fromRGB(195, 95, 255),Pos = UDim2.new(0.5, 3, 0, 104), Size = UDim2.new(0.5, -11, 0, 54)}
 }
 
-for idx, st in ipairs(statConfigs) do
-	local card = Instance.new("Frame", StatsWin)
-	card.Size = UDim2.new(1, -24, 0, 44)
-	card.Position = UDim2.new(0, 12, 0, 66 + (idx - 1) * 51)
-	card.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
-	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+for _, st in ipairs(bentoTiles) do
+	local tile = Instance.new("Frame", StatsWin)
+	tile.Size = st.Size
+	tile.Position = st.Pos
+	tile.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
+	Instance.new("UICorner", tile).CornerRadius = UDim.new(0, 12)
 
-	local cStroke = Instance.new("UIStroke", card)
-	cStroke.Color = st.Color
-	cStroke.Thickness = 1.2
-	cStroke.Transparency = 0.45
+	local tGrad = Instance.new("UIGradient", tile)
+	tGrad.Rotation = 45
+	tGrad.Color = ColorSequence.new{
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(26, 31, 50)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 17, 28))
+	}
 
-	-- Barra Neon laterale sinistra sulla card
-	local accentBar = Instance.new("Frame", card)
-	accentBar.Size = UDim2.new(0, 4, 1, -14)
-	accentBar.Position = UDim2.new(0, 6, 0, 7)
-	accentBar.BackgroundColor3 = st.Color
-	accentBar.BorderSizePixel = 0
-	Instance.new("UICorner", accentBar).CornerRadius = UDim.new(1, 0)
+	local tStroke = Instance.new("UIStroke", tile)
+	tStroke.Color = st.Color
+	tStroke.Thickness = 1.2
+	tStroke.Transparency = 0.45
 
-	local iconLbl = Instance.new("TextLabel", card)
-	iconLbl.Size = UDim2.new(0, 26, 0, 26)
-	iconLbl.Position = UDim2.new(0, 15, 0.5, -13)
-	iconLbl.BackgroundColor3 = Color3.fromRGB(14, 17, 26)
-	iconLbl.Font = Enum.Font.GothamBold
-	iconLbl.Text = st.Icon
-	iconLbl.TextSize = 13
-	Instance.new("UICorner", iconLbl).CornerRadius = UDim.new(0, 7)
+	local topRow = Instance.new("TextLabel", tile)
+	topRow.Size = UDim2.new(1, -14, 0, 16)
+	topRow.Position = UDim2.new(0, 8, 0, 6)
+	topRow.BackgroundTransparency = 1
+	topRow.Font = Enum.Font.GothamBlack
+	topRow.Text = st.Icon .. " " .. st.Title
+	topRow.TextColor3 = st.Color
+	topRow.TextSize = 9
+	topRow.TextXAlignment = Enum.TextXAlignment.Left
 
-	local nameLbl = Instance.new("TextLabel", card)
-	nameLbl.Size = UDim2.new(0.42, 0, 1, 0)
-	nameLbl.Position = UDim2.new(0, 48, 0, 0)
-	nameLbl.BackgroundTransparency = 1
-	nameLbl.Font = Enum.Font.GothamBlack
-	nameLbl.Text = st.Title
-	nameLbl.TextColor3 = st.Color
-	nameLbl.TextSize = 11
-	nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-
-	local valLbl = Instance.new("TextLabel", card)
-	valLbl.Size = UDim2.new(0.5, -12, 1, 0)
-	valLbl.Position = UDim2.new(0.5, 0, 0, 0)
+	local valLbl = Instance.new("TextLabel", tile)
+	valLbl.Size = UDim2.new(1, -14, 0, 24)
+	valLbl.Position = UDim2.new(0, 8, 0, 24)
 	valLbl.BackgroundTransparency = 1
 	valLbl.Font = Enum.Font.GothamBlack
 	valLbl.Text = "..."
 	valLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
 	valLbl.TextSize = 14
-	valLbl.TextXAlignment = Enum.TextXAlignment.Right
+	valLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-	StatValueLabels[st.Key] = {Label = valLbl, IsReb = st.IsReb}
+	StatValueLabels[st.Key] = {Label = valLbl, IsReb = false}
 end
+
+-- 5. CAPSULA IMPERIALE REBIRTHS IN BASSO
+local RebBento = Instance.new("Frame", StatsWin)
+RebBento.Size = UDim2.new(1, -16, 0, 44)
+RebBento.Position = UDim2.new(0, 8, 0, 164)
+RebBento.BackgroundColor3 = Color3.fromRGB(24, 26, 38)
+Instance.new("UICorner", RebBento).CornerRadius = UDim.new(0, 12)
+local rbStroke = Instance.new("UIStroke", RebBento)
+rbStroke.Color = Color3.fromRGB(255, 215, 0)
+rbStroke.Thickness = 1.5
+rbStroke.Transparency = 0.2
+
+local rbTitle = Instance.new("TextLabel", RebBento)
+rbTitle.Size = UDim2.new(0.40, 0, 1, 0)
+rbTitle.Position = UDim2.new(0, 10, 0, 0)
+rbTitle.BackgroundTransparency = 1
+rbTitle.Font = Enum.Font.GothamBlack
+rbTitle.Text = "👑 REBIRTHS"
+rbTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+rbTitle.TextSize = 10
+rbTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local rbVal = Instance.new("TextLabel", RebBento)
+rbVal.Size = UDim2.new(0.58, -16, 1, 0)
+rbVal.Position = UDim2.new(0.42, 0, 0, 0)
+rbVal.BackgroundTransparency = 1
+rbVal.Font = Enum.Font.GothamBlack
+rbVal.Text = "..."
+rbVal.TextColor3 = Color3.fromRGB(255, 255, 255)
+rbVal.TextSize = 12
+rbVal.TextXAlignment = Enum.TextXAlignment.Right
+
+StatValueLabels["Rebirth"] = {Label = rbVal, IsReb = true}
 
 task.spawn(function()
 	while IsCurrentSession() do
 		local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+		local elapsed = os.time() - SessionStartTime
+		local m = math.floor(elapsed / 60)
+		local s = elapsed % 60
+
+		local status = GetLiveStatus()
+		local actualForm = status and status:FindFirstChild("Transformation") and status.Transformation.Value or "Base"
+		if actualForm == "" or actualForm == "None" then actualForm = "Base" end
+		if FormPill and FormPill.Parent then
+			FormPill.Text = string.format("⚡ %s • %02d:%02d", tostring(actualForm), m, s)
+		end
+
 		if pData then
 			for key, info in pairs(StatValueLabels) do
 				local valObj = pData:FindFirstChild(key)
 				if valObj and info.Label and info.Label.Parent then
 					if info.IsReb then
-						info.Label.Text = tostring(valObj.Value)
+						local suffix = (currentPreviewRebs > 0) and (" (+" .. FormatReb(currentPreviewRebs) .. ")") or ""
+						info.Label.Text = FormatReb(valObj.Value) .. suffix
 					else
 						info.Label.Text = FormatStat(valObj.Value)
 					end
@@ -553,119 +772,143 @@ task.spawn(function()
 end)
 
 -- ------------------------------------------------------------------------------
--- ⚡ 2. FINESTRA CONTROLLO CYBER HUB (DESTRA)
+-- 🔮 2. DESTRA: "CIAB HOLO-DECK" (COMPATTA CON SCHEDE: ⚙️ CONFIG | 🎯 BOSS)
 -- ------------------------------------------------------------------------------
 local MainWin = Instance.new("Frame", ScreenGui)
-MainWin.Name = "MainWindow"
-MainWin.Size = UDim2.new(0, 325, 0, 395)
-MainWin.Position = UDim2.new(1, -343, 0.5, -197)
-MainWin.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+MainWin.Name = "HoloDeckHub"
+MainWin.Size = UDim2.new(0, 275, 0, 268)
+MainWin.Position = UDim2.new(1, -293, 0.5, -134)
+MainWin.BackgroundColor3 = Color3.fromRGB(11, 13, 22)
 MainWin.BackgroundTransparency = 0.04
 MainWin.Active = true
 MainWin.ClipsDescendants = true
 Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 16)
 
-local mainBgGrad = Instance.new("UIGradient", MainWin)
-mainBgGrad.Rotation = 45
-mainBgGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 19, 32)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 10, 16))
+local mWinGrad = Instance.new("UIGradient", MainWin)
+mWinGrad.Rotation = 135
+mWinGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(22, 26, 45)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(8, 10, 16))
 }
 
 local mainStroke = Instance.new("UIStroke", MainWin)
 mainStroke.Color = Color3.fromRGB(255, 255, 255)
-mainStroke.Thickness = 2.2
-local mainStrokeGrad = Instance.new("UIGradient", mainStroke)
-mainStrokeGrad.Color = ColorSequence.new{
-	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 200)),
-	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 140, 255)),
-	ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 50, 255))
-}
+mainStroke.Thickness = 2
+AddAuroraGradient(mainStroke, Color3.fromRGB(0, 255, 200), Color3.fromRGB(0, 140, 255), Color3.fromRGB(190, 50, 255), Color3.fromRGB(255, 215, 0))
+
+local _, hubArcGrip = SetupConcentricCornerResize(MainWin, getgenv().HubUIScale, 275, Color3.fromRGB(0, 255, 200), function(s)
+	getgenv().HubUIScale = s
+end)
 
 local Header = Instance.new("Frame", MainWin)
-Header.Size = UDim2.new(1, 0, 0, 50)
-Header.BackgroundColor3 = Color3.fromRGB(20, 24, 38)
+Header.Size = UDim2.new(1, 0, 0, 40)
+Header.BackgroundColor3 = Color3.fromRGB(17, 20, 34)
+Header.BackgroundTransparency = 0.2
 Header.BorderSizePixel = 0
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 16)
 MakeDraggable(Header, MainWin)
 
 local Title = Instance.new("TextLabel", Header)
-Title.Size = UDim2.new(1, -55, 0, 22)
-Title.Position = UDim2.new(0, 14, 0, 6)
+Title.Size = UDim2.new(0, 125, 0, 16)
+Title.Position = UDim2.new(0, 12, 0, 5)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBlack
-Title.Text = "⚡ CIAB CYBER HUB"
+Title.Text = "🔮 CIAB HOLO-DECK"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-Title.TextSize = 15
+Title.TextSize = 12
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
-local SubTitle = Instance.new("TextLabel", Header)
-SubTitle.Size = UDim2.new(1, -55, 0, 14)
-SubTitle.Position = UDim2.new(0, 14, 0, 27)
-SubTitle.BackgroundTransparency = 1
-SubTitle.Font = Enum.Font.GothamBold
-SubTitle.Text = "Smart Auto-Boss • Lock-On • Tween"
-SubTitle.TextColor3 = Color3.fromRGB(0, 235, 190)
-SubTitle.TextSize = 10
-SubTitle.TextXAlignment = Enum.TextXAlignment.Left
+local SaveBadge = Instance.new("TextLabel", Header)
+SaveBadge.Size = UDim2.new(0, 125, 0, 12)
+SaveBadge.Position = UDim2.new(0, 12, 0, 22)
+SaveBadge.BackgroundTransparency = 1
+SaveBadge.Font = Enum.Font.GothamBold
+SaveBadge.Text = "✨ VisionOS Bento UI"
+SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
+SaveBadge.TextSize = 9
+SaveBadge.TextXAlignment = Enum.TextXAlignment.Left
+
+onConfigSavedCallback = function()
+	if SaveBadge and SaveBadge.Parent then
+		SaveBadge.Text = "💾 Memoria Salvata!"
+		SaveBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
+		task.wait(1.2)
+		if SaveBadge and SaveBadge.Parent then
+			SaveBadge.Text = "✨ VisionOS Bento UI"
+			SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
+		end
+	end
+end
+
+local StartBtn = Instance.new("TextButton", Header)
+StartBtn.Size = UDim2.new(0, 88, 0, 24)
+StartBtn.Position = UDim2.new(1, -122, 0.5, -12)
+StartBtn.BackgroundColor3 = Color3.fromRGB(195, 35, 60)
+StartBtn.Font = Enum.Font.GothamBlack
+StartBtn.Text = "⏹️ FARM OFF"
+StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+StartBtn.TextSize = 10
+Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(1, 0)
 
 local MinBtn = Instance.new("TextButton", Header)
-MinBtn.Size = UDim2.new(0, 28, 0, 28)
-MinBtn.Position = UDim2.new(1, -38, 0, 11)
-MinBtn.BackgroundColor3 = Color3.fromRGB(32, 38, 56)
+MinBtn.Size = UDim2.new(0, 22, 0, 22)
+MinBtn.Position = UDim2.new(1, -28, 0.5, -11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(26, 31, 48)
 MinBtn.Font = Enum.Font.GothamBlack
 MinBtn.Text = "—"
-MinBtn.TextColor3 = Color3.fromRGB(220, 230, 255)
-MinBtn.TextSize = 12
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+MinBtn.TextColor3 = Color3.fromRGB(200, 220, 255)
+MinBtn.TextSize = 10
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(1, 0)
 
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "—"
+	hubArcGrip.Visible = not minimized
 	TweenService:Create(MainWin, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-		Size = minimized and UDim2.new(0, 325, 0, 50) or UDim2.new(0, 325, 0, 395)
+		Size = minimized and UDim2.new(0, 275, 0, 40) or UDim2.new(0, 275, 0, 268)
 	}):Play()
 end)
 
--- Pulsante Master Start / Stop
-local StartBtn = Instance.new("TextButton", MainWin)
-StartBtn.Size = UDim2.new(1, -24, 0, 38)
-StartBtn.Position = UDim2.new(0, 12, 0, 58)
-StartBtn.BackgroundColor3 = Color3.fromRGB(190, 40, 60)
-StartBtn.Font = Enum.Font.GothamBlack
-StartBtn.Text = "⏹️ AUTO-FARM: SPENTO (CLICCA PER AVVIARE)"
-StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-StartBtn.TextSize = 11
-Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 10)
-local startStroke = Instance.new("UIStroke", StartBtn)
-startStroke.Color = Color3.fromRGB(255, 255, 255)
-startStroke.Thickness = 1
-startStroke.Transparency = 0.6
-
--- Status Pod
+-- Barra Stato + Micro HP Bar Boss
 local StatusPod = Instance.new("Frame", MainWin)
-StatusPod.Size = UDim2.new(1, -24, 0, 26)
-StatusPod.Position = UDim2.new(0, 12, 0, 102)
-StatusPod.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
-Instance.new("UICorner", StatusPod).CornerRadius = UDim.new(0, 8)
+StatusPod.Size = UDim2.new(1, -16, 0, 32)
+StatusPod.Position = UDim2.new(0, 8, 0, 45)
+StatusPod.BackgroundColor3 = Color3.fromRGB(17, 21, 34)
+Instance.new("UICorner", StatusPod).CornerRadius = UDim.new(0, 9)
 local spStroke = Instance.new("UIStroke", StatusPod)
-spStroke.Color = Color3.fromRGB(0, 200, 255)
+spStroke.Color = Color3.fromRGB(0, 210, 255)
 spStroke.Thickness = 1
-spStroke.Transparency = 0.65
+spStroke.Transparency = 0.55
 
 local StatusLbl = Instance.new("TextLabel", StatusPod)
-StatusLbl.Size = UDim2.new(1, -16, 1, 0)
-StatusLbl.Position = UDim2.new(0, 8, 0, 0)
+StatusLbl.Size = UDim2.new(1, -14, 0, 16)
+StatusLbl.Position = UDim2.new(0, 7, 0, 3)
 StatusLbl.BackgroundTransparency = 1
-StatusLbl.Font = Enum.Font.GothamSemibold
-StatusLbl.Text = "⏸️ STATO: In attesa di avvio..."
-StatusLbl.TextColor3 = Color3.fromRGB(220, 235, 255)
-StatusLbl.TextSize = 11
+StatusLbl.Font = Enum.Font.GothamBold
+StatusLbl.Text = "⏸️ In attesa di avvio..."
+StatusLbl.TextColor3 = Color3.fromRGB(230, 240, 255)
+StatusLbl.TextSize = 10
 StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local function SetStatus(txt)
+local HpBarBg = Instance.new("Frame", StatusPod)
+HpBarBg.Size = UDim2.new(1, -14, 0, 4)
+HpBarBg.Position = UDim2.new(0, 7, 0, 22)
+HpBarBg.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+Instance.new("UICorner", HpBarBg).CornerRadius = UDim.new(1, 0)
+
+local HpBarFill = Instance.new("Frame", HpBarBg)
+HpBarFill.Size = UDim2.new(0, 0, 1, 0)
+HpBarFill.BackgroundColor3 = Color3.fromRGB(0, 245, 150)
+Instance.new("UICorner", HpBarFill).CornerRadius = UDim.new(1, 0)
+
+local function SetStatus(txt, hpRatio)
 	if StatusLbl and StatusLbl.Parent then StatusLbl.Text = txt end
+	if HpBarFill and HpBarFill.Parent then
+		local r = math.clamp(tonumber(hpRatio) or 0, 0, 1)
+		local col = (r > 0.5) and Color3.fromRGB(0, 245, 150) or ((r > 0.25) and Color3.fromRGB(255, 200, 0) or Color3.fromRGB(255, 60, 85))
+		TweenService:Create(HpBarFill, TweenInfo.new(0.15), {Size = UDim2.new(r, 0, 1, 0), BackgroundColor3 = col}):Play()
+	end
 end
 
 local lastStartClick = 0
@@ -676,16 +919,16 @@ StartBtn.MouseButton1Click:Connect(function()
 	getgenv().AutoFarmActive = not getgenv().AutoFarmActive
 	UpdateFloatState()
 	if getgenv().AutoFarmActive then
-		TweenService:Create(StartBtn, TweenInfo.new(0.25), {BackgroundColor3 = Color3.fromRGB(0, 175, 105)}):Play()
-		StartBtn.Text = "▶️ AUTO-FARM: ATTIVO (CLICCA PER FERMARE)"
+		TweenService:Create(StartBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 180, 105)}):Play()
+		StartBtn.Text = "▶️ FARM ON"
 		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
 		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		StopActiveTween()
-		TweenService:Create(StartBtn, TweenInfo.new(0.25), {BackgroundColor3 = Color3.fromRGB(190, 40, 60)}):Play()
-		StartBtn.Text = "⏹️ AUTO-FARM: SPENTO (CLICCA PER AVVIARE)"
-		SetStatus("⏸️ STATO: Farm disattivato.")
+		TweenService:Create(StartBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(195, 35, 60)}):Play()
+		StartBtn.Text = "⏹️ FARM OFF"
+		SetStatus("⏸️ Farm disattivato.", 0)
 		pcall(function()
 			camera.CameraType = Enum.CameraType.Custom
 			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -693,48 +936,205 @@ StartBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Box Velocità Tween (Slider + Input)
-local SpeedCard = Instance.new("Frame", MainWin)
-SpeedCard.Size = UDim2.new(1, -24, 0, 50)
-SpeedCard.Position = UDim2.new(0, 12, 0, 134)
-SpeedCard.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
+-- ------------------------------------------------------------------------------
+-- 🔀 BARRA DI NAVIGAZIONE SEGMENTATA: [ ⚙️ CONFIG ] | [ 🎯 BOSSES ]
+-- ------------------------------------------------------------------------------
+local TabBar = Instance.new("Frame", MainWin)
+TabBar.Size = UDim2.new(1, -16, 0, 26)
+TabBar.Position = UDim2.new(0, 8, 0, 82)
+TabBar.BackgroundColor3 = Color3.fromRGB(16, 19, 30)
+Instance.new("UICorner", TabBar).CornerRadius = UDim.new(0, 8)
+
+local TabConfigBtn = Instance.new("TextButton", TabBar)
+TabConfigBtn.Size = UDim2.new(0.5, -2, 1, -4)
+TabConfigBtn.Position = UDim2.new(0, 2, 0, 2)
+TabConfigBtn.BackgroundColor3 = Color3.fromRGB(0, 135, 215)
+TabConfigBtn.Font = Enum.Font.GothamBlack
+TabConfigBtn.Text = "⚙️ CONFIG"
+TabConfigBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+TabConfigBtn.TextSize = 10
+Instance.new("UICorner", TabConfigBtn).CornerRadius = UDim.new(0, 6)
+
+local TabBossBtn = Instance.new("TextButton", TabBar)
+TabBossBtn.Size = UDim2.new(0.5, -2, 1, -4)
+TabBossBtn.Position = UDim2.new(0.5, 0, 0, 2)
+TabBossBtn.BackgroundColor3 = Color3.fromRGB(16, 19, 30)
+TabBossBtn.Font = Enum.Font.GothamBlack
+TabBossBtn.Text = "🎯 BOSSES"
+TabBossBtn.TextColor3 = Color3.fromRGB(160, 175, 205)
+TabBossBtn.TextSize = 10
+Instance.new("UICorner", TabBossBtn).CornerRadius = UDim.new(0, 6)
+
+local ConfigPage = Instance.new("Frame", MainWin)
+ConfigPage.Size = UDim2.new(1, -16, 1, -120)
+ConfigPage.Position = UDim2.new(0, 8, 0, 114)
+ConfigPage.BackgroundTransparency = 1
+
+local BossPage = Instance.new("Frame", MainWin)
+BossPage.Size = UDim2.new(1, -16, 1, -120)
+BossPage.Position = UDim2.new(0, 8, 0, 114)
+BossPage.BackgroundTransparency = 1
+BossPage.Visible = false
+
+TabConfigBtn.MouseButton1Click:Connect(function()
+	ConfigPage.Visible = true
+	BossPage.Visible = false
+	TweenService:Create(TabConfigBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 135, 215), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+	TweenService:Create(TabBossBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(16, 19, 30), TextColor3 = Color3.fromRGB(160, 175, 205)}):Play()
+end)
+
+TabBossBtn.MouseButton1Click:Connect(function()
+	ConfigPage.Visible = false
+	BossPage.Visible = true
+	TweenService:Create(TabBossBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 135, 215), TextColor3 = Color3.fromRGB(255, 255, 255)}):Play()
+	TweenService:Create(TabConfigBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(16, 19, 30), TextColor3 = Color3.fromRGB(160, 175, 205)}):Play()
+end)
+
+-- ==============================================================================
+-- ⚙️ PAGINA 1: CONFIG (AUTO-REB ESATTO, ATTESA KAIOKEN, TWEEN SPEED)
+-- ==============================================================================
+local RebCard = Instance.new("Frame", ConfigPage)
+RebCard.Size = UDim2.new(1, 0, 0, 42)
+RebCard.Position = UDim2.new(0, 0, 0, 0)
+RebCard.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
+Instance.new("UICorner", RebCard).CornerRadius = UDim.new(0, 10)
+local rcStroke = Instance.new("UIStroke", RebCard)
+rcStroke.Color = Color3.fromRGB(255, 215, 0)
+rcStroke.Thickness = 1.2
+rcStroke.Transparency = 0.45
+
+local RebToggleBtn = Instance.new("TextButton", RebCard)
+RebToggleBtn.Size = UDim2.new(0, 96, 0, 28)
+RebToggleBtn.Position = UDim2.new(0, 6, 0.5, -14)
+RebToggleBtn.BackgroundColor3 = Color3.fromRGB(175, 35, 55)
+RebToggleBtn.Font = Enum.Font.GothamBlack
+RebToggleBtn.Text = "👑 REB: OFF"
+RebToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RebToggleBtn.TextSize = 10
+Instance.new("UICorner", RebToggleBtn).CornerRadius = UDim.new(0, 7)
+
+local RebPreviewLbl = Instance.new("TextLabel", RebCard)
+RebPreviewLbl.Size = UDim2.new(1, -176, 1, 0)
+RebPreviewLbl.Position = UDim2.new(0, 106, 0, 0)
+RebPreviewLbl.BackgroundTransparency = 1
+RebPreviewLbl.Font = Enum.Font.GothamBlack
+RebPreviewLbl.Text = "Prev: +0"
+RebPreviewLbl.TextColor3 = Color3.fromRGB(255, 215, 0)
+RebPreviewLbl.TextSize = 10
+RebPreviewLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local RebTargetInput = Instance.new("TextBox", RebCard)
+RebTargetInput.Size = UDim2.new(0, 62, 0, 26)
+RebTargetInput.Position = UDim2.new(1, -68, 0.5, -13)
+RebTargetInput.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+RebTargetInput.Font = Enum.Font.GothamBlack
+RebTargetInput.Text = FormatReb(getgenv().TargetRebAmount)
+RebTargetInput.TextColor3 = Color3.fromRGB(255, 215, 0)
+RebTargetInput.TextSize = 11
+RebTargetInput.ClearTextOnFocus = false
+Instance.new("UICorner", RebTargetInput).CornerRadius = UDim.new(0, 6)
+
+RebTargetInput.FocusLost:Connect(function()
+	-- Accetta sia "1770" che "1.770" e lo salva come intero 1770, mostrandolo come "1.770"!
+	local parsed = ParseRebirthInt(RebTargetInput.Text)
+	getgenv().TargetRebAmount = (parsed and parsed >= 1) and parsed or 1
+	RebTargetInput.Text = FormatReb(getgenv().TargetRebAmount)
+	SaveConfig()
+end)
+
+RebToggleBtn.MouseButton1Click:Connect(function()
+	getgenv().AutoRebActive = not getgenv().AutoRebActive
+	if getgenv().AutoRebActive then
+		TweenService:Create(RebToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 175, 100)}):Play()
+		RebToggleBtn.Text = "👑 REB: ON"
+	else
+		TweenService:Create(RebToggleBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(175, 35, 55)}):Play()
+		RebToggleBtn.Text = "👑 REB: OFF"
+	end
+end)
+
+-- Card Attesa Kaioken
+local KaioCard = Instance.new("Frame", ConfigPage)
+KaioCard.Size = UDim2.new(1, 0, 0, 38)
+KaioCard.Position = UDim2.new(0, 0, 0, 48)
+KaioCard.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
+Instance.new("UICorner", KaioCard).CornerRadius = UDim.new(0, 10)
+local kcStroke = Instance.new("UIStroke", KaioCard)
+kcStroke.Color = Color3.fromRGB(255, 75, 105)
+kcStroke.Thickness = 1.2
+kcStroke.Transparency = 0.45
+
+local KaioLbl = Instance.new("TextLabel", KaioCard)
+KaioLbl.Size = UDim2.new(1, -75, 1, 0)
+KaioLbl.Position = UDim2.new(0, 10, 0, 0)
+KaioLbl.BackgroundTransparency = 1
+KaioLbl.Font = Enum.Font.GothamBlack
+KaioLbl.Text = "🔥 ATTESA PER KAIOKEN (s):"
+KaioLbl.TextColor3 = Color3.fromRGB(255, 90, 115)
+KaioLbl.TextSize = 10
+KaioLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+local KaioInput = Instance.new("TextBox", KaioCard)
+KaioInput.Size = UDim2.new(0, 62, 0, 24)
+KaioInput.Position = UDim2.new(1, -68, 0.5, -12)
+KaioInput.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+KaioInput.Font = Enum.Font.GothamBlack
+KaioInput.Text = tostring(getgenv().KaiokenWaitTime)
+KaioInput.TextColor3 = Color3.fromRGB(255, 110, 130)
+KaioInput.TextSize = 11
+KaioInput.ClearTextOnFocus = false
+Instance.new("UICorner", KaioInput).CornerRadius = UDim.new(0, 6)
+
+KaioInput.FocusLost:Connect(function()
+	local txt = string.gsub(KaioInput.Text, ",", ".")
+	local n = tonumber(txt)
+	getgenv().KaiokenWaitTime = (n and n >= 0) and n or 10
+	KaioInput.Text = tostring(getgenv().KaiokenWaitTime)
+	SaveConfig()
+end)
+
+-- Card Tween Speed
+local SpeedCard = Instance.new("Frame", ConfigPage)
+SpeedCard.Size = UDim2.new(1, 0, 0, 52)
+SpeedCard.Position = UDim2.new(0, 0, 0, 92)
+SpeedCard.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
 Instance.new("UICorner", SpeedCard).CornerRadius = UDim.new(0, 10)
 local scStroke = Instance.new("UIStroke", SpeedCard)
-scStroke.Color = Color3.fromRGB(0, 180, 255)
-scStroke.Thickness = 1
-scStroke.Transparency = 0.55
+scStroke.Color = Color3.fromRGB(0, 200, 255)
+scStroke.Thickness = 1.2
+scStroke.Transparency = 0.45
 
 local SpeedLbl = Instance.new("TextLabel", SpeedCard)
-SpeedLbl.Size = UDim2.new(1, -90, 0, 20)
+SpeedLbl.Size = UDim2.new(1, -75, 0, 20)
 SpeedLbl.Position = UDim2.new(0, 10, 0, 4)
 SpeedLbl.BackgroundTransparency = 1
-SpeedLbl.Font = Enum.Font.GothamBold
-SpeedLbl.Text = "✈️ TWEEN SPEED (10 - " .. MAX_TWEEN_SPEED .. ")"
-SpeedLbl.TextColor3 = Color3.fromRGB(0, 225, 255)
-SpeedLbl.TextSize = 11
+SpeedLbl.Font = Enum.Font.GothamBlack
+SpeedLbl.Text = "✈️ TWEEN SPEED (10-" .. MAX_TWEEN_SPEED .. ")"
+SpeedLbl.TextColor3 = Color3.fromRGB(0, 235, 255)
+SpeedLbl.TextSize = 10
 SpeedLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 local SpeedInput = Instance.new("TextBox", SpeedCard)
-SpeedInput.Size = UDim2.new(0, 68, 0, 20)
-SpeedInput.Position = UDim2.new(1, -76, 0, 4)
-SpeedInput.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+SpeedInput.Size = UDim2.new(0, 62, 0, 20)
+SpeedInput.Position = UDim2.new(1, -68, 0, 4)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 SpeedInput.Font = Enum.Font.GothamBlack
 SpeedInput.Text = tostring(getgenv().TweenSpeed)
-SpeedInput.TextColor3 = Color3.fromRGB(0, 255, 190)
-SpeedInput.TextSize = 12
+SpeedInput.TextColor3 = Color3.fromRGB(0, 255, 195)
+SpeedInput.TextSize = 11
 SpeedInput.ClearTextOnFocus = false
 Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
 
 local SliderBg = Instance.new("Frame", SpeedCard)
 SliderBg.Size = UDim2.new(1, -20, 0, 8)
-SliderBg.Position = UDim2.new(0, 10, 0, 32)
-SliderBg.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+SliderBg.Position = UDim2.new(0, 10, 0, 34)
+SliderBg.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
 
 local initRatio = (getgenv().TweenSpeed - 10) / (MAX_TWEEN_SPEED - 10)
 local SliderFill = Instance.new("Frame", SliderBg)
 SliderFill.Size = UDim2.new(initRatio, 0, 1, 0)
-SliderFill.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
+SliderFill.BackgroundColor3 = Color3.fromRGB(0, 235, 255)
 Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
 
 local SliderKnob = Instance.new("Frame", SliderBg)
@@ -743,13 +1143,14 @@ SliderKnob.Position = UDim2.new(initRatio, -7, 0.5, -7)
 SliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
 Instance.new("UICorner", SliderKnob).CornerRadius = UDim.new(1, 0)
 
-local function SetTweenSpeed(val)
+local function SetTweenSpeed(val, shouldSave)
 	val = math.clamp(math.floor(tonumber(val) or 300), 10, MAX_TWEEN_SPEED)
 	getgenv().TweenSpeed = val
 	SpeedInput.Text = tostring(val)
 	local r = (val - 10) / (MAX_TWEEN_SPEED - 10)
 	SliderFill.Size = UDim2.new(r, 0, 1, 0)
 	SliderKnob.Position = UDim2.new(r, -7, 0.5, -7)
+	if shouldSave then SaveConfig() end
 end
 
 local sliding = false
@@ -757,59 +1158,76 @@ SliderBg.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		sliding = true
 		local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10))
+		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10), false)
 	end
 end)
 table.insert(connections, UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+	if sliding and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
 		sliding = false
+		SaveConfig()
 	end
 end))
 table.insert(connections, UserInputService.InputChanged:Connect(function(input)
 	if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
-		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10))
+		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10), false)
 	end
 end))
-SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text) end)
+SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text, true) end)
 
--- Selettore Modalità Auto / Manuale
-local ModeBtn = Instance.new("TextButton", MainWin)
-ModeBtn.Size = UDim2.new(1, -24, 0, 30)
-ModeBtn.Position = UDim2.new(0, 12, 0, 190)
-ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 125, 205)
+-- ==============================================================================
+-- 🎯 PAGINA 2: BOSSES (MODO AUTO/MANUALE + RICERCA + LISTA)
+-- ==============================================================================
+local ModeBtn = Instance.new("TextButton", BossPage)
+ModeBtn.Size = UDim2.new(1, 0, 0, 24)
+ModeBtn.Position = UDim2.new(0, 0, 0, 0)
+ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 130, 215)
 ModeBtn.Font = Enum.Font.GothamBlack
-ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
+ModeBtn.Text = "🤖 MODO: AUTO (PER DIFESA)"
 ModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ModeBtn.TextSize = 11
-Instance.new("UICorner", ModeBtn).CornerRadius = UDim.new(0, 8)
+ModeBtn.TextSize = 10
+Instance.new("UICorner", ModeBtn).CornerRadius = UDim.new(0, 7)
 
--- Lista Scorrevole Boss
-local BossScroll = Instance.new("ScrollingFrame", MainWin)
-BossScroll.Size = UDim2.new(1, -24, 1, -238)
-BossScroll.Position = UDim2.new(0, 12, 0, 226)
-BossScroll.BackgroundColor3 = Color3.fromRGB(16, 19, 30)
-BossScroll.ScrollBarThickness = 3
-BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 225, 255)
+local SearchBox = Instance.new("TextBox", BossPage)
+SearchBox.Size = UDim2.new(1, 0, 0, 24)
+SearchBox.Position = UDim2.new(0, 0, 0, 28)
+SearchBox.BackgroundColor3 = Color3.fromRGB(16, 19, 32)
+SearchBox.Font = Enum.Font.GothamSemibold
+SearchBox.Text = ""
+SearchBox.PlaceholderText = "🔍 Cerca Boss..."
+SearchBox.PlaceholderColor3 = Color3.fromRGB(120, 135, 165)
+SearchBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+SearchBox.TextSize = 10
+SearchBox.ClearTextOnFocus = false
+Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 7)
+
+local BossScroll = Instance.new("ScrollingFrame", BossPage)
+BossScroll.Size = UDim2.new(1, -6, 1, -56)
+BossScroll.Position = UDim2.new(0, 0, 0, 56)
+BossScroll.BackgroundColor3 = Color3.fromRGB(14, 16, 26)
+BossScroll.ScrollBarThickness = 2
+BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 235, 255)
 BossScroll.BorderSizePixel = 0
-Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 8)
 
 local listLayout = Instance.new("UIListLayout", BossScroll)
-listLayout.Padding = UDim.new(0, 5)
+listLayout.Padding = UDim.new(0, 4)
 
 local bossButtons = {}
 local function RefreshBossSelectionUI()
 	if getgenv().ManualBoss == nil then
-		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 125, 205)}):Play()
-		ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
+		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 130, 215)}):Play()
+		ModeBtn.Text = "🤖 MODO: AUTO (PER DIFESA)"
 	else
-		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 125, 15)}):Play()
-		ModeBtn.Text = "🎯 MANUALE: " .. getgenv().ManualBoss .. " (Clicca x Auto)"
+		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(235, 130, 15)}):Play()
+		ModeBtn.Text = "🎯 MANUALE: " .. getgenv().ManualBoss
 	end
 	for name, info in pairs(bossButtons) do
 		local selected = (getgenv().ManualBoss == name)
-		info.Card.BackgroundColor3 = selected and Color3.fromRGB(18, 55, 45) or Color3.fromRGB(24, 28, 42)
-		info.Stroke.Color = selected and Color3.fromRGB(0, 240, 150) or Color3.fromRGB(40, 46, 68)
+		TweenService:Create(info.Card, TweenInfo.new(0.18), {
+			BackgroundColor3 = selected and Color3.fromRGB(16, 65, 52) or Color3.fromRGB(22, 26, 40)
+		}):Play()
+		info.Stroke.Color = selected and Color3.fromRGB(0, 255, 160) or Color3.fromRGB(38, 44, 66)
 	end
 end
 
@@ -823,34 +1241,34 @@ end)
 
 for _, bData in ipairs(BossList) do
 	local bBtn = Instance.new("TextButton", BossScroll)
-	bBtn.Size = UDim2.new(1, -8, 0, 30)
-	bBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 42)
+	bBtn.Size = UDim2.new(1, -6, 0, 26)
+	bBtn.BackgroundColor3 = Color3.fromRGB(22, 26, 40)
 	bBtn.Text = ""
 	bBtn.AutoButtonColor = false
-	Instance.new("UICorner", bBtn).CornerRadius = UDim.new(0, 8)
+	Instance.new("UICorner", bBtn).CornerRadius = UDim.new(0, 7)
 
 	local bStroke = Instance.new("UIStroke", bBtn)
-	bStroke.Color = Color3.fromRGB(40, 46, 68)
+	bStroke.Color = Color3.fromRGB(38, 44, 66)
 	bStroke.Thickness = 1
 
 	local badge = Instance.new("TextLabel", bBtn)
-	badge.Size = UDim2.new(0, 54, 0, 20)
-	badge.Position = UDim2.new(0, 6, 0.5, -10)
-	badge.BackgroundColor3 = Color3.fromRGB(14, 17, 26)
+	badge.Size = UDim2.new(0, 48, 0, 18)
+	badge.Position = UDim2.new(0, 5, 0.5, -9)
+	badge.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
 	badge.Font = Enum.Font.GothamBlack
 	badge.Text = FormatStat(bData.MinDef)
-	badge.TextColor3 = Color3.fromRGB(0, 225, 255)
-	badge.TextSize = 10
-	Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 6)
+	badge.TextColor3 = bData.NoQuest and Color3.fromRGB(255, 200, 50) or Color3.fromRGB(0, 235, 255)
+	badge.TextSize = 9
+	Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 5)
 
 	local bNameLbl = Instance.new("TextLabel", bBtn)
-	bNameLbl.Size = UDim2.new(1, -72, 1, 0)
-	bNameLbl.Position = UDim2.new(0, 66, 0, 0)
+	bNameLbl.Size = UDim2.new(1, -62, 1, 0)
+	bNameLbl.Position = UDim2.new(0, 58, 0, 0)
 	bNameLbl.BackgroundTransparency = 1
-	bNameLbl.Font = Enum.Font.GothamSemibold
+	bNameLbl.Font = Enum.Font.GothamBold
 	bNameLbl.Text = bData.Name
-	bNameLbl.TextColor3 = Color3.fromRGB(235, 240, 255)
-	bNameLbl.TextSize = 11
+	bNameLbl.TextColor3 = Color3.fromRGB(240, 245, 255)
+	bNameLbl.TextSize = 10
 	bNameLbl.TextXAlignment = Enum.TextXAlignment.Left
 	bNameLbl.TextTruncate = Enum.TextTruncate.AtEnd
 
@@ -868,19 +1286,64 @@ for _, bData in ipairs(BossList) do
 	end)
 end
 
-listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-	BossScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8)
+SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+	local q = string.lower(SearchBox.Text or "")
+	for name, info in pairs(bossButtons) do
+		info.Card.Visible = (q == "" or string.find(string.lower(name), q, 1, true) ~= nil)
+	end
 end)
 
--- Rotazione fluida dei bordi Neon su entrambe le GUI
+listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	BossScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 6)
+end)
+
 table.insert(connections, RunService.RenderStepped:Connect(function()
-	if statsStrokeGrad and statsStrokeGrad.Parent then
-		statsStrokeGrad.Rotation = (statsStrokeGrad.Rotation + 1.5) % 360
-	end
-	if mainStrokeGrad and mainStrokeGrad.Parent then
-		mainStrokeGrad.Rotation = (mainStrokeGrad.Rotation + 1.5) % 360
+	for _, grad in ipairs(rotatingGradients) do
+		if grad and grad.Parent then
+			grad.Rotation = (grad.Rotation + 1.8) % 360
+		end
 	end
 end))
+
+-- ==============================================================================
+-- 👑 LOOP AUTO-REBIRTH CORRETTO (LEGGE 1.770 COME 1770 E FA REB SE >= TARGET)
+-- ==============================================================================
+task.spawn(function()
+	while IsCurrentSession() do
+		local ok, res = pcall(function()
+			return previewRemote:InvokeServer()
+		end)
+
+		if ok then
+			local previewNum = ParseRebirthInt(res)
+			currentPreviewRebs = previewNum
+			if RebPreviewLbl and RebPreviewLbl.Parent then
+				RebPreviewLbl.Text = "Prev: +" .. FormatReb(previewNum)
+			end
+
+			local targetReb = tonumber(getgenv().TargetRebAmount) or 1
+			if getgenv().AutoRebActive and previewNum >= targetReb and targetReb > 0 then
+				isCurrentlyAttacking = false
+				currentLockedBoss = nil
+				justRebirthed = true
+				lastFormWithKaioken = nil
+				StopActiveTween()
+
+				SetStatus("👑 MULTIREB (+" .. FormatReb(previewNum) .. " Reb)!", 1)
+				pcall(function()
+					multirebRemote:InvokeServer()
+				end)
+
+				task.wait(1.2)
+				table.clear(equippedSkills)
+				CheckAndEquipSkills(true)
+				justRebirthed = false
+			end
+		end
+
+		task.wait(0.4)
+	end
+end)
 
 -- ==============================================================================
 -- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO
@@ -890,7 +1353,7 @@ task.spawn(function()
 	if queue_on_teleport then
 		queue_on_teleport([[
 			repeat task.wait() until game:IsLoaded()
-			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboboss"))()
+			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turbotween"))()
 		]])
 	end
 end)
@@ -990,6 +1453,7 @@ end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function()
 	isCurrentlyAttacking = false
+	lastFormWithKaioken = nil
 	task.wait(1.2)
 	UpdateFloatState()
 	CheckAndEquipSkills(true)
@@ -1010,16 +1474,8 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- 🔥 GESTIONE FORMA SENZA BLOCCHI DOPO LA MORTE
+-- 🔥 GESTIONE FORMA + ATTESA PER KAIOKEN ("schtah") PRIMA DI PARTIRE
 -- ==============================================================================
-local function GetLiveStatus()
-	local char = localPlayer.Character
-	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-	return (char and char:FindFirstChild("Status"))
-		or (wsChar and wsChar:FindFirstChild("Status"))
-		or localPlayer:FindFirstChild("Status")
-end
-
 local function IsTransformedIn(actualVal)
 	if not actualVal or actualVal == "" or actualVal == "Base" or actualVal == "None" then
 		return false
@@ -1027,50 +1483,8 @@ local function IsTransformedIn(actualVal)
 	return true
 end
 
-task.spawn(function()
-	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking then
-			local char = localPlayer.Character
-			if char and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
-				local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-				local status = GetLiveStatus()
-
-				if folderData and status then
-					local defVal = tonumber(folderData:FindFirstChild("Defense") and folderData.Defense.Value) or 0
-					local rebVal = tonumber(folderData:FindFirstChild("Rebirth") and folderData.Rebirth.Value) or 0
-					local selected = status:FindFirstChild("SelectedTransformation")
-					local actual = status:FindFirstChild("Transformation")
-
-					if selected and actual then
-						local targetForm = nil
-						for _, f in ipairs(FormProgression) do
-							if defVal >= f.MinDef and rebVal >= f.MinReb then
-								targetForm = f.Name
-								break
-							end
-						end
-
-						if targetForm and actual.Value ~= targetForm and not IsTransformedIn(actual.Value) then
-							if selected.Value ~= targetForm then
-								pcall(function() equipRemote:InvokeServer(targetForm) end)
-								task.wait(0.35)
-							end
-							if selected.Value == targetForm and not IsTransformedIn(actual.Value) then
-								pcall(function() transformRemote:InvokeServer() end)
-								task.wait(1.0)
-								CheckAndEquipSkills(true)
-							end
-						end
-					end
-				end
-			end
-		end
-		task.wait(1.5)
-	end
-end)
-
-local function WaitForTransformation(bossMinDef)
-	if not getgenv().AutoFarmActive then return false end
+local function EnsureFormAndKaioken(bossMinDef)
+	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	local char = localPlayer.Character
 	if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
 
@@ -1093,34 +1507,71 @@ local function WaitForTransformation(bossMinDef)
 	end
 
 	if not targetForm then
+		lastFormWithKaioken = nil
 		if (bossMinDef or 0) <= NO_FORM_MAX_DEF then
 			return true
 		else
-			SetStatus("⚠️ Oltre 10T serve la Forma (1T+500k Reb o 6Qa)!")
+			SetStatus("⚠️ Oltre 10T serve la Forma!", 0)
 			return false
 		end
 	end
 
-	if IsTransformedIn(actual.Value) then
-		return true
+	if not IsTransformedIn(actual.Value) then
+		lastFormWithKaioken = nil
 	end
 
-	isCurrentlyAttacking = false
-	SetStatus("⚡ Attivazione " .. targetForm .. "...")
-	if selected and selected.Value ~= targetForm then
-		pcall(function() equipRemote:InvokeServer(targetForm) end)
-		task.wait(0.3)
-	end
-	pcall(function() transformRemote:InvokeServer() end)
+	if not IsTransformedIn(actual.Value) or (selected and selected.Value ~= targetForm and lastFormWithKaioken ~= targetForm) then
+		isCurrentlyAttacking = false
+		currentLockedBoss = nil
+		StopActiveTween()
 
-	local timeout = 6
-	while not IsTransformedIn(actual.Value) and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() do
-		if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+		SetStatus("⚡ Attivazione Forma: " .. targetForm .. "...", 0.5)
+		if selected and selected.Value ~= targetForm then
+			pcall(function() equipRemote:InvokeServer(targetForm) end)
+			task.wait(0.35)
+		end
+
+		if not IsTransformedIn(actual.Value) then
+			pcall(function() transformRemote:InvokeServer() end)
+			local timeout = 8
+			while not IsTransformedIn(actual.Value) and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
+				if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+				task.wait(0.4)
+				timeout -= 1
+			end
+		end
+
+		lastFormWithKaioken = nil
+	end
+
+	if IsTransformedIn(actual.Value) and lastFormWithKaioken ~= targetForm then
+		isCurrentlyAttacking = false
+		currentLockedBoss = nil
+		StopActiveTween()
+
+		local waitDuration = tonumber(getgenv().KaiokenWaitTime) or 10
+		local startWait = os.clock()
+
+		while (os.clock() - startWait) < waitDuration do
+			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then return false end
+			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
+			local elapsedWait = os.clock() - startWait
+			local remaining = math.max(0, waitDuration - elapsedWait)
+			local ratio = math.clamp(elapsedWait / math.max(waitDuration, 0.1), 0, 1)
+			SetStatus(string.format("🔥 Attesa Kaioken: %.1fs...", remaining), ratio)
+			task.wait(0.1)
+		end
+
+		SetStatus("🔥 Attivazione Kaioken (schtah)!", 1)
+		pcall(function()
+			kaiokenRemote:InvokeServer()
+		end)
 		task.wait(0.4)
-		timeout -= 1
+
+		lastFormWithKaioken = targetForm
+		CheckAndEquipSkills(true)
 	end
 
-	task.spawn(function() CheckAndEquipSkills(true) end)
 	return true
 end
 
@@ -1167,8 +1618,14 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 	CheckAndEquipSkills(false)
 
-	while IsCurrentSession() and getgenv().AutoFarmActive do
+	while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
+
+		if not getgenv().ManualBoss and playerData and playerData:FindFirstChild("Defense") then
+			if (tonumber(playerData.Defense.Value) or 0) < bossEntry.MinDef then
+				break
+			end
+		end
 
 		if hasQuestNpc and questVal then
 			if questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss then
@@ -1187,10 +1644,11 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 		currentLockedBoss = currentBoss
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
+		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 
 		if distToBoss > 25 then
 			isCurrentlyAttacking = false
-			SetStatus("✈️ Tween verso Boss: " .. bossEntry.Name)
+			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
@@ -1199,12 +1657,12 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
 			if kiObj and (tonumber(kiObj.Value) or 100) < 10 then
 				isCurrentlyAttacking = false
-				SetStatus("⚡ Ricarica rapida Ki...")
+				SetStatus("⚡ Ricarica rapida Ki...", hpRatio)
 				task.wait(0.35)
 			else
 				isCurrentlyAttacking = true
-				local hpPct = math.floor((bossHum.Health / math.max(bossHum.MaxHealth, 1)) * 100)
-				SetStatus(string.format("⚔️ %s [HP: %d%%]", bossEntry.Name, hpPct))
+				local hpPct = math.floor(hpRatio * 100)
+				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 				DoFullAttack()
 			end
 		end
@@ -1230,7 +1688,7 @@ local function WaitForBossToSpawn(bossEntry, timeLimit, hasQuestNpc)
 	isCurrentlyAttacking = false
 
 	repeat
-		if not IsCurrentSession() or not getgenv().AutoFarmActive then return false end
+		if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then return false end
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then return false end
 		local char = localPlayer.Character
 		if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
@@ -1240,7 +1698,7 @@ local function WaitForBossToSpawn(bossEntry, timeLimit, hasQuestNpc)
 		bossReady = (currentBoss ~= nil)
 	until bossReady or os.time() - startTime > timeLimit
 
-	if bossReady and getgenv().AutoFarmActive then
+	if bossReady and getgenv().AutoFarmActive and not justRebirthed then
 		task.wait(0.1)
 		TweenAndFight(bossEntry, hasQuestNpc)
 		return true
@@ -1249,7 +1707,7 @@ local function WaitForBossToSpawn(bossEntry, timeLimit, hasQuestNpc)
 end
 
 local function CheckAndFightBoss(bossEntry)
-	if not getgenv().AutoFarmActive then return false end
+	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	isCurrentlyAttacking = false
 
 	local character = localPlayer.Character
@@ -1269,12 +1727,12 @@ local function CheckAndFightBoss(bossEntry)
 		return false
 	end
 
-	if not WaitForTransformation(bossEntry.MinDef) then return false end
+	if not EnsureFormAndKaioken(bossEntry.MinDef) then return false end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
 		local questVal = playerData:WaitForChild("Quest")
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
-			if not IsCurrentSession() or not getgenv().AutoFarmActive then
+			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
 				StopActiveTween()
 				return false
 			end
@@ -1286,7 +1744,7 @@ local function CheckAndFightBoss(bossEntry)
 
 			isCurrentlyAttacking = false
 			currentLockedBoss = nil
-			SetStatus("✈️ Tween verso Quest: " .. bossEntry.Name)
+			SetStatus("✈️ Quest: " .. bossEntry.Name, 0)
 			local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
 			MoveToTarget(npcCF, true)
 
@@ -1313,7 +1771,7 @@ end
 -- ==============================================================================
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive then
+		if getgenv().AutoFarmActive and not justRebirthed then
 			if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") and localPlayer.Character.Humanoid.Health > 0 then
 				local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 				if playerData then
@@ -1323,7 +1781,7 @@ task.spawn(function()
 								local fought = CheckAndFightBoss(bEntry)
 								if not fought and getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
-									SetStatus("⏳ Attesa Boss: " .. bEntry.Name)
+									SetStatus("⏳ Attesa: " .. bEntry.Name, 0)
 								end
 								break
 							end
@@ -1332,7 +1790,7 @@ task.spawn(function()
 						local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
 						local foughtAny = false
 						for _, bEntry in ipairs(BossList) do
-							if not getgenv().AutoFarmActive or getgenv().ManualBoss ~= nil or not IsCurrentSession() then break end
+							if not getgenv().AutoFarmActive or getgenv().ManualBoss ~= nil or not IsCurrentSession() or justRebirthed then break end
 							if myDef >= bEntry.MinDef then
 								if CheckAndFightBoss(bEntry) then
 									foughtAny = true
@@ -1342,7 +1800,7 @@ task.spawn(function()
 						end
 						if not foughtAny and getgenv().AutoFarmActive then
 							isCurrentlyAttacking = false
-							SetStatus("🔍 Ricerca Boss (Difesa: " .. FormatStat(myDef) .. ")...")
+							SetStatus("🔍 Cerco Boss (Def: " .. FormatStat(myDef) .. ")...", 0)
 						end
 					end
 				end
