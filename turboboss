@@ -1,7 +1,8 @@
 -- ==============================================================================
 -- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI
 -- ==============================================================================
-if CoreGui and CoreGui:FindFirstChild("TestOnlyAttackGUI") then CoreGui.TestOnlyAttackGUI:Destroy() end
+local CoreGui = game:GetService("CoreGui")
+if CoreGui:FindFirstChild("TestOnlyAttackGUI") then CoreGui.TestOnlyAttackGUI:Destroy() end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
 if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
 if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
@@ -20,7 +21,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
 local camera = workspace.CurrentCamera
 
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -31,7 +31,7 @@ local punchRemote = Events:WaitForChild("p")
 local chaRemote = Events:WaitForChild("cha")
 
 -- ==============================================================================
--- ⚙️ CONFIGURAZIONE VELOCITÀ MAX TWEEN, SKILL PER STATS E FORME
+-- ⚙️ CONFIGURAZIONE VELOCITÀ MAX TWEEN, SKILL (STATS + REB) E FORME
 -- ==============================================================================
 local MAX_TWEEN_SPEED = 10000
 local NO_FORM_MAX_DEF = 10e12 -- Fino a 10T può combattere anche senza forma!
@@ -40,39 +40,56 @@ getgenv().AutoFarmActive = false
 getgenv().TweenSpeed = 300
 getgenv().ManualBoss = nil -- nil = Automatico in base alla Difesa | "NomeBoss" = Manuale
 
--- 🗡️ REQUISITI ESATTI DI STRENGTH & SPEED PER EQUIPAGGIARE E USARE LE SKILL
+local isCurrentlyAttacking = false
+
+-- 🗡️ REQUISITI ESATTI DI STRENGTH, SPEED E REBIRTH PER EQUIPAGGIARE E USARE LE SKILL
 local SkillRequirements = {
-	{Name = "Wolf Fang Fist",    MinStat = 30000},       -- 30k Str & Speed
-	{Name = "Meteor Crash",      MinStat = 500000},      -- 500k Str & Speed
-	{Name = "Mach Kick",         MinStat = 2100000},     -- 2.1M Str & Speed
-	{Name = "Super Dragon Fist", MinStat = 650000000},   -- 650M Str & Speed
-	{Name = "God Slicer",        MinStat = 15000000000}  -- 15B Str & Speed
+	{Name = "Wolf Fang Fist",    MinStat = 30000,       MinReb = 0},    -- 30k Str & Speed | 0 Reb
+	{Name = "Meteor Crash",      MinStat = 500000,      MinReb = 0},    -- 500k Str & Speed | 0 Reb
+	{Name = "Mach Kick",         MinStat = 2100000,     MinReb = 2},    -- 2.1M Str & Speed | 2 Reb
+	{Name = "Super Dragon Fist", MinStat = 650000000,   MinReb = 100},  -- 650M Str & Speed | 100 Reb
+	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000}  -- 15B Str & Speed | 1k Reb
 }
 
 local equippedSkills = {}
 
--- Equipaggia SOLO le skill per cui hai abbastanza Strength e Speed
-local function EquipUnlockedSkills()
+local function CheckAndEquipSkills(forceReEquip)
+	if forceReEquip then
+		table.clear(equippedSkills)
+	end
+
 	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not playerData then return end
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
+	local myReb = tonumber(playerData:FindFirstChild("Rebirth") and playerData.Rebirth.Value) or 0
 
 	for _, skill in ipairs(SkillRequirements) do
-		if myStr >= skill.MinStat and mySpd >= skill.MinStat then
-			pcall(function()
-				equipRemote:InvokeServer(skill.Name)
-				equippedSkills[skill.Name] = true
-			end)
-			task.wait(0.06)
+		if myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
+			if not equippedSkills[skill.Name] then
+				pcall(function()
+					equipRemote:InvokeServer(skill.Name)
+					equippedSkills[skill.Name] = true
+				end)
+				task.wait(0.1)
+			end
 		else
 			equippedSkills[skill.Name] = false
 		end
 	end
 end
 
-task.spawn(EquipUnlockedSkills)
+task.spawn(function() CheckAndEquipSkills(true) end)
+
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking then
+			CheckAndEquipSkills(false)
+		end
+		task.wait(1.5)
+	end
+end)
 
 -- 🔥 LE 2 FORME RICHIESTE (True SSJG a 6Qa Def | LBSSJ4 a 1T Def + 500k Reb)
 local FormProgression = {
@@ -162,15 +179,15 @@ local BossList = {
 
 local function FormatStat(n)
 	n = tonumber(n) or 0
-	if n >= 1e24 then return string.format("%.0fSp", n / 1e24)
-	elseif n >= 1e21 then return string.format("%.0fSx", n / 1e21)
-	elseif n >= 1e18 then return string.format("%.1fQi", n / 1e18)
-	elseif n >= 1e15 then return string.format("%.1fQd", n / 1e15)
-	elseif n >= 1e12 then return string.format("%.1fT", n / 1e12)
-	elseif n >= 1e9 then return string.format("%.0fB", n / 1e9)
-	elseif n >= 1e6 then return string.format("%.0fM", n / 1e6)
-	elseif n >= 1e3 then return string.format("%.0fk", n / 1e3)
-	else return tostring(n) end
+	if n >= 1e24 then return string.format("%.2fSp", n / 1e24)
+	elseif n >= 1e21 then return string.format("%.2fSx", n / 1e21)
+	elseif n >= 1e18 then return string.format("%.2fQi", n / 1e18)
+	elseif n >= 1e15 then return string.format("%.2fQd", n / 1e15)
+	elseif n >= 1e12 then return string.format("%.2fT", n / 1e12)
+	elseif n >= 1e9 then return string.format("%.2fB", n / 1e9)
+	elseif n >= 1e6 then return string.format("%.2fM", n / 1e6)
+	elseif n >= 1e3 then return string.format("%.1fk", n / 1e3)
+	else return tostring(math.floor(n)) end
 end
 
 -- ==============================================================================
@@ -312,8 +329,30 @@ local function MoveToTarget(targetCFrame, waitForCompletion)
 	end
 end
 
+local function MakeDraggable(dragHandle, targetFrame)
+	local dragging, dragStart, startPos
+	dragHandle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = targetFrame.Position
+		end
+	end)
+	table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end))
+	table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			targetFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+		end
+	end))
+end
+
 -- ==============================================================================
--- 🎨 MINI-GUI COMPATTA (START/STOP + TWEEN + AUTO/MANUAL BOSS)
+-- 🌌 ULTRA-PREMIUM CYBER-NEON GUI (STATS A SINISTRA + HUB A DESTRA)
 -- ==============================================================================
 for _, guiName in ipairs({"UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
 	if CoreGui:FindFirstChild(guiName) then
@@ -325,10 +364,12 @@ local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "CiabMiniHub"
 ScreenGui.Parent = CoreGui
 ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.DisplayOrder = 9999
 
 getgenv().CiabCleanup = function()
 	getgenv().AutoFarmActive = false
+	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	StopActiveTween()
 	UpdateFloatState()
@@ -337,81 +378,291 @@ getgenv().CiabCleanup = function()
 	if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
 end
 
-local MainWin = Instance.new("Frame", ScreenGui)
-MainWin.Size = UDim2.new(0, 290, 0, 320)
-MainWin.Position = UDim2.new(1, -310, 0.5, -160)
-MainWin.BackgroundColor3 = Color3.fromRGB(14, 16, 24)
-MainWin.Active = true
-MainWin.ClipsDescendants = true
-Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 12)
-local stroke = Instance.new("UIStroke", MainWin)
-stroke.Color = Color3.fromRGB(0, 210, 255)
-stroke.Thickness = 2
+-- ------------------------------------------------------------------------------
+-- 📊 1. FINESTRA STATISTICHE ULTRA-NEON (SINISTRA)
+-- Ordine esatto: Strength -> Speed -> Defense -> Energy -> Rebirths
+-- ------------------------------------------------------------------------------
+local StatsWin = Instance.new("Frame", ScreenGui)
+StatsWin.Name = "StatsWindow"
+StatsWin.Size = UDim2.new(0, 265, 0, 330)
+StatsWin.Position = UDim2.new(0, 18, 0.5, -165)
+StatsWin.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+StatsWin.BackgroundTransparency = 0.04
+StatsWin.Active = true
+StatsWin.ClipsDescendants = true
+Instance.new("UICorner", StatsWin).CornerRadius = UDim.new(0, 16)
 
-local dragging, dragStart, startPos
-MainWin.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true
-		dragStart = input.Position
-		startPos = MainWin.Position
+local statsBgGrad = Instance.new("UIGradient", StatsWin)
+statsBgGrad.Rotation = 45
+statsBgGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 19, 32)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 10, 16))
+}
+
+local statsStroke = Instance.new("UIStroke", StatsWin)
+statsStroke.Color = Color3.fromRGB(255, 255, 255)
+statsStroke.Thickness = 2.2
+local statsStrokeGrad = Instance.new("UIGradient", statsStroke)
+statsStrokeGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 210, 0)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 230, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 50, 140))
+}
+
+-- Header Profilo Giocatore con Avatar
+local StatsHeader = Instance.new("Frame", StatsWin)
+StatsHeader.Size = UDim2.new(1, 0, 0, 56)
+StatsHeader.BackgroundColor3 = Color3.fromRGB(20, 24, 38)
+StatsHeader.BorderSizePixel = 0
+Instance.new("UICorner", StatsHeader).CornerRadius = UDim.new(0, 16)
+MakeDraggable(StatsHeader, StatsWin)
+
+local AvatarFrame = Instance.new("Frame", StatsHeader)
+AvatarFrame.Size = UDim2.new(0, 40, 0, 40)
+AvatarFrame.Position = UDim2.new(0, 10, 0, 8)
+AvatarFrame.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+Instance.new("UICorner", AvatarFrame).CornerRadius = UDim.new(1, 0)
+local avStroke = Instance.new("UIStroke", AvatarFrame)
+avStroke.Color = Color3.fromRGB(0, 230, 255)
+avStroke.Thickness = 1.5
+
+local AvatarImg = Instance.new("ImageLabel", AvatarFrame)
+AvatarImg.Size = UDim2.new(1, 0, 1, 0)
+AvatarImg.BackgroundTransparency = 1
+AvatarImg.Image = "rbxthumb://type=AvatarHeadShot&id=" .. tostring(localPlayer.UserId) .. "&w=150&h=150"
+Instance.new("UICorner", AvatarImg).CornerRadius = UDim.new(1, 0)
+
+local StatsTitle = Instance.new("TextLabel", StatsHeader)
+StatsTitle.Size = UDim2.new(1, -95, 0, 20)
+StatsTitle.Position = UDim2.new(0, 58, 0, 9)
+StatsTitle.BackgroundTransparency = 1
+StatsTitle.Font = Enum.Font.GothamBlack
+StatsTitle.Text = "📊 CIAB LIVE STATS"
+StatsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+StatsTitle.TextSize = 13
+StatsTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local PlayerSub = Instance.new("TextLabel", StatsHeader)
+PlayerSub.Size = UDim2.new(1, -95, 0, 16)
+PlayerSub.Position = UDim2.new(0, 58, 0, 28)
+PlayerSub.BackgroundTransparency = 1
+PlayerSub.Font = Enum.Font.GothamBold
+PlayerSub.Text = "@" .. localPlayer.Name
+PlayerSub.TextColor3 = Color3.fromRGB(0, 225, 255)
+PlayerSub.TextSize = 11
+PlayerSub.TextXAlignment = Enum.TextXAlignment.Left
+
+local StatsMinBtn = Instance.new("TextButton", StatsHeader)
+StatsMinBtn.Size = UDim2.new(0, 28, 0, 28)
+StatsMinBtn.Position = UDim2.new(1, -36, 0, 14)
+StatsMinBtn.BackgroundColor3 = Color3.fromRGB(32, 38, 56)
+StatsMinBtn.Font = Enum.Font.GothamBlack
+StatsMinBtn.Text = "—"
+StatsMinBtn.TextColor3 = Color3.fromRGB(220, 230, 255)
+StatsMinBtn.TextSize = 12
+Instance.new("UICorner", StatsMinBtn).CornerRadius = UDim.new(0, 8)
+
+local statsMinimized = false
+StatsMinBtn.MouseButton1Click:Connect(function()
+	statsMinimized = not statsMinimized
+	StatsMinBtn.Text = statsMinimized and "+" or "—"
+	TweenService:Create(StatsWin, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+		Size = statsMinimized and UDim2.new(0, 265, 0, 56) or UDim2.new(0, 265, 0, 330)
+	}):Play()
+end)
+
+-- ORDINE ESATTO RICHIESTO: STR -> SPEED -> DEF -> ENERGY -> REB
+local StatValueLabels = {}
+local statConfigs = {
+	{Key = "Strength", Title = "STRENGTH", Icon = "💥", Color = Color3.fromRGB(255, 75, 95)},
+	{Key = "Speed",    Title = "SPEED",    Icon = "💨", Color = Color3.fromRGB(0, 240, 160)},
+	{Key = "Defense",  Title = "DEFENSE",  Icon = "🛡️", Color = Color3.fromRGB(0, 195, 255)},
+	{Key = "Energy",   Title = "ENERGY",   Icon = "⚡", Color = Color3.fromRGB(190, 100, 255)},
+	{Key = "Rebirth",  Title = "REBIRTHS", Icon = "👑", Color = Color3.fromRGB(255, 210, 0), IsReb = true}
+}
+
+for idx, st in ipairs(statConfigs) do
+	local card = Instance.new("Frame", StatsWin)
+	card.Size = UDim2.new(1, -24, 0, 44)
+	card.Position = UDim2.new(0, 12, 0, 66 + (idx - 1) * 51)
+	card.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
+	Instance.new("UICorner", card).CornerRadius = UDim.new(0, 10)
+
+	local cStroke = Instance.new("UIStroke", card)
+	cStroke.Color = st.Color
+	cStroke.Thickness = 1.2
+	cStroke.Transparency = 0.45
+
+	-- Barra Neon laterale sinistra sulla card
+	local accentBar = Instance.new("Frame", card)
+	accentBar.Size = UDim2.new(0, 4, 1, -14)
+	accentBar.Position = UDim2.new(0, 6, 0, 7)
+	accentBar.BackgroundColor3 = st.Color
+	accentBar.BorderSizePixel = 0
+	Instance.new("UICorner", accentBar).CornerRadius = UDim.new(1, 0)
+
+	local iconLbl = Instance.new("TextLabel", card)
+	iconLbl.Size = UDim2.new(0, 26, 0, 26)
+	iconLbl.Position = UDim2.new(0, 15, 0.5, -13)
+	iconLbl.BackgroundColor3 = Color3.fromRGB(14, 17, 26)
+	iconLbl.Font = Enum.Font.GothamBold
+	iconLbl.Text = st.Icon
+	iconLbl.TextSize = 13
+	Instance.new("UICorner", iconLbl).CornerRadius = UDim.new(0, 7)
+
+	local nameLbl = Instance.new("TextLabel", card)
+	nameLbl.Size = UDim2.new(0.42, 0, 1, 0)
+	nameLbl.Position = UDim2.new(0, 48, 0, 0)
+	nameLbl.BackgroundTransparency = 1
+	nameLbl.Font = Enum.Font.GothamBlack
+	nameLbl.Text = st.Title
+	nameLbl.TextColor3 = st.Color
+	nameLbl.TextSize = 11
+	nameLbl.TextXAlignment = Enum.TextXAlignment.Left
+
+	local valLbl = Instance.new("TextLabel", card)
+	valLbl.Size = UDim2.new(0.5, -12, 1, 0)
+	valLbl.Position = UDim2.new(0.5, 0, 0, 0)
+	valLbl.BackgroundTransparency = 1
+	valLbl.Font = Enum.Font.GothamBlack
+	valLbl.Text = "..."
+	valLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+	valLbl.TextSize = 14
+	valLbl.TextXAlignment = Enum.TextXAlignment.Right
+
+	StatValueLabels[st.Key] = {Label = valLbl, IsReb = st.IsReb}
+end
+
+task.spawn(function()
+	while IsCurrentSession() do
+		local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+		if pData then
+			for key, info in pairs(StatValueLabels) do
+				local valObj = pData:FindFirstChild(key)
+				if valObj and info.Label and info.Label.Parent then
+					if info.IsReb then
+						info.Label.Text = tostring(valObj.Value)
+					else
+						info.Label.Text = FormatStat(valObj.Value)
+					end
+				end
+			end
+		end
+		task.wait(0.25)
 	end
 end)
-table.insert(connections, UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = false end
-end))
-table.insert(connections, UserInputService.InputChanged:Connect(function(input)
-	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - dragStart
-		MainWin.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-end))
 
-local Title = Instance.new("TextLabel", MainWin)
-Title.Size = UDim2.new(1, -45, 0, 28)
-Title.Position = UDim2.new(0, 12, 0, 4)
+-- ------------------------------------------------------------------------------
+-- ⚡ 2. FINESTRA CONTROLLO CYBER HUB (DESTRA)
+-- ------------------------------------------------------------------------------
+local MainWin = Instance.new("Frame", ScreenGui)
+MainWin.Name = "MainWindow"
+MainWin.Size = UDim2.new(0, 325, 0, 395)
+MainWin.Position = UDim2.new(1, -343, 0.5, -197)
+MainWin.BackgroundColor3 = Color3.fromRGB(12, 14, 22)
+MainWin.BackgroundTransparency = 0.04
+MainWin.Active = true
+MainWin.ClipsDescendants = true
+Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 16)
+
+local mainBgGrad = Instance.new("UIGradient", MainWin)
+mainBgGrad.Rotation = 45
+mainBgGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(16, 19, 32)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(9, 10, 16))
+}
+
+local mainStroke = Instance.new("UIStroke", MainWin)
+mainStroke.Color = Color3.fromRGB(255, 255, 255)
+mainStroke.Thickness = 2.2
+local mainStrokeGrad = Instance.new("UIGradient", mainStroke)
+mainStrokeGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 200)),
+	ColorSequenceKeypoint.new(0.5, Color3.fromRGB(0, 140, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 50, 255))
+}
+
+local Header = Instance.new("Frame", MainWin)
+Header.Size = UDim2.new(1, 0, 0, 50)
+Header.BackgroundColor3 = Color3.fromRGB(20, 24, 38)
+Header.BorderSizePixel = 0
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 16)
+MakeDraggable(Header, MainWin)
+
+local Title = Instance.new("TextLabel", Header)
+Title.Size = UDim2.new(1, -55, 0, 22)
+Title.Position = UDim2.new(0, 14, 0, 6)
 Title.BackgroundTransparency = 1
 Title.Font = Enum.Font.GothamBlack
-Title.Text = "MINI HUB"
-Title.TextColor3 = Color3.fromRGB(0, 230, 255)
-Title.TextSize = 14
+Title.Text = "⚡ CIAB CYBER HUB"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 15
 Title.TextXAlignment = Enum.TextXAlignment.Left
 
-local MinBtn = Instance.new("TextButton", MainWin)
-MinBtn.Size = UDim2.new(0, 24, 0, 24)
-MinBtn.Position = UDim2.new(1, -32, 0, 6)
-MinBtn.BackgroundColor3 = Color3.fromRGB(30, 35, 50)
-MinBtn.Font = Enum.Font.GothamBold
+local SubTitle = Instance.new("TextLabel", Header)
+SubTitle.Size = UDim2.new(1, -55, 0, 14)
+SubTitle.Position = UDim2.new(0, 14, 0, 27)
+SubTitle.BackgroundTransparency = 1
+SubTitle.Font = Enum.Font.GothamBold
+SubTitle.Text = "Smart Auto-Boss • Lock-On • Tween"
+SubTitle.TextColor3 = Color3.fromRGB(0, 235, 190)
+SubTitle.TextSize = 10
+SubTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local MinBtn = Instance.new("TextButton", Header)
+MinBtn.Size = UDim2.new(0, 28, 0, 28)
+MinBtn.Position = UDim2.new(1, -38, 0, 11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(32, 38, 56)
+MinBtn.Font = Enum.Font.GothamBlack
 MinBtn.Text = "—"
-MinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinBtn.TextColor3 = Color3.fromRGB(220, 230, 255)
 MinBtn.TextSize = 12
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
 
 local minimized = false
 MinBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "—"
-	TweenService:Create(MainWin, TweenInfo.new(0.25), {Size = minimized and UDim2.new(0, 290, 0, 36) or UDim2.new(0, 290, 0, 320)}):Play()
+	TweenService:Create(MainWin, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+		Size = minimized and UDim2.new(0, 325, 0, 50) or UDim2.new(0, 325, 0, 395)
+	}):Play()
 end)
 
+-- Pulsante Master Start / Stop
 local StartBtn = Instance.new("TextButton", MainWin)
-StartBtn.Size = UDim2.new(1, -20, 0, 34)
-StartBtn.Position = UDim2.new(0, 10, 0, 36)
-StartBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
+StartBtn.Size = UDim2.new(1, -24, 0, 38)
+StartBtn.Position = UDim2.new(0, 12, 0, 58)
+StartBtn.BackgroundColor3 = Color3.fromRGB(190, 40, 60)
 StartBtn.Font = Enum.Font.GothamBlack
-StartBtn.Text = "⏹️ FARM: SPENTO (CLICCA PER AVVIARE)"
+StartBtn.Text = "⏹️ AUTO-FARM: SPENTO (CLICCA PER AVVIARE)"
 StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 StartBtn.TextSize = 11
-Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(0, 10)
+local startStroke = Instance.new("UIStroke", StartBtn)
+startStroke.Color = Color3.fromRGB(255, 255, 255)
+startStroke.Thickness = 1
+startStroke.Transparency = 0.6
 
-local StatusLbl = Instance.new("TextLabel", MainWin)
-StatusLbl.Size = UDim2.new(1, -20, 0, 22)
-StatusLbl.Position = UDim2.new(0, 10, 0, 74)
-StatusLbl.BackgroundColor3 = Color3.fromRGB(22, 26, 38)
+-- Status Pod
+local StatusPod = Instance.new("Frame", MainWin)
+StatusPod.Size = UDim2.new(1, -24, 0, 26)
+StatusPod.Position = UDim2.new(0, 12, 0, 102)
+StatusPod.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
+Instance.new("UICorner", StatusPod).CornerRadius = UDim.new(0, 8)
+local spStroke = Instance.new("UIStroke", StatusPod)
+spStroke.Color = Color3.fromRGB(0, 200, 255)
+spStroke.Thickness = 1
+spStroke.Transparency = 0.65
+
+local StatusLbl = Instance.new("TextLabel", StatusPod)
+StatusLbl.Size = UDim2.new(1, -16, 1, 0)
+StatusLbl.Position = UDim2.new(0, 8, 0, 0)
+StatusLbl.BackgroundTransparency = 1
 StatusLbl.Font = Enum.Font.GothamSemibold
-StatusLbl.Text = "⏸️ In attesa di avvio..."
-StatusLbl.TextColor3 = Color3.fromRGB(210, 225, 255)
-StatusLbl.TextSize = 10
-Instance.new("UICorner", StatusLbl).CornerRadius = UDim.new(0, 6)
+StatusLbl.Text = "⏸️ STATO: In attesa di avvio..."
+StatusLbl.TextColor3 = Color3.fromRGB(220, 235, 255)
+StatusLbl.TextSize = 11
+StatusLbl.TextXAlignment = Enum.TextXAlignment.Left
 
 local function SetStatus(txt)
 	if StatusLbl and StatusLbl.Parent then StatusLbl.Text = txt end
@@ -425,16 +676,16 @@ StartBtn.MouseButton1Click:Connect(function()
 	getgenv().AutoFarmActive = not getgenv().AutoFarmActive
 	UpdateFloatState()
 	if getgenv().AutoFarmActive then
-		StartBtn.BackgroundColor3 = Color3.fromRGB(16, 150, 90)
-		StartBtn.Text = "▶️ FARM: ATTIVO (CLICCA PER FERMARE)"
-		table.clear(equippedSkills)
-		task.spawn(EquipUnlockedSkills)
+		TweenService:Create(StartBtn, TweenInfo.new(0.25), {BackgroundColor3 = Color3.fromRGB(0, 175, 105)}):Play()
+		StartBtn.Text = "▶️ AUTO-FARM: ATTIVO (CLICCA PER FERMARE)"
+		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
+		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		StopActiveTween()
-		StartBtn.BackgroundColor3 = Color3.fromRGB(180, 40, 55)
-		StartBtn.Text = "⏹️ FARM: SPENTO (CLICCA PER AVVIARE)"
-		SetStatus("⏸️ Farm disattivato.")
+		TweenService:Create(StartBtn, TweenInfo.new(0.25), {BackgroundColor3 = Color3.fromRGB(190, 40, 60)}):Play()
+		StartBtn.Text = "⏹️ AUTO-FARM: SPENTO (CLICCA PER AVVIARE)"
+		SetStatus("⏸️ STATO: Farm disattivato.")
 		pcall(function()
 			camera.CameraType = Enum.CameraType.Custom
 			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
@@ -442,20 +693,31 @@ StartBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-local SpeedLbl = Instance.new("TextLabel", MainWin)
-SpeedLbl.Size = UDim2.new(0.65, 0, 0, 26)
-SpeedLbl.Position = UDim2.new(0, 12, 0, 102)
+-- Box Velocità Tween (Slider + Input)
+local SpeedCard = Instance.new("Frame", MainWin)
+SpeedCard.Size = UDim2.new(1, -24, 0, 50)
+SpeedCard.Position = UDim2.new(0, 12, 0, 134)
+SpeedCard.BackgroundColor3 = Color3.fromRGB(20, 24, 36)
+Instance.new("UICorner", SpeedCard).CornerRadius = UDim.new(0, 10)
+local scStroke = Instance.new("UIStroke", SpeedCard)
+scStroke.Color = Color3.fromRGB(0, 180, 255)
+scStroke.Thickness = 1
+scStroke.Transparency = 0.55
+
+local SpeedLbl = Instance.new("TextLabel", SpeedCard)
+SpeedLbl.Size = UDim2.new(1, -90, 0, 20)
+SpeedLbl.Position = UDim2.new(0, 10, 0, 4)
 SpeedLbl.BackgroundTransparency = 1
 SpeedLbl.Font = Enum.Font.GothamBold
-SpeedLbl.Text = "✈️ Tween Speed (Max " .. MAX_TWEEN_SPEED .. "):"
-SpeedLbl.TextColor3 = Color3.fromRGB(0, 220, 255)
+SpeedLbl.Text = "✈️ TWEEN SPEED (10 - " .. MAX_TWEEN_SPEED .. ")"
+SpeedLbl.TextColor3 = Color3.fromRGB(0, 225, 255)
 SpeedLbl.TextSize = 11
 SpeedLbl.TextXAlignment = Enum.TextXAlignment.Left
 
-local SpeedInput = Instance.new("TextBox", MainWin)
-SpeedInput.Size = UDim2.new(0, 75, 0, 24)
-SpeedInput.Position = UDim2.new(1, -85, 0, 103)
-SpeedInput.BackgroundColor3 = Color3.fromRGB(24, 28, 42)
+local SpeedInput = Instance.new("TextBox", SpeedCard)
+SpeedInput.Size = UDim2.new(0, 68, 0, 20)
+SpeedInput.Position = UDim2.new(1, -76, 0, 4)
+SpeedInput.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
 SpeedInput.Font = Enum.Font.GothamBlack
 SpeedInput.Text = tostring(getgenv().TweenSpeed)
 SpeedInput.TextColor3 = Color3.fromRGB(0, 255, 190)
@@ -463,49 +725,97 @@ SpeedInput.TextSize = 12
 SpeedInput.ClearTextOnFocus = false
 Instance.new("UICorner", SpeedInput).CornerRadius = UDim.new(0, 6)
 
-SpeedInput.FocusLost:Connect(function()
-	getgenv().TweenSpeed = math.clamp(math.floor(tonumber(SpeedInput.Text) or 300), 10, MAX_TWEEN_SPEED)
-	SpeedInput.Text = tostring(getgenv().TweenSpeed)
-end)
+local SliderBg = Instance.new("Frame", SpeedCard)
+SliderBg.Size = UDim2.new(1, -20, 0, 8)
+SliderBg.Position = UDim2.new(0, 10, 0, 32)
+SliderBg.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+Instance.new("UICorner", SliderBg).CornerRadius = UDim.new(1, 0)
 
+local initRatio = (getgenv().TweenSpeed - 10) / (MAX_TWEEN_SPEED - 10)
+local SliderFill = Instance.new("Frame", SliderBg)
+SliderFill.Size = UDim2.new(initRatio, 0, 1, 0)
+SliderFill.BackgroundColor3 = Color3.fromRGB(0, 220, 255)
+Instance.new("UICorner", SliderFill).CornerRadius = UDim.new(1, 0)
+
+local SliderKnob = Instance.new("Frame", SliderBg)
+SliderKnob.Size = UDim2.new(0, 14, 0, 14)
+SliderKnob.Position = UDim2.new(initRatio, -7, 0.5, -7)
+SliderKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+Instance.new("UICorner", SliderKnob).CornerRadius = UDim.new(1, 0)
+
+local function SetTweenSpeed(val)
+	val = math.clamp(math.floor(tonumber(val) or 300), 10, MAX_TWEEN_SPEED)
+	getgenv().TweenSpeed = val
+	SpeedInput.Text = tostring(val)
+	local r = (val - 10) / (MAX_TWEEN_SPEED - 10)
+	SliderFill.Size = UDim2.new(r, 0, 1, 0)
+	SliderKnob.Position = UDim2.new(r, -7, 0.5, -7)
+end
+
+local sliding = false
+SliderBg.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		sliding = true
+		local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
+		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10))
+	end
+end)
+table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		sliding = false
+	end
+end))
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+	if sliding and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local relX = math.clamp((input.Position.X - SliderBg.AbsolutePosition.X) / SliderBg.AbsoluteSize.X, 0, 1)
+		SetTweenSpeed(10 + relX * (MAX_TWEEN_SPEED - 10))
+	end
+end))
+SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text) end)
+
+-- Selettore Modalità Auto / Manuale
 local ModeBtn = Instance.new("TextButton", MainWin)
-ModeBtn.Size = UDim2.new(1, -20, 0, 28)
-ModeBtn.Position = UDim2.new(0, 10, 0, 132)
-ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 190)
-ModeBtn.Font = Enum.Font.GothamBold
+ModeBtn.Size = UDim2.new(1, -24, 0, 30)
+ModeBtn.Position = UDim2.new(0, 12, 0, 190)
+ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 125, 205)
+ModeBtn.Font = Enum.Font.GothamBlack
 ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
 ModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 ModeBtn.TextSize = 11
-Instance.new("UICorner", ModeBtn).CornerRadius = UDim.new(0, 6)
+Instance.new("UICorner", ModeBtn).CornerRadius = UDim.new(0, 8)
 
+-- Lista Scorrevole Boss
 local BossScroll = Instance.new("ScrollingFrame", MainWin)
-BossScroll.Size = UDim2.new(1, -20, 1, -172)
-BossScroll.Position = UDim2.new(0, 10, 0, 165)
-BossScroll.BackgroundColor3 = Color3.fromRGB(18, 21, 32)
+BossScroll.Size = UDim2.new(1, -24, 1, -238)
+BossScroll.Position = UDim2.new(0, 12, 0, 226)
+BossScroll.BackgroundColor3 = Color3.fromRGB(16, 19, 30)
 BossScroll.ScrollBarThickness = 3
-BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 210, 255)
+BossScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 225, 255)
 BossScroll.BorderSizePixel = 0
-Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", BossScroll).CornerRadius = UDim.new(0, 10)
 
 local listLayout = Instance.new("UIListLayout", BossScroll)
-listLayout.Padding = UDim.new(0, 4)
+listLayout.Padding = UDim.new(0, 5)
 
 local bossButtons = {}
 local function RefreshBossSelectionUI()
 	if getgenv().ManualBoss == nil then
-		ModeBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 190)
+		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 125, 205)}):Play()
 		ModeBtn.Text = "🤖 MODO: AUTO IN BASE ALLA DIFESA"
 	else
-		ModeBtn.BackgroundColor3 = Color3.fromRGB(210, 120, 20)
+		TweenService:Create(ModeBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(220, 125, 15)}):Play()
 		ModeBtn.Text = "🎯 MANUALE: " .. getgenv().ManualBoss .. " (Clicca x Auto)"
 	end
-	for name, btn in pairs(bossButtons) do
-		btn.BackgroundColor3 = (getgenv().ManualBoss == name) and Color3.fromRGB(0, 165, 95) or Color3.fromRGB(28, 32, 46)
+	for name, info in pairs(bossButtons) do
+		local selected = (getgenv().ManualBoss == name)
+		info.Card.BackgroundColor3 = selected and Color3.fromRGB(18, 55, 45) or Color3.fromRGB(24, 28, 42)
+		info.Stroke.Color = selected and Color3.fromRGB(0, 240, 150) or Color3.fromRGB(40, 46, 68)
 	end
 end
 
 ModeBtn.MouseButton1Click:Connect(function()
 	getgenv().ManualBoss = nil
+	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	StopActiveTween()
 	RefreshBossSelectionUI()
@@ -513,23 +823,45 @@ end)
 
 for _, bData in ipairs(BossList) do
 	local bBtn = Instance.new("TextButton", BossScroll)
-	bBtn.Size = UDim2.new(1, -8, 0, 26)
-	bBtn.BackgroundColor3 = Color3.fromRGB(28, 32, 46)
-	bBtn.Font = Enum.Font.GothamSemibold
-	bBtn.Text = string.format(" [%s] %s", FormatStat(bData.MinDef), bData.Name)
-	bBtn.TextColor3 = Color3.fromRGB(235, 240, 255)
-	bBtn.TextSize = 11
-	bBtn.TextXAlignment = Enum.TextXAlignment.Left
-	bBtn.TextTruncate = Enum.TextTruncate.AtEnd
-	Instance.new("UICorner", bBtn).CornerRadius = UDim.new(0, 6)
+	bBtn.Size = UDim2.new(1, -8, 0, 30)
+	bBtn.BackgroundColor3 = Color3.fromRGB(24, 28, 42)
+	bBtn.Text = ""
+	bBtn.AutoButtonColor = false
+	Instance.new("UICorner", bBtn).CornerRadius = UDim.new(0, 8)
 
-	bossButtons[bData.Name] = bBtn
+	local bStroke = Instance.new("UIStroke", bBtn)
+	bStroke.Color = Color3.fromRGB(40, 46, 68)
+	bStroke.Thickness = 1
+
+	local badge = Instance.new("TextLabel", bBtn)
+	badge.Size = UDim2.new(0, 54, 0, 20)
+	badge.Position = UDim2.new(0, 6, 0.5, -10)
+	badge.BackgroundColor3 = Color3.fromRGB(14, 17, 26)
+	badge.Font = Enum.Font.GothamBlack
+	badge.Text = FormatStat(bData.MinDef)
+	badge.TextColor3 = Color3.fromRGB(0, 225, 255)
+	badge.TextSize = 10
+	Instance.new("UICorner", badge).CornerRadius = UDim.new(0, 6)
+
+	local bNameLbl = Instance.new("TextLabel", bBtn)
+	bNameLbl.Size = UDim2.new(1, -72, 1, 0)
+	bNameLbl.Position = UDim2.new(0, 66, 0, 0)
+	bNameLbl.BackgroundTransparency = 1
+	bNameLbl.Font = Enum.Font.GothamSemibold
+	bNameLbl.Text = bData.Name
+	bNameLbl.TextColor3 = Color3.fromRGB(235, 240, 255)
+	bNameLbl.TextSize = 11
+	bNameLbl.TextXAlignment = Enum.TextXAlignment.Left
+	bNameLbl.TextTruncate = Enum.TextTruncate.AtEnd
+
+	bossButtons[bData.Name] = {Card = bBtn, Stroke = bStroke}
 	bBtn.MouseButton1Click:Connect(function()
 		if getgenv().ManualBoss == bData.Name then
 			getgenv().ManualBoss = nil
 		else
 			getgenv().ManualBoss = bData.Name
 		end
+		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		StopActiveTween()
 		RefreshBossSelectionUI()
@@ -537,8 +869,18 @@ for _, bData in ipairs(BossList) do
 end
 
 listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-	BossScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 6)
+	BossScroll.CanvasSize = UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y + 8)
 end)
+
+-- Rotazione fluida dei bordi Neon su entrambe le GUI
+table.insert(connections, RunService.RenderStepped:Connect(function()
+	if statsStrokeGrad and statsStrokeGrad.Parent then
+		statsStrokeGrad.Rotation = (statsStrokeGrad.Rotation + 1.5) % 360
+	end
+	if mainStrokeGrad and mainStrokeGrad.Parent then
+		mainStrokeGrad.Rotation = (mainStrokeGrad.Rotation + 1.5) % 360
+	end
+end))
 
 -- ==============================================================================
 -- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO
@@ -548,7 +890,7 @@ task.spawn(function()
 	if queue_on_teleport then
 		queue_on_teleport([[
 			repeat task.wait() until game:IsLoaded()
-			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turboboss"))()
+			loadstring(game:HttpGetAsync("https://raw.githubusercontent.com/Aminix06/testciabattoso/refs/heads/main/turbotween"))()
 		]])
 	end
 end)
@@ -637,7 +979,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- ⚡ ANTIAFK & AUTO-CHARGE ("cha") ULTRA-VELOCIZZATO
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") SOLO QUANDO NON STA ATTACCANDO!
 -- ==============================================================================
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
@@ -647,15 +989,15 @@ table.insert(connections, localPlayer.Idled:Connect(function()
 end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function()
-	task.wait(1)
-	table.clear(equippedSkills)
+	isCurrentlyAttacking = false
+	task.wait(1.2)
 	UpdateFloatState()
-	EquipUnlockedSkills()
+	CheckAndEquipSkills(true)
 end))
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive then
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking then
 			coroutine.wrap(function()
 				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 			end)()
@@ -663,20 +1005,35 @@ task.spawn(function()
 				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 			end)()
 		end
-		task.wait(0.03)
+		task.wait(0.04)
 	end
 end)
 
 -- ==============================================================================
--- 🔥 CONTROLLO FORMA (TRUE SSJG A 6Qa | LBSSJ4 A 1T+500k REB | SENZA FORMA FINO A 10T)
+-- 🔥 GESTIONE FORMA SENZA BLOCCHI DOPO LA MORTE
 -- ==============================================================================
+local function GetLiveStatus()
+	local char = localPlayer.Character
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	return (char and char:FindFirstChild("Status"))
+		or (wsChar and wsChar:FindFirstChild("Status"))
+		or localPlayer:FindFirstChild("Status")
+end
+
+local function IsTransformedIn(actualVal)
+	if not actualVal or actualVal == "" or actualVal == "Base" or actualVal == "None" then
+		return false
+	end
+	return true
+end
+
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive then
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking then
 			local char = localPlayer.Character
 			if char and char:FindFirstChildOfClass("Humanoid") and char.Humanoid.Health > 0 then
 				local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-				local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+				local status = GetLiveStatus()
 
 				if folderData and status then
 					local defVal = tonumber(folderData:FindFirstChild("Defense") and folderData.Defense.Value) or 0
@@ -693,16 +1050,15 @@ task.spawn(function()
 							end
 						end
 
-						if targetForm and actual.Value ~= targetForm then
+						if targetForm and actual.Value ~= targetForm and not IsTransformedIn(actual.Value) then
 							if selected.Value ~= targetForm then
 								pcall(function() equipRemote:InvokeServer(targetForm) end)
 								task.wait(0.35)
 							end
-							if selected.Value == targetForm then
+							if selected.Value == targetForm and not IsTransformedIn(actual.Value) then
 								pcall(function() transformRemote:InvokeServer() end)
-								task.wait(1.2)
-								table.clear(equippedSkills)
-								EquipUnlockedSkills()
+								task.wait(1.0)
+								CheckAndEquipSkills(true)
 							end
 						end
 					end
@@ -719,11 +1075,12 @@ local function WaitForTransformation(bossMinDef)
 	if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
 
 	local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-	local status = localPlayer:FindFirstChild("Status") or char:FindFirstChild("Status")
+	local status = GetLiveStatus()
 	if not folderData or not status then return false end
 
 	local defVal = tonumber(folderData:FindFirstChild("Defense") and folderData.Defense.Value) or 0
 	local rebVal = tonumber(folderData:FindFirstChild("Rebirth") and folderData.Rebirth.Value) or 0
+	local selected = status:FindFirstChild("SelectedTransformation")
 	local actual = status:FindFirstChild("Transformation")
 	if not actual then return false end
 
@@ -744,20 +1101,31 @@ local function WaitForTransformation(bossMinDef)
 		end
 	end
 
-	local timeout = 16
-	while actual.Value ~= targetForm and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() do
+	if IsTransformedIn(actual.Value) then
+		return true
+	end
+
+	isCurrentlyAttacking = false
+	SetStatus("⚡ Attivazione " .. targetForm .. "...")
+	if selected and selected.Value ~= targetForm then
+		pcall(function() equipRemote:InvokeServer(targetForm) end)
+		task.wait(0.3)
+	end
+	pcall(function() transformRemote:InvokeServer() end)
+
+	local timeout = 6
+	while not IsTransformedIn(actual.Value) and timeout > 0 and getgenv().AutoFarmActive and IsCurrentSession() do
 		if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
-		SetStatus("⚡ Attivazione " .. targetForm .. "...")
-		task.wait(0.5)
+		task.wait(0.4)
 		timeout -= 1
 	end
 
-	if (bossMinDef or 0) <= NO_FORM_MAX_DEF then return true end
-	return actual.Value == targetForm
+	task.spawn(function() CheckAndEquipSkills(true) end)
+	return true
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO (PUGNI + SKILL EQUIPAGGIATE IN BASE A STR & SPEED)
+-- ⚔️ SISTEMA DI COMBATTIMENTO PULITO (ZERO EQUIPSKILL SPAM, ZERO CHA MENTRE ATTACCA)
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
@@ -776,31 +1144,18 @@ local function FindLivingBoss(bossEntry)
 	return nil
 end
 
--- Funzione d'attacco: usa i Pugni + equipaggia ed esegue SOLO le skill sbloccate per Str & Speed
 local function DoFullAttack()
 	pcall(function()
 		punchRemote:FireServer("Blacknwhite27", 1, false)
 		punchRemote:FireServer("Blacknwhite27", 1)
 
-		local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-		local myStr = tonumber(playerData and playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
-		local mySpd = tonumber(playerData and playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
-
 		for _, skill in ipairs(SkillRequirements) do
-			if myStr >= skill.MinStat and mySpd >= skill.MinStat then
+			if equippedSkills[skill.Name] then
 				coroutine.wrap(function()
 					pcall(function()
-						if not equippedSkills[skill.Name] then
-							equipRemote:InvokeServer(skill.Name)
-							equippedSkills[skill.Name] = true
-						end
-						if equippedSkills[skill.Name] then
-							skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
-						end
+						skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
 					end)
 				end)()
-			else
-				equippedSkills[skill.Name] = false
 			end
 		end
 	end)
@@ -810,7 +1165,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	local questVal = playerData and playerData:FindFirstChild("Quest")
 
-	task.spawn(EquipUnlockedSkills)
+	CheckAndEquipSkills(false)
 
 	while IsCurrentSession() and getgenv().AutoFarmActive do
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
@@ -834,19 +1189,30 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
 
 		if distToBoss > 25 then
+			isCurrentlyAttacking = false
 			SetStatus("✈️ Tween verso Boss: " .. bossEntry.Name)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
 		else
-			local hpPct = math.floor((bossHum.Health / math.max(bossHum.MaxHealth, 1)) * 100)
-			SetStatus(string.format("⚔️ %s [HP: %d%%]", bossEntry.Name, hpPct))
-			DoFullAttack()
+			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
+			if kiObj and (tonumber(kiObj.Value) or 100) < 10 then
+				isCurrentlyAttacking = false
+				SetStatus("⚡ Ricarica rapida Ki...")
+				task.wait(0.35)
+			else
+				isCurrentlyAttacking = true
+				local hpPct = math.floor((bossHum.Health / math.max(bossHum.MaxHealth, 1)) * 100)
+				SetStatus(string.format("⚔️ %s [HP: %d%%]", bossEntry.Name, hpPct))
+				DoFullAttack()
+			end
 		end
 
-		task.wait(0.12)
+		task.wait(0.1)
 	end
 
+	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	StopActiveTween()
 	pcall(function()
@@ -861,6 +1227,7 @@ end
 local function WaitForBossToSpawn(bossEntry, timeLimit, hasQuestNpc)
 	local startTime = os.time()
 	local bossReady = false
+	isCurrentlyAttacking = false
 
 	repeat
 		if not IsCurrentSession() or not getgenv().AutoFarmActive then return false end
@@ -883,7 +1250,7 @@ end
 
 local function CheckAndFightBoss(bossEntry)
 	if not getgenv().AutoFarmActive then return false end
-	if not WaitForTransformation(bossEntry.MinDef) then return false end
+	isCurrentlyAttacking = false
 
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return false end
@@ -902,6 +1269,8 @@ local function CheckAndFightBoss(bossEntry)
 		return false
 	end
 
+	if not WaitForTransformation(bossEntry.MinDef) then return false end
+
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
 		local questVal = playerData:WaitForChild("Quest")
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
@@ -915,6 +1284,7 @@ local function CheckAndFightBoss(bossEntry)
 			end
 			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
 
+			isCurrentlyAttacking = false
 			currentLockedBoss = nil
 			SetStatus("✈️ Tween verso Quest: " .. bossEntry.Name)
 			local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
@@ -952,6 +1322,7 @@ task.spawn(function()
 							if bEntry.Name == getgenv().ManualBoss then
 								local fought = CheckAndFightBoss(bEntry)
 								if not fought and getgenv().AutoFarmActive then
+									isCurrentlyAttacking = false
 									SetStatus("⏳ Attesa Boss: " .. bEntry.Name)
 								end
 								break
@@ -970,6 +1341,7 @@ task.spawn(function()
 							end
 						end
 						if not foughtAny and getgenv().AutoFarmActive then
+							isCurrentlyAttacking = false
 							SetStatus("🔍 Ricerca Boss (Difesa: " .. FormatStat(myDef) .. ")...")
 						end
 					end
