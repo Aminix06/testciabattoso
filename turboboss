@@ -952,9 +952,10 @@ end
 local StartBtn = Instance.new("TextButton", Header)
 StartBtn.Size = UDim2.new(0, 86, 0, 24)
 StartBtn.Position = UDim2.new(1, -122, 0.5, -12)
-StartBtn.BackgroundColor3 = Color3.fromRGB(195, 35, 60)
+StartBtn.BackgroundColor3 = getgenv().AutoFarmActive and Color3.fromRGB(0, 180, 105) or Color3.fromRGB(195, 35, 60)
 StartBtn.Font = Enum.Font.GothamBlack
-StartBtn.Text = "⏹️ FARM OFF"
+StartBtn.Text = getgenv().AutoFarmActive and "▶️ FARM ON" or "⏹️ FARM OFF"
+if getgenv().AutoFarmActive then task.spawn(UpdateFloatState) end
 StartBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 StartBtn.TextSize = 10
 StartBtn.ZIndex = 15
@@ -1138,9 +1139,9 @@ rcStroke.Transparency = 0.45
 local RebToggleBtn = Instance.new("TextButton", RebCard)
 RebToggleBtn.Size = UDim2.new(0, 96, 0, 28)
 RebToggleBtn.Position = UDim2.new(0, 6, 0.5, -14)
-RebToggleBtn.BackgroundColor3 = Color3.fromRGB(175, 35, 55)
+RebToggleBtn.BackgroundColor3 = getgenv().AutoRebActive and Color3.fromRGB(0, 175, 100) or Color3.fromRGB(175, 35, 55)
 RebToggleBtn.Font = Enum.Font.GothamBlack
-RebToggleBtn.Text = "👑 REB: OFF"
+RebToggleBtn.Text = getgenv().AutoRebActive and "👑 REB: ON" or "👑 REB: OFF"
 RebToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 RebToggleBtn.TextSize = 10
 Instance.new("UICorner", RebToggleBtn).CornerRadius = UDim.new(0, 7)
