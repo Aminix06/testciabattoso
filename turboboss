@@ -40,15 +40,8 @@ local multirebRemote = Events:WaitForChild("Multireb")
 -- 🔢 GESTIONE REBIRTH: SENZA PUNTO SOTTO 100k, LETTERE INTERE DA 100k+ E INPUT "10M"
 -- ==============================================================================
 local SuffixMultipliers = {
-	k = 1e3,
-	m = 1e6,
-	b = 1e9,
-	t = 1e12,
-	qd = 1e15,
-	qa = 1e15,
-	qi = 1e18,
-	sx = 1e21,
-	sp = 1e24
+	k = 1e3, m = 1e6, b = 1e9, t = 1e12,
+	qd = 1e15, qa = 1e15, qi = 1e18, sx = 1e21, sp = 1e24
 }
 
 local function ParseRebirthInt(res)
@@ -78,8 +71,6 @@ end
 
 local function FormatReb(n)
 	n = math.floor(tonumber(n) or 0)
-
-	-- Funzione interna: da 1 a 9,99 mette 2 decimali (es. 1,50M), da 10 in su mette intero (es. 10M)
 	local function FormatUnit(val, suffix)
 		if val < 10 then
 			return (string.format("%.2f", val):gsub("%.", ",")) .. suffix
@@ -88,21 +79,13 @@ local function FormatReb(n)
 		end
 	end
 
-	if n >= 1e18 then
-		return FormatUnit(n / 1e18, "Qi")
-	elseif n >= 1e15 then
-		return FormatUnit(n / 1e15, "Qd")
-	elseif n >= 1e12 then
-		return FormatUnit(n / 1e12, "T")
-	elseif n >= 1e9 then
-		return FormatUnit(n / 1e9, "B")
-	elseif n >= 1e6 then
-		return FormatUnit(n / 1e6, "M")
-	elseif n >= 100000 then
-		return tostring(math.floor(n / 1e3)) .. "k"
-	else
-		return tostring(n)
-	end
+	if n >= 1e18 then return FormatUnit(n / 1e18, "Qi")
+	elseif n >= 1e15 then return FormatUnit(n / 1e15, "Qd")
+	elseif n >= 1e12 then return FormatUnit(n / 1e12, "T")
+	elseif n >= 1e9 then return FormatUnit(n / 1e9, "B")
+	elseif n >= 1e6 then return FormatUnit(n / 1e6, "M")
+	elseif n >= 100000 then return tostring(math.floor(n / 1e3)) .. "k"
+	else return tostring(n) end
 end
 
 local function FormatStat(n)
@@ -123,7 +106,8 @@ end
 -- ==============================================================================
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
-local NO_FORM_MAX_DEF = 3000 -- Fino a 10T può combattere anche senza forma!
+local NO_FORM_MAX_DEF = 3000 -- Fino a 3000 può combattere anche senza forma!
+local MAX_PLAYERS_IN_SERVER = 1 -- <-- CAMBIA QUI IL NUMERO DI PERSONE ACCETTABILI NEL PRIVATO (es. 1 = solo tu, 2 = tu + 1 amico)
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = false
@@ -178,7 +162,7 @@ end
 
 local isCurrentlyAttacking = false
 local justRebirthed = false
-local lastTransformClock = 0 -- Registra il momento esatto in cui è entrata la forma
+local lastTransformClock = 0
 local currentPreviewRebs = 0
 local rejectedForms = {}
 local lastCheckedRebForForms = -1
@@ -347,14 +331,12 @@ local BossList = {
 	{Name = "X Fighter Trainer",                      Boss = "X Fighter",                              MinDef = 0}
 }
 
--- Legge lo Status del giocatore (dove ci sono Transformation e KaiokenActive)
 local function GetLiveStatus()
 	return localPlayer:FindFirstChild("Status")
 		or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
 		or (workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name) and workspace.Living[localPlayer.Name]:FindFirstChild("Status"))
 end
 
--- Rileva con certezza al 100% se il Kaioken è attivo (Player.Status.KaiokenActive)
 local function IsKaiokenCurrentlyActive()
 	local st = localPlayer:FindFirstChild("Status") or GetLiveStatus()
 	local kk = st and st:FindFirstChild("KaiokenActive")
@@ -1479,7 +1461,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO (USA MAX_PLAYERS_IN_SERVER)
 -- ==============================================================================
 task.spawn(function()
 	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
@@ -1495,7 +1477,7 @@ task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
 	local function IsPublicServer()
-		if #Players:GetPlayers() > 1 then return false end
+		if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then return false end
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
@@ -1528,7 +1510,7 @@ task.spawn(function()
 		local function FugaSullaTerra()
 			if isEscaping then return end
 			isEscaping = true
-			warn("⚠️ Intruso rilevato! Fuga istantanea verso Earth...")
+			warn("⚠️ Superato il limite di " .. tostring(MAX_PLAYERS_IN_SERVER) .. " giocatori! Fuga istantanea verso Earth...")
 			StopActiveTween()
 			pcall(function()
 				if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -1541,13 +1523,14 @@ task.spawn(function()
 			end)
 		end
 
-		if #Players:GetPlayers() > 1 then FugaSullaTerra() end
-		table.insert(connections, Players.PlayerAdded:Connect(function(player)
-			if player.UserId ~= localPlayer.UserId then FugaSullaTerra() end
+		if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
+		table.insert(connections, Players.PlayerAdded:Connect(function()
+			task.wait(0.2)
+			if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
 		end))
 		task.spawn(function()
 			while IsCurrentSession() and task.wait(1) do
-				if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+				if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
 			end
 		end)
 	end
@@ -1634,14 +1617,12 @@ local function NeedsFormOrKaiokenRightNow()
 	local actual = status:FindFirstChild("Transformation")
 	if not actual then return false end
 
-	-- Fino a 10T (se non hai ancora sbloccato LBSSJ4 o superiori), può attaccare anche senza forma
 	if defVal <= NO_FORM_MAX_DEF and not (defVal >= 1e12 and rebVal >= 500000) then
 		return false
 	end
 
 	local bestCandidate = GetBestAvailableCandidate(defVal, rebVal)
 	if bestCandidate then
-		-- Se non hai la forma migliore attiva OPPURE Status.KaiokenActive è false, deve fermarsi per attivarli!
 		if actual.Value ~= bestCandidate or not IsKaiokenCurrentlyActive() then
 			return true
 		end
@@ -1751,7 +1732,6 @@ local function EnsureFormAndKaioken()
 			task.wait(0.1)
 		end
 
-		-- Esegue schtah e verifica che Status.KaiokenActive diventi effettivamente true!
 		local attempts = 0
 		while not IsKaiokenCurrentlyActive() and attempts < 5 and getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
 			if not localPlayer.Character or localPlayer.Character:FindFirstChildOfClass("Humanoid").Health <= 0 then return false end
@@ -1932,7 +1912,6 @@ local function CheckAndFightBoss(bossEntry)
 		return false
 	end
 
-	-- PRIMA verifica ed esegue Forma Migliore -> Attesa Kaioken -> KaiokenActive == true, POI va dal Boss!
 	if not EnsureFormAndKaioken() then return false end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
