@@ -261,7 +261,6 @@ local FormProgression = {
 local BossList = {
 	{Name = "Lady Aeos",                              Boss = "Lady Aeos",                              MinDef = 700e24},
 	{Name = "LUCIF",                                  Boss = "LUCIF",                                  MinDef = 30e24},
-	{Name = "Hit (PURE PROGRESS)",                    Boss = "Hit (PURE PROGRESS)",                    MinDef = 10e24},
 	{Name = "Full Power Grand Priest",                Boss = "Full Power Grand Priest",                MinDef = 700e21},
 	{Name = "Summer Bulma (Full Power)",              Boss = "Summer Bulma (Full Power)",              MinDef = 600e18},
 	{Name = "Ultra Super Hero Wukong",                Boss = "Ultra Super Hero Wukong",                MinDef = 599e18},
@@ -348,12 +347,53 @@ local function IsKaiokenCurrentlyActive()
 end
 
 -- ==============================================================================
--- ✈️ SISTEMA TWEEN, FLOAT AUTO-RIPARANTE DOPO LA MORTE & LOCK-ON RAPIDO
+-- ✈️ SISTEMA TWEEN, ANTI-SEDIE TOTALE, FLOAT AUTO-RIPARANTE & LOCK-ON RAPIDO
 -- ==============================================================================
 local activeTween = nil
 local currentLockedBoss = nil
 local behindDistance = -5
 local connections = {}
+
+-- 🪑 NEUTRALIZZA TUTTE LE SEDIE DELLA MAPPA (PRESENTI E FUTURE)
+local function DisableChair(obj)
+	if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
+		pcall(function()
+			obj.Disabled = true
+			obj.CanTouch = false
+			obj.CanCollide = false
+		end)
+	elseif obj.Name == "SeatWeld" and obj:IsA("Weld") then
+		pcall(function() obj:Destroy() end)
+	end
+end
+
+for _, obj in ipairs(workspace:GetDescendants()) do
+	DisableChair(obj)
+end
+table.insert(connections, workspace.DescendantAdded:Connect(DisableChair))
+
+-- Blocca lo stato "Seduto" su qualsiasi personaggio appena nasce
+local function SetupAntiSitOnCharacter(char)
+	if not char then return end
+	task.spawn(function()
+		local hum = char:WaitForChild("Humanoid", 8)
+		if hum then
+			pcall(function()
+				hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+				hum.Sit = false
+			end)
+			table.insert(connections, hum:GetPropertyChangedSignal("Sit"):Connect(function()
+				if hum.Sit then
+					hum.Sit = false
+				end
+			end))
+		end
+	end)
+end
+
+if localPlayer.Character then
+	SetupAntiSitOnCharacter(localPlayer.Character)
+end
 
 local function StopActiveTween()
 	if activeTween then
@@ -402,18 +442,29 @@ local function UpdateFloatState()
 	lv.MaxAxesForce = Vector3.new(0, math.huge, 0)
 end
 
+-- Loop Stepped: mantiene Anti-Sit SEMPRE attivo, più Noclip e Float durante il Farm!
 table.insert(connections, RunService.Stepped:Connect(function()
-	if not getgenv().AutoFarmActive then return end
 	local char = localPlayer.Character
-	if char then
-		local root = char:FindFirstChild("HumanoidRootPart")
-		if root and not root:FindFirstChild("FloatVelocity") then
-			UpdateFloatState()
+	if not char then return end
+
+	-- 🚫 ANTI-SIT COSTANTE (impedisce al personaggio di sedersi per sbaglio in qualsiasi momento)
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+		if hum.Sit then
+			hum.Sit = false
 		end
-		for _, part in ipairs(char:GetDescendants()) do
-			if part:IsA("BasePart") and part.CanCollide then
-				part.CanCollide = false
-			end
+	end
+
+	if not getgenv().AutoFarmActive then return end
+
+	local root = char:FindFirstChild("HumanoidRootPart")
+	if root and not root:FindFirstChild("FloatVelocity") then
+		UpdateFloatState()
+	end
+	for _, part in ipairs(char:GetDescendants()) do
+		if part:IsA("BasePart") and part.CanCollide then
+			part.CanCollide = false
 		end
 	end
 end))
@@ -1591,6 +1642,7 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	isCurrentlyAttacking = false
 	lastTransformClock = 0
 	table.clear(rejectedForms)
+	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
 	task.wait(0.3)
 	UpdateFloatState()
@@ -1987,7 +2039,6 @@ local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questV
 		if currentBoss then
 			task.wait(0.08)
 			TweenAndFight(bossEntry, hasQuestNpc)
-			-- NOTA: Per i Boss NoQuest NON usciamo dopo l'uccisione, ma restiamo nel ciclo ad aspettare il respawn (proprio come quelli con Quest)!
 		else
 			SetStatus("⏳ Attesa respawn: " .. bossEntry.Name .. "...", 0)
 			task.wait(0.25)
@@ -2016,7 +2067,6 @@ local function CheckAndFightBoss(bossEntry)
 		return false
 	end
 
-	-- ✅ FIX 1: Se è un Boss NoQuest, restituisce false SOLO se non è mai stato visto nella mappa, non è il nostro bersaglio attivo e non è selezionato in Manuale!
 	if bossEntry.NoQuest then
 		local isKnownInMap = (livingBoss ~= nil)
 			or (confirmedNoQuestBosses[bossEntry.Name] == true)
@@ -2035,7 +2085,6 @@ local function CheckAndFightBoss(bossEntry)
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
 		local questVal = playerData:WaitForChild("Quest")
 
-		-- Prende la Quest SOLO se non ha già questa Quest attiva!
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
 				StopActiveTween()
@@ -2075,7 +2124,6 @@ local function CheckAndFightBoss(bossEntry)
 	end
 end
 
--- Cerca il Boss corrispondente alla Quest già attiva
 local function GetActiveQuestBossEntry(questName, myDef)
 	if not questName or questName == "" or questName == "None" then return nil end
 	for _, bEntry in ipairs(BossList) do
@@ -2115,24 +2163,20 @@ task.spawn(function()
 							local currentQuestName = questVal and questVal.Value or ""
 
 							local activeQuestEntry = GetActiveQuestBossEntry(currentQuestName, myDef)
-							-- ✅ FIX 2: Controlla se c'è un Boss senza quest nella mappa che richiede PIÙ Difesa della quest attiva!
 							local strongerNoQuest = activeQuestEntry and GetStrongerNoQuestBoss(myDef, activeQuestEntry.MinDef) or nil
 
 							if strongerNoQuest then
-								-- Dà priorità al Boss senza quest più forte invece di rimanere bloccato sulla quest più debole!
 								CheckAndFightBoss(strongerNoQuest)
 							elseif activeQuestEntry then
-								-- Altrimenti se la Quest attiva è già il bersaglio migliore, finisce quella
 								CheckAndFightBoss(activeQuestEntry)
 							else
-								-- Altrimenti scorre la lista dal Boss più forte al più debole (inclusi i NoQuest memorizzati)
 								local foughtAny = false
 								for _, bEntry in ipairs(BossList) do
 									if not getgenv().AutoFarmActive or getgenv().ManualBoss ~= nil or not IsCurrentSession() or justRebirthed then break end
 									if myDef >= bEntry.MinDef then
 										if CheckAndFightBoss(bEntry) then
 											foughtAny = true
-											break -- Si ferma al Boss più forte della mappa senza MAI scendere a quelli sotto!
+											break
 										end
 									end
 								end
