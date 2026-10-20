@@ -123,9 +123,9 @@ end
 -- ==============================================================================
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
-local NO_FORM_MAX_DEF = 10e12 -- Fino a 10T può combattere anche senza forma!
+local NO_FORM_MAX_DEF = 3000 -- Fino a 10T può combattere anche senza forma!
 
-getgenv().AutoFarmActive = false
+getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = false
 getgenv().TargetRebAmount = 1
 getgenv().KaiokenWaitTime = 10
