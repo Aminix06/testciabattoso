@@ -1541,13 +1541,13 @@ task.spawn(function()
 			end)
 		end
 
-		if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+		if #Players:GetPlayers() > 2 then FugaSullaTerra() end
 		table.insert(connections, Players.PlayerAdded:Connect(function(player)
 			if player.UserId ~= localPlayer.UserId then FugaSullaTerra() end
 		end))
 		task.spawn(function()
 			while IsCurrentSession() and task.wait(1) do
-				if #Players:GetPlayers() > 1 then FugaSullaTerra() end
+				if #Players:GetPlayers() > 2 then FugaSullaTerra() end
 			end
 		end)
 	end
