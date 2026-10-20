@@ -1495,7 +1495,7 @@ task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
 	local function IsPublicServer()
-		if #Players:GetPlayers() > 2 then return false end
+		if #Players:GetPlayers() > 3 then return false end
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
@@ -1541,13 +1541,13 @@ task.spawn(function()
 			end)
 		end
 
-		if #Players:GetPlayers() > 2 then FugaSullaTerra() end
+		if #Players:GetPlayers() > 3 then FugaSullaTerra() end
 		table.insert(connections, Players.PlayerAdded:Connect(function(player)
 			if player.UserId ~= localPlayer.UserId then FugaSullaTerra() end
 		end))
 		task.spawn(function()
 			while IsCurrentSession() and task.wait(1) do
-				if #Players:GetPlayers() > 2 then FugaSullaTerra() end
+				if #Players:GetPlayers() > 3 then FugaSullaTerra() end
 			end
 		end)
 	end
