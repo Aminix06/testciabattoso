@@ -1495,7 +1495,7 @@ task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
 	local function IsPublicServer()
-		if #Players:GetPlayers() > 2 then return false end
+		if #Players:GetPlayers() > 1 then return false end
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
