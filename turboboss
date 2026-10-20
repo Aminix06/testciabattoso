@@ -107,7 +107,7 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 3000 -- Fino a 3000 può combattere anche senza forma!
-local MAX_PLAYERS_IN_SERVER = 1 -- <-- CAMBIA QUI IL NUMERO DI PERSONE ACCETTABILI NEL PRIVATO (es. 1 = solo tu, 2 = tu + 1 amico)
+local MAX_PLAYERS_IN_SERVER = 3 -- <-- CAMBIA QUI IL NUMERO DI PERSONE ACCETTABILI NEL PRIVATO (es. 1 = solo tu, 2 = tu + 1 amico)
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = false
