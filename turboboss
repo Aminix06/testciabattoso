@@ -320,7 +320,7 @@ local BossList = {
 	{Name = "Super Vegetable",                        Boss = "Super Vegetable",                        MinDef = 150e6},
 	{Name = "Chilly",                                 Boss = "Chilly",                                 MinDef = 70e6},
 	{Name = "Kaio Student",                           Boss = "Kaio Student",                           MinDef = 30e6},
-	{Name = "Piclow fused with Nail",                 Boss = "Piclow fused with Nail",                 MinDef = 15e6},
+	{Name = "Piclow (Fused with Nail)",               Boss = "Piclow (Fused with Nail)",               MinDef = 15e6},
 	{Name = "Frieza",                                 Boss = "Frieza",                                 MinDef = 9e6},
 	{Name = "Captain Ginyu",                          Boss = "Captain Ginyu",                          MinDef = 6e6},
 	{Name = "Nail",                                   Boss = "Nail",                                   MinDef = 4e6},
