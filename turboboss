@@ -264,7 +264,7 @@ local BossList = {
 	{Name = "Hit (PURE PROGRESS)",                    Boss = "Hit (PURE PROGRESS)",                    MinDef = 10e24},
 	{Name = "Full Power Grand Priest",                Boss = "Full Power Grand Priest",                MinDef = 700e21},
 	{Name = "Summer Bulma (Full Power)",              Boss = "Summer Bulma (Full Power)",              MinDef = 600e18},
-	{Name = "Ultra Super Hero Wukong",                Boss = "Ultra Super Hero Wukong",                MinDef = 250e18},
+	{Name = "Ultra Super Hero Wukong",                Boss = "Ultra Super Hero Wukong",                MinDef = 599e18},
 	{Name = "Surfs Up Grand Priest",                  Boss = "Surfs Up Grand Priest",                  MinDef = 8e18,   NoQuest = true},
 	{Name = "Ultra Super Villain Rose Wukong Black",  Boss = "Ultra Super Villain Rose Wukong Black",  MinDef = 800e15},
 	{Name = "Wukong (TUI)",                           Boss = "Wukong (TUI)",                           MinDef = 200e15},
