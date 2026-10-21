@@ -2138,8 +2138,28 @@ local function GetActiveQuestBossEntry(questName, myDef)
 	return nil
 end
 
+-- Cerca il boss in assoluto più forte presente in questa specifica mappa
+local function GetBestBossInMap(myDef)
+	local npcFolder = workspace:FindFirstChild("Others") and workspace.Others:FindFirstChild("NPCs")
+	for _, bEntry in ipairs(BossList) do
+		if myDef >= bEntry.MinDef then
+			local inMap = false
+			if FindLivingBoss(bEntry) or confirmedNoQuestBosses[bEntry.Name] or lastActiveNoQuestBoss == bEntry.Name then
+				inMap = true
+			elseif not bEntry.NoQuest and npcFolder and (npcFolder:FindFirstChild(bEntry.Name) or npcFolder:FindFirstChild(bEntry.Boss)) then
+				inMap = true
+			end
+			
+			if inMap then
+				return bEntry
+			end
+		end
+	end
+	return nil
+end
+
 -- ==============================================================================
--- 🔄 MAIN FARM LOOP (PRIORITÀ DIFESA REALE + MEMORIA BOSS NO-QUEST)
+-- 🔄 MAIN FARM LOOP (SCARTA VECCHIE QUEST PER BOSS PIÙ FORTI)
 -- ==============================================================================
 task.spawn(function()
 	while IsCurrentSession() do
@@ -2165,24 +2185,31 @@ task.spawn(function()
 							local currentQuestName = questVal and questVal.Value or ""
 
 							local activeQuestEntry = GetActiveQuestBossEntry(currentQuestName, myDef)
-							local strongerNoQuest = activeQuestEntry and GetStrongerNoQuestBoss(myDef, activeQuestEntry.MinDef) or nil
+							local bestMapBoss = GetBestBossInMap(myDef)
 
-							if strongerNoQuest then
-								CheckAndFightBoss(strongerNoQuest)
-							elseif activeQuestEntry then
-								CheckAndFightBoss(activeQuestEntry)
-							else
-								local foughtAny = false
-								for _, bEntry in ipairs(BossList) do
-									if not getgenv().AutoFarmActive or getgenv().ManualBoss ~= nil or not IsCurrentSession() or justRebirthed then break end
-									if myDef >= bEntry.MinDef then
-										if CheckAndFightBoss(bEntry) then
-											foughtAny = true
-											break
-										end
-									end
+							local targetBoss = nil
+
+							-- Se il boss migliore della mappa è PIÙ FORTE della vecchia quest, IGNORA la quest e vai al nuovo!
+							if activeQuestEntry and bestMapBoss then
+								if bestMapBoss.MinDef > activeQuestEntry.MinDef then
+									targetBoss = bestMapBoss
+								else
+									targetBoss = activeQuestEntry
 								end
-								if not foughtAny and getgenv().AutoFarmActive then
+							elseif activeQuestEntry then
+								targetBoss = activeQuestEntry
+							elseif bestMapBoss then
+								targetBoss = bestMapBoss
+							end
+
+							if targetBoss then
+								local fought = CheckAndFightBoss(targetBoss)
+								if not fought and getgenv().AutoFarmActive then
+									isCurrentlyAttacking = false
+									SetStatus("⏳ Attesa: " .. targetBoss.Name, 0)
+								end
+							else
+								if getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
 									SetStatus("🔍 Cerco Boss (Def: " .. FormatStat(myDef) .. ")...", 0)
 								end
