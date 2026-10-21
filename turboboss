@@ -1900,7 +1900,7 @@ local function DoFullAttack(bossModel, bossEntry)
 
 	if equippedSkills["Timeskip Breaker"] then
 		-- 1° PASSO: 3 tentativi rapidi di TIMESKIP BREAKER (così parte sempre per prima appena il server aggiorna la posizione!)
-		for _ = 1, 5 do
+		for _ = 1, 15 do
 			if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then return end
 			coroutine.wrap(function()
 				pcall(function() skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27") end)
