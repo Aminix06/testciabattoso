@@ -221,6 +221,7 @@ end)
 -- 🔥 TABELLA FORME ESATTA CON STATS E REBIRTH REALI (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
 -- ==============================================================================
 local FormProgression = {
+	{Name = "Omni SSJ",              MinDef = 700e21, MinReb = 150000000},
 	{Name = "Ultra Super Hero",      MinDef = 10e18,  MinReb = 100000000},
 	{Name = "Ultra Super Villain",   MinDef = 50e15,  MinReb = 80000000},
 	{Name = "Ego Instinct",          MinDef = 30e15,  MinReb = 70000000},
