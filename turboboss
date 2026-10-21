@@ -110,9 +110,9 @@ local NO_FORM_MAX_DEF = 3000
 local MAX_PLAYERS_IN_SERVER = 1 -- <-- CAMBIA QUI IL NUMERO DI PERSONE ACCETTABILI NEL PRIVATO
 
 getgenv().AutoFarmActive = true
-getgenv().AutoRebActive = false
-getgenv().TargetRebAmount = 1
-getgenv().KaiokenWaitTime = 10
+getgenv().AutoRebActive = true
+getgenv().TargetRebAmount = 20e6
+getgenv().KaiokenWaitTime = 1
 getgenv().TweenSpeed = 300
 getgenv().StatsUIScale = 1.0
 getgenv().HubUIScale = 1.0
