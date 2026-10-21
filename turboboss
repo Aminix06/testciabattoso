@@ -99,7 +99,7 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
-local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo Rose, Time e God!
+local BULMA_MIN_DEF = 600e30 -- Da Summer Bulma (Full Power) in su usa solo Rose, Time e God!
 local MAX_PLAYERS_IN_SERVER = 1
 
 getgenv().AutoFarmActive = true
