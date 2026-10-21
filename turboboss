@@ -160,21 +160,21 @@ local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
--- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (DA BULMA IN SU SOLO ROSE, TIME E GOD)
+-- 🗡️ REQUISITI SKILL (ORDINATE CON TIMESKIP BREAKER PER PRIMA!)
 local SkillRequirements = {
-	{Name = "Wolf Fang Fist",    MinStat = 30000,       MinReb = 0},
-	{Name = "Meteor Crash",      MinStat = 500000,      MinReb = 0},
-	{Name = "Mach Kick",         MinStat = 2100000,     MinReb = 2},
-	{Name = "Super Dragon Fist", MinStat = 650000000,   MinReb = 100},
-	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
+	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
 	{Name = "Rose Massacre",     MinStat = 1e18,        MinReb = 50000000},
-	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000}
+	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
+	{Name = "Super Dragon Fist", MinStat = 650000000,   MinReb = 100},
+	{Name = "Mach Kick",         MinStat = 2100000,     MinReb = 2},
+	{Name = "Meteor Crash",      MinStat = 500000,      MinReb = 0},
+	{Name = "Wolf Fang Fist",    MinStat = 30000,       MinReb = 0}
 }
 
 local HighTierSkills = {
-	["God Slicer"] = true,
+	["Timeskip Breaker"] = true,
 	["Rose Massacre"] = true,
-	["Timeskip Breaker"] = true
+	["God Slicer"] = true
 }
 
 local equippedSkills = {}
@@ -364,10 +364,10 @@ local function EnsureServerLockOn(bossModel)
 	end
 end
 
--- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON
+-- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON RAVVICINATO (-3 STUD PER TIMESKIP!)
 local activeTween = nil
 local currentLockedBoss = nil
-local behindDistance = -5
+local behindDistance = -3
 local connections = {}
 local cachedCharParts = {}
 
@@ -486,14 +486,14 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 
 	if not hrp or not hum or hum.Health <= 0 or not eHrp or not eHum or eHum.Health <= 0 then return end
 
-	if (hrp.Position - eHrp.Position).Magnitude <= 25 then
+	if (hrp.Position - eHrp.Position).Magnitude <= 28 then
 		StopActiveTween()
 		hum.AutoRotate = false
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 
 		local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * behindDistance)
-		hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(behindPos, eHrp.Position), 0.88)
+		hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(behindPos, eHrp.Position), 0.92)
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
 end))
@@ -1827,7 +1827,7 @@ local function EnsureFormAndKaioken()
 	return ((not targetForm or actual.Value == targetForm) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO, LOCK-ON ("locky"), FILTRO SKILL BULMA+ E PRIORITÀ DIFESA
+-- ⚔️ SISTEMA DI COMBATTIMENTO, PRIORITÀ TIMESKIP BREAKER E DISTANZA RAVVICINATA
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -1896,14 +1896,21 @@ end
 local function DoFullAttack(bossModel, bossEntry)
 	pcall(function()
 		EnsureServerLockOn(bossModel)
-		punchRemote:FireServer("Blacknwhite27", 1, false)
-		punchRemote:FireServer("Blacknwhite27", 1)
-
-		-- Da Summer Bulma (Full Power) in su usa SOLO Rose Massacre, Timeskip Breaker e God Slicer!
 		local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
+		-- 1. PRIORITÀ ASSOLUTA: Lancia TIMESKIP BREAKER per prima (prima dei pugni e delle altre skill!)
+		if equippedSkills["Timeskip Breaker"] then
+			coroutine.wrap(function()
+				pcall(function()
+					skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27")
+				end)
+			end)()
+			task.wait(0.03)
+		end
+
+		-- 2. Lancia le altre skill (Rose Massacre, God Slicer, ecc.)
 		for _, skill in ipairs(SkillRequirements) do
-			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+			if skill.Name ~= "Timeskip Breaker" and equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
 				coroutine.wrap(function()
 					pcall(function()
 						skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
@@ -1911,6 +1918,10 @@ local function DoFullAttack(bossModel, bossEntry)
 				end)()
 			end
 		end
+
+		-- 3. Pugni base
+		punchRemote:FireServer("Blacknwhite27", 1, false)
+		punchRemote:FireServer("Blacknwhite27", 1)
 	end)
 end
 
@@ -1947,12 +1958,16 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 
-		if distToBoss > 25 then
+		if distToBoss > 28 then
 			isCurrentlyAttacking = false
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
+		elseif distToBoss > 9 then
+			-- Aspetta quella frazione di secondo finché il Lerp ti incolla a <9 stud dalla schiena prima di usare Timeskip!
+			isCurrentlyAttacking = false
+			SetStatus("🎯 Aggancio ravvicinato -> " .. bossEntry.Name, hpRatio)
 		else
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
