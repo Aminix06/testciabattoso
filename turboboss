@@ -263,7 +263,7 @@ local FormProgression = {
 local BossList = {
 	{Name = "Lady Aeos",                              Boss = "Lady Aeos",                              MinDef = 700e24},
 	{Name = "Lucif",                                  Boss = "Lucif",                                  MinDef = 30e24},
-	{Name = "Grand Minister (Full Power)",            Boss = "Grand Minister (Full Power)",            MinDef = 1e24},
+	{Name = "Grand Minister (Full Power)",            Boss = "Grand Minister (Full Power)",            MinDef = 700e21},
 	{Name = "Summer Bulma (Full Power)",              Boss = "Summer Bulma (Full Power)",              MinDef = 600e18},
 	{Name = "Ultra Super Hero Wukong",                Boss = "Ultra Super Hero Wukong",                MinDef = 599e18},
 	{Name = "Surfs Up Grand Priest",                  Boss = "Surfs Up Grand Priest",                  MinDef = 8e18,   NoQuest = true},
