@@ -99,6 +99,7 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
+local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo Rose, Time e God!
 local MAX_PLAYERS_IN_SERVER = 1
 
 getgenv().AutoFarmActive = true
@@ -159,7 +160,7 @@ local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
--- 🗡️ REQUISITI ESATTI DI STRENGTH, SPEED E REBIRTH PER EQUIPAGGIARE E USARE LE SKILL
+-- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (DA BULMA IN SU SOLO ROSE, TIME E GOD)
 local SkillRequirements = {
 	{Name = "Wolf Fang Fist",    MinStat = 30000,       MinReb = 0},
 	{Name = "Meteor Crash",      MinStat = 500000,      MinReb = 0},
@@ -168,6 +169,12 @@ local SkillRequirements = {
 	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
 	{Name = "Rose Massacre",     MinStat = 1e18,        MinReb = 50000000},
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000}
+}
+
+local HighTierSkills = {
+	["God Slicer"] = true,
+	["Rose Massacre"] = true,
+	["Timeskip Breaker"] = true
 }
 
 local equippedSkills = {}
@@ -180,11 +187,15 @@ local function CheckAndEquipSkills(forceReEquip)
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
+	local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
 	local myReb = tonumber(playerData:FindFirstChild("Rebirth") and playerData.Rebirth.Value) or 0
+	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
 
 	for _, skill in ipairs(SkillRequirements) do
 		if isTransforming then break end
-		if myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
+		if onlyHighTier and not HighTierSkills[skill.Name] then
+			equippedSkills[skill.Name] = false
+		elseif myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
 			if not equippedSkills[skill.Name] then
 				pcall(function()
 					equipRemote:InvokeServer(skill.Name)
@@ -1816,7 +1827,7 @@ local function EnsureFormAndKaioken()
 	return ((not targetForm or actual.Value == targetForm) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO, LOCK-ON ("locky"), MEMORIA BOSS NO-QUEST E PRIORITÀ DIFESA
+-- ⚔️ SISTEMA DI COMBATTIMENTO, LOCK-ON ("locky"), FILTRO SKILL BULMA+ E PRIORITÀ DIFESA
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -1882,14 +1893,17 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
-local function DoFullAttack(bossModel)
+local function DoFullAttack(bossModel, bossEntry)
 	pcall(function()
 		EnsureServerLockOn(bossModel)
 		punchRemote:FireServer("Blacknwhite27", 1, false)
 		punchRemote:FireServer("Blacknwhite27", 1)
 
+		-- Da Summer Bulma (Full Power) in su usa SOLO Rose Massacre, Timeskip Breaker e God Slicer!
+		local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
+
 		for _, skill in ipairs(SkillRequirements) do
-			if equippedSkills[skill.Name] then
+			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
 				coroutine.wrap(function()
 					pcall(function()
 						skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
@@ -1950,7 +1964,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 				isCurrentlyAttacking = true
 				local hpPct = math.floor(hpRatio * 100)
 				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
-				DoFullAttack(currentBoss)
+				DoFullAttack(currentBoss, bossEntry)
 			end
 		end
 
