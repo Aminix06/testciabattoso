@@ -220,9 +220,9 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 TABELLA FORME ESATTA (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
+-- 🔥 TABELLA FORME ESATTA (OMNI SSJ SKIPPATA IN AUTOMATICO PER EVITARE IL KICK!)
 local FormProgression = {
-	{Name = "Omni SSJ",              MinDef = 700e21, MinReb = 150000000},
+	{Name = "Omni SSJ",              MinDef = 700e21, MinReb = 150000000, OnlyIfAlreadySelected = true},
 	{Name = "Ultra Super Hero",      MinDef = 10e18,  MinReb = 100000000},
 	{Name = "Ultra Super Villain",   MinDef = 50e15,  MinReb = 80000000},
 	{Name = "Ego Instinct",          MinDef = 30e15,  MinReb = 70000000},
@@ -1649,11 +1649,22 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN
+-- 🔥 CONTROLLO FORMA RAPIDO (SKIPPA OMNI SSJ PER EVITARE KICK SE NON È GIÀ SELEZIONATA)
 local function GetBestAvailableCandidate(defVal, rebVal)
+	local status = GetLiveStatus()
+	local selectedVal = status and status:FindFirstChild("SelectedTransformation") and status.SelectedTransformation.Value or ""
+	local actualVal = status and status:FindFirstChild("Transformation") and status.Transformation.Value or ""
+
 	for _, f in ipairs(FormProgression) do
 		if defVal >= f.MinDef and rebVal >= (f.MinReb or 0) and not rejectedForms[f.Name] then
-			return f.Name
+			if f.OnlyIfAlreadySelected then
+				-- Usa Omni SSJ solo se l'hai già selezionata tu nel menu del gioco (non invia mai equipskill!)
+				if selectedVal == f.Name or actualVal == f.Name then
+					return f.Name
+				end
+			else
+				return f.Name
+			end
 		end
 	end
 	return nil
@@ -1756,6 +1767,8 @@ local function EnsureFormAndKaioken()
 				if actual.Value == targetForm then
 					lastTransformClock = os.clock()
 					break
+				else
+					rejectedForms[targetForm] = true
 				end
 			else
 				rejectedForms[targetForm] = true
@@ -1899,7 +1912,6 @@ local function DoFullAttack(bossModel, bossEntry)
 		punchRemote:FireServer("Blacknwhite27", 1, false)
 		punchRemote:FireServer("Blacknwhite27", 1)
 
-		-- Da Summer Bulma (Full Power) in su usa SOLO Rose Massacre, Timeskip Breaker e God Slicer!
 		local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 		for _, skill in ipairs(SkillRequirements) do
