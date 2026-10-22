@@ -222,6 +222,7 @@ end)
 
 -- 🔥 TABELLA FORME ESATTA (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
 local FormProgression = {
+	{Name = "Corrupted Universal",   MinDef = 1.5e24, MinReb = 0},
 	{Name = "Omni SSJ",              MinDef = 700e21, MinReb = 150000000},
 	{Name = "Ultra Super Hero",      MinDef = 10e18,  MinReb = 100000000},
 	{Name = "Ultra Super Villain",   MinDef = 50e15,  MinReb = 80000000},
