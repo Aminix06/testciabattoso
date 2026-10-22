@@ -225,7 +225,7 @@ end)
 -- 🔥 TABELLA FORME ESATTA (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
 local FormProgression = {
 	{Name = "Corrupted Universal",   MinDef = 1.5e24, MinReb = 0},
-	{Name = "Universal Bluei",        MinDef = 1e24,   MinReb = 200000000},
+	{Name = "Universal Blue",        MinDef = 1e24,   MinReb = 200000000},
 	{Name = "Omni SSJ",              MinDef = 700e21, MinReb = 150000000},
 	{Name = "Ultra Super Hero",      MinDef = 10e18,  MinReb = 100000000},
 	{Name = "Ultra Super Villain",   MinDef = 50e15,  MinReb = 80000000},
@@ -1654,7 +1654,18 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (ORIGINALE)
+-- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (CON FIX PER "Universal Bluei")
+local FormAliases = {
+	["Universal Blue"] = "Universal Bluei"
+}
+
+local function MatchesForm(currentVal, targetForm)
+	if not currentVal or not targetForm then return false end
+	if currentVal == targetForm then return true end
+	if FormAliases[targetForm] and currentVal == FormAliases[targetForm] then return true end
+	return false
+end
+
 local function GetBestAvailableCandidate(defVal, rebVal)
 	for _, f in ipairs(FormProgression) do
 		if defVal >= f.MinDef and rebVal >= (f.MinReb or 0) and not rejectedForms[f.Name] then
@@ -1679,7 +1690,7 @@ local function NeedsFormOrKaiokenRightNow()
 	end
 
 	local bestCandidate = GetBestAvailableCandidate(defVal, rebVal)
-	if bestCandidate and actual.Value ~= bestCandidate then
+	if bestCandidate and not MatchesForm(actual.Value, bestCandidate) then
 		return true
 	end
 	if not IsKaiokenCurrentlyActive() then
@@ -1709,7 +1720,7 @@ local function EnsureFormAndKaioken()
 
 	local targetForm = GetBestAvailableCandidate(defVal, rebVal)
 
-	if targetForm and actual.Value ~= targetForm then
+	if targetForm and not MatchesForm(actual.Value, targetForm) then
 		isCurrentlyAttacking = false
 		isTransforming = true
 		currentLockedBoss = nil
@@ -1726,22 +1737,22 @@ local function EnsureFormAndKaioken()
 			targetForm = GetBestAvailableCandidate(defVal, rebVal)
 
 			if not targetForm then break end
-			if actual.Value == targetForm then
+			if MatchesForm(actual.Value, targetForm) then
 				lastTransformClock = os.clock()
 				break
 			end
 
 			SetStatus("⚡ Equip Forma: " .. targetForm .. "...", 0.3)
 
-			if selected.Value ~= targetForm then
+			if not MatchesForm(selected.Value, targetForm) then
 				for _ = 1, 2 do
 					pcall(function() equipRemote:InvokeServer(targetForm) end)
-					if selected.Value == targetForm then break end
+					if MatchesForm(selected.Value, targetForm) then break end
 					task.wait(0.12)
 				end
 			end
 
-			if selected.Value == targetForm then
+			if MatchesForm(selected.Value, targetForm) then
 				local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 				local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
 				if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
@@ -1753,12 +1764,12 @@ local function EnsureFormAndKaioken()
 				pcall(function() transformRemote:InvokeServer() end)
 
 				local checkWait = 0
-				while actual.Value ~= targetForm and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
+				while not MatchesForm(actual.Value, targetForm) and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
 					task.wait(0.12)
 					checkWait += 1
 				end
 
-				if actual.Value == targetForm then
+				if MatchesForm(actual.Value, targetForm) then
 					lastTransformClock = os.clock()
 					break
 				end
@@ -1768,7 +1779,7 @@ local function EnsureFormAndKaioken()
 		end
 
 		isTransforming = false
-		if targetForm and actual.Value ~= targetForm then
+		if targetForm and not MatchesForm(actual.Value, targetForm) then
 			return false
 		end
 	end
@@ -1790,7 +1801,7 @@ local function EnsureFormAndKaioken()
 					isTransforming = false
 					return false
 				end
-				if targetForm and actual.Value ~= targetForm then
+				if targetForm and not MatchesForm(actual.Value, targetForm) then
 					isTransforming = false
 					return false
 				end
@@ -1809,7 +1820,7 @@ local function EnsureFormAndKaioken()
 				isTransforming = false
 				return false
 			end
-			if targetForm and actual.Value ~= targetForm then
+			if targetForm and not MatchesForm(actual.Value, targetForm) then
 				isTransforming = false
 				return false
 			end
@@ -1829,7 +1840,7 @@ local function EnsureFormAndKaioken()
 		CheckAndEquipSkills(true)
 	end
 
-	return ((not targetForm or actual.Value == targetForm) and IsKaiokenCurrentlyActive())
+	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
 
 -- ⚔️ SISTEMA DI COMBATTIMENTO: RAFFICA TIMESKIP (x3) -> ROSE -> PUNISHER + GOD SLICER
