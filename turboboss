@@ -222,12 +222,21 @@ end
 
 task.spawn(function() CheckAndEquipSkills(true) end)
 
+local activeChaCalls = 0
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
-			CheckAndEquipSkills(false)
+		if getgenv().AutoFarmActive and not isTransforming then
+			if activeChaCalls < 2 then
+				activeChaCalls += 1
+				task.spawn(function()
+					pcall(function()
+						chaRemote:InvokeServer("Blacknwhite27")
+					end)
+					activeChaCalls = math.max(0, activeChaCalls - 1)
+				end)
+			end
 		end
-		task.wait(1.5)
+		task.wait(0.03)
 	end
 end)
 
@@ -1915,33 +1924,57 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 end
 
 -- Combattimento stile 9:30PM ma con ogni colpo/skill separato
+local skillBusy = {}
+local currentSkillIndex = 1
+
+-- 👊 THREAD PUGNI INDIPENDENTE (Gira per conto suo ogni 0.05s senza mai bloccarsi con le skill)
+task.spawn(function()
+	local comboStep = false
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive and isCurrentlyAttacking and currentLockedBoss and not isTransforming and not justRebirthed then
+			EnsureServerLockOn(currentLockedBoss)
+			comboStep = not comboStep
+			pcall(function()
+				if comboStep then
+					punchRemote:FireServer("Blacknwhite27", 1, false)
+				else
+					punchRemote:FireServer("Blacknwhite27", 1)
+				end
+			end)
+		end
+		task.wait(0.05)
+	end
+end)
+
+-- 🗡️ SEQUENZIATORE SKILL SEPARATE CON FILTRO ANTI-CODA (skillBusy)
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
-	-- 1° Pugno separato
-	pcall(function()
-		punchRemote:FireServer("Blacknwhite27", 1, false)
-	end)
-	task.wait(0.03)
-
-	-- 2° Pugno separato
-	pcall(function()
-		punchRemote:FireServer("Blacknwhite27", 1)
-	end)
-
-	-- Skill lanciate separatamente (con equip + invoke staccate tra loro)
+	local activeList = {}
 	for _, skill in ipairs(SkillRequirements) do
-		if not getgenv().AutoFarmActive or justRebirthed then break end
 		if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
-			local skillName = skill.Name
-			coroutine.wrap(function()
+			table.insert(activeList, skill.Name)
+		end
+	end
+
+	if #activeList > 0 then
+		if currentSkillIndex > #activeList then
+			currentSkillIndex = 1
+		end
+		local skillName = activeList[currentSkillIndex]
+		currentSkillIndex += 1
+
+		if not skillBusy[skillName] then
+			skillBusy[skillName] = true
+			task.spawn(function()
 				pcall(function()
 					equipRemote:InvokeServer(skillName)
 					skillRemote:InvokeServer(skillName, "Blacknwhite27")
 				end)
-			end)()
-			task.wait(0.03)
+				task.wait(0.15)
+				skillBusy[skillName] = false
+			end)
 		end
 	end
 end
@@ -1996,14 +2029,13 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
 		else
-			-- Identico allo script 9:30PM: nessuna pausa di ricarica, attacca direttamente
 			isCurrentlyAttacking = true
 			local hpPct = math.floor(hpRatio * 100)
 			SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 			DoFullAttack(currentBoss, bossEntry)
 		end
 
-		task.wait(0.08)
+		task.wait(0.07)
 	end
 
 	isCurrentlyAttacking = false
