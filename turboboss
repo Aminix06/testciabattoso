@@ -168,7 +168,7 @@ local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
 -- ==============================================================================
--- 🗡️ REQUISITI SKILL + FILTRO ENDGAME
+-- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (DIVISO IN 2 FASCE: PRE-BULMA / POST-BULMA)
 -- ==============================================================================
 local SkillRequirements = {
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
@@ -221,6 +221,15 @@ local function CheckAndEquipSkills(forceReEquip)
 end
 
 task.spawn(function() CheckAndEquipSkills(true) end)
+
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
+			CheckAndEquipSkills(false)
+		end
+		task.wait(1.5)
+	end
+end)
 
 -- ==============================================================================
 -- 🔥 TABELLA FORME E LISTA BOSS
@@ -1639,7 +1648,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- ⚡ ANTIAFK & AUTO-CHARGE ("cha") UNIFICATO E PROTETTO DA OVERFLOW
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") SOLO QUANDO NON STA ATTACCANDO!
 -- ==============================================================================
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
@@ -1661,22 +1670,17 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	CheckAndEquipSkills(true)
 end))
 
--- Ricarica Ki continua in background (anche mentre attacca, senza accumulare coroutine bloccate)
-local activeChaCalls = 0
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isTransforming then
-			for _ = 1, 2 do
-				if activeChaCalls < 4 then
-					activeChaCalls += 1
-					task.spawn(function()
-						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-						activeChaCalls = math.max(0, activeChaCalls - 1)
-					end)
-				end
-			end
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
 		end
-		task.wait(0.03)
+		task.wait(0.04)
 	end
 end)
 
@@ -1868,7 +1872,7 @@ local function EnsureFormAndKaioken()
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO (INTATTO COME RICHIESTO)
+-- ⚔️ SISTEMA DI COMBATTIMENTO (RICARICA E FIGHT VELOCE DIVISO IN 2 PARTI)
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
@@ -1934,11 +1938,7 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
--- Combattimento stile 9:30PM ma con ogni colpo/skill separato (INVARIATO)
-local skillBusy = {}
-local currentSkillIndex = 1
-
--- 👊 THREAD PUGNI INDIPENDENTE (Gira per conto suo ogni 0.05s senza mai bloccarsi con le skill)
+-- PARTE 1 DEL FIGHT: 👊 THREAD PUGNI INDIPENDENTE
 task.spawn(function()
 	local comboStep = false
 	while IsCurrentSession() do
@@ -1957,37 +1957,25 @@ task.spawn(function()
 	end
 end)
 
--- 🗡️ SEQUENZIATORE SKILL SEPARATE CON FILTRO ANTI-CODA (skillBusy)
+-- PARTE 2 DEL FIGHT: 🗡️ ATTACCO COMPLETO VELOCE (DIVISO IN PRE-BULMA / POST-BULMA 600Qi+)
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
-	local activeList = {}
-	for _, skill in ipairs(SkillRequirements) do
-		if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
-			table.insert(activeList, skill.Name)
-		end
-	end
+	pcall(function()
+		punchRemote:FireServer("Blacknwhite27", 1, false)
+		punchRemote:FireServer("Blacknwhite27", 1)
 
-	if #activeList > 0 then
-		if currentSkillIndex > #activeList then
-			currentSkillIndex = 1
+		for _, skill in ipairs(SkillRequirements) do
+			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+				coroutine.wrap(function()
+					pcall(function()
+						skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
+					end)
+				end)()
+			end
 		end
-		local skillName = activeList[currentSkillIndex]
-		currentSkillIndex += 1
-
-		if not skillBusy[skillName] then
-			skillBusy[skillName] = true
-			task.spawn(function()
-				pcall(function()
-					equipRemote:InvokeServer(skillName)
-					skillRemote:InvokeServer(skillName, "Blacknwhite27")
-				end)
-				task.wait(0.15)
-				skillBusy[skillName] = false
-			end)
-		end
-	end
+	end)
 end
 
 local function TweenAndFight(bossEntry, hasQuestNpc)
@@ -2040,13 +2028,21 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
 		else
-			isCurrentlyAttacking = true
-			local hpPct = math.floor(hpRatio * 100)
-			SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
-			DoFullAttack(currentBoss, bossEntry)
+			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
+			if kiObj and (tonumber(kiObj.Value) or 100) < 10 then
+				isCurrentlyAttacking = false
+				SetStatus("⚡ Ricarica rapida Ki...", hpRatio)
+				task.wait(0.35)
+			else
+				isCurrentlyAttacking = true
+				local hpPct = math.floor(hpRatio * 100)
+				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+				DoFullAttack(currentBoss, bossEntry)
+			end
 		end
 
-		task.wait(0.07)
+		task.wait(0.1)
 	end
 
 	isCurrentlyAttacking = false
