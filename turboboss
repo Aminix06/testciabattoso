@@ -1951,7 +1951,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.10)
 		end
 	else
-		-- Rotazione rapida quando non hai ancora i 10Qi per Timeskip Breaker
+		-- Rotazione rapida standard quando non hai ancora i 10Qi per Timeskip Breaker
 		for _, skill in ipairs(SkillRequirements) do
 			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
 				coroutine.wrap(function()
@@ -2043,19 +2043,6 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 		task.wait(0.05)
 	end
-
-	isCurrentlyAttacking = false
-	currentLockedBoss = nil
-	lastServerLockedBoss = nil
-	StopActiveTween()
-	pcall(function()
-		camera.CameraType = Enum.CameraType.Custom
-		if localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid") then
-			localPlayer.Character:FindFirstChildOfClass("Humanoid").AutoRotate = true
-			camera.CameraSubject = localPlayer.Character:FindFirstChildOfClass("Humanoid")
-		end
-	end)
-end
 
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
