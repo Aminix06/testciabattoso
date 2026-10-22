@@ -2025,7 +2025,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 				local chargeStart = os.clock()
 				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 2.5 do
 					local curKi = tonumber(kiObj.Value) or 100
-					if curKi >= 90 or not bossHum or bossHum.Health <= 0 then break end
+					if curKi >= 500 or not bossHum or bossHum.Health <= 0 then break end
 					SetStatus(string.format("⚡ Ricarica Ki (%d%%)...", math.floor(curKi)), hpRatio)
 					coroutine.wrap(function()
 						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
