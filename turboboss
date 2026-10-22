@@ -2,9 +2,10 @@
 -- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI E SCRIPT DI TEST
 -- ==============================================================================
 local CoreGui = game:GetService("CoreGui")
-for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScanner", "CiabRaceTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
+for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScanner", "CiabRaceTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub", "GMTestGUI"}) do
 	if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
 end
+if getgenv().StopGMTest then pcall(getgenv().StopGMTest) end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
 if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
 if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
@@ -157,14 +158,28 @@ local function SaveConfig()
 end
 
 local isCurrentlyAttacking = false
+local isRechargingKi = false
 local isTransforming = false
 local justRebirthed = false
 local lastTransformClock = 0
 local currentPreviewRebs = 0
+local maxKiSeen = 200
 local rejectedForms = {}
 local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
+
+local function GetCurrentKi()
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
+	if not kiObj then return 100, 100 end
+
+	local cur = tonumber(kiObj.Value) or 0
+	if cur > maxKiSeen then
+		maxKiSeen = cur
+	end
+	return cur, maxKiSeen
+end
 
 -- ==============================================================================
 -- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (OLTRE I 600QI USA TIME, ROSE, PUNISHER E GOD)
@@ -223,7 +238,7 @@ task.spawn(function() CheckAndEquipSkills(true) end)
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isRechargingKi then
 			CheckAndEquipSkills(false)
 		end
 		task.wait(1.5)
@@ -699,6 +714,7 @@ getgenv().CiabCleanup = function()
 	getgenv().AutoFarmActive = false
 	getgenv().AutoRebActive = false
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 	isTransforming = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
@@ -1135,6 +1151,7 @@ StartBtn.MouseButton1Click:Connect(function()
 		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
 		isCurrentlyAttacking = false
+		isRechargingKi = false
 		isTransforming = false
 		currentLockedBoss = nil
 		lastServerLockedBoss = nil
@@ -1448,6 +1465,7 @@ end
 ModeBtn.MouseButton1Click:Connect(function()
 	getgenv().ManualBoss = nil
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 	StopActiveTween()
@@ -1495,6 +1513,7 @@ for _, bData in ipairs(BossList) do
 			getgenv().ManualBoss = bData.Name
 		end
 		isCurrentlyAttacking = false
+		isRechargingKi = false
 		currentLockedBoss = nil
 		lastServerLockedBoss = nil
 		StopActiveTween()
@@ -1540,6 +1559,7 @@ task.spawn(function()
 			local targetReb = tonumber(getgenv().TargetRebAmount) or 1
 			if getgenv().AutoRebActive and previewNum >= targetReb and targetReb > 0 then
 				isCurrentlyAttacking = false
+				isRechargingKi = false
 				isTransforming = false
 				currentLockedBoss = nil
 				lastServerLockedBoss = nil
@@ -1552,6 +1572,7 @@ task.spawn(function()
 				end)
 
 				task.wait(1.0)
+				maxKiSeen = 200 -- Reset Ki massimo dopo il Rebirth
 				table.clear(equippedSkills)
 				table.clear(rejectedForms)
 				CheckAndEquipSkills(true)
@@ -1661,7 +1682,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- ⚡ ANTIAFK & AUTO-CHARGE ("cha") SOLO QUANDO NON ATTACCA E NON SI TRASFORMA!
+-- ⚡ ANTIAFK & AUTO-CHARGE PULITO (SENZA INTASARE LA CODA REMOTE)
 -- ==============================================================================
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
@@ -1672,9 +1693,11 @@ end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 	isTransforming = false
 	lastTransformClock = 0
 	lastServerLockedBoss = nil
+	maxKiSeen = 200
 	table.clear(rejectedForms)
 	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
@@ -1685,15 +1708,10 @@ end))
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isRechargingKi then
+			pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 		end
-		task.wait(0.04)
+		task.wait(0.1)
 	end
 end)
 
@@ -1767,6 +1785,7 @@ local function EnsureFormAndKaioken()
 
 	if targetForm and not MatchesForm(actual.Value, targetForm) then
 		isCurrentlyAttacking = false
+		isRechargingKi = false
 		isTransforming = true
 		currentLockedBoss = nil
 		StopActiveTween()
@@ -1798,11 +1817,10 @@ local function EnsureFormAndKaioken()
 			end
 
 			if MatchesForm(selected.Value, targetForm) then
-				local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-				local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-				if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
+				local curKi, maxKi = GetCurrentKi()
+				if curKi < math.max(50, maxKi * 0.15) then
 					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-					task.wait(0.08)
+					task.wait(0.1)
 				end
 
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
@@ -1831,6 +1849,7 @@ local function EnsureFormAndKaioken()
 
 	if not IsKaiokenCurrentlyActive() then
 		isCurrentlyAttacking = false
+		isRechargingKi = false
 		isTransforming = true
 		currentLockedBoss = nil
 		StopActiveTween()
@@ -1889,7 +1908,7 @@ local function EnsureFormAndKaioken()
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO DIRETTO (STILE 8:27PM + NUOVE SKILL + KI A 500)
+-- ⚔️ SISTEMA DI COMBATTIMENTO CON RICARICA KI AL 50% E SBLOCCO PULITO
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
@@ -1956,24 +1975,32 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
--- Combattimento diretto e istantaneo come nello script delle 8:27PM!
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
+	-- Pugni base puliti
 	pcall(function()
-		punchRemote:FireServer("Blacknwhite27", 1, false)
 		punchRemote:FireServer("Blacknwhite27", 1)
+	end)
 
-		for _, skill in ipairs(SkillRequirements) do
-			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
-				coroutine.wrap(function()
-					pcall(function()
-						skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
-					end)
-				end)()
-			end
+	-- Lancio skill senza bloccare il ciclo principale
+	for _, skill in ipairs(SkillRequirements) do
+		if isRechargingKi or not getgenv().AutoFarmActive then break end
+		if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+			task.spawn(function()
+				pcall(function()
+					skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
+				end)
+			end)
 		end
+	end
+
+	-- Micro-impulso di carica per sostenere il drain di Forma + Kaioken
+	task.spawn(function()
+		pcall(function()
+			chaRemote:InvokeServer("Blacknwhite27")
+		end)
 	end)
 end
 
@@ -2021,36 +2048,63 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 		if distToBoss > 25 then
 			isCurrentlyAttacking = false
+			isRechargingKi = false
 			lastServerLockedBoss = nil
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
 		else
-			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
-				-- Scende sotto 15 -> carica fino a 500 sfruttando anche l'auto-charge in background
+			local curKi, maxKi = GetCurrentKi()
+			local lowThreshold = math.max(40, maxKi * 0.15)     -- Sotto il 15% avvia la ricarica
+			local targetThreshold = math.max(150, maxKi * 0.50) -- Ricarica fino al 50%
+
+			if curKi < lowThreshold then
 				isCurrentlyAttacking = false
-				local chargeStart = os.clock()
-				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 8 do
-					local curKi = tonumber(kiObj.Value) or 100
-					if curKi >= 200 or not bossHum or bossHum.Health <= 0 then break end
-					SetStatus(string.format("⚡ Ricarica Ki (%d / 500)...", math.floor(curKi)), hpRatio)
-					task.wait(0.05)
+				isRechargingKi = true
+				local lastVal = curKi
+				local stagnantTicks = 0
+
+				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
+					if not bossHum or bossHum.Health <= 0 then break end
+					curKi, maxKi = GetCurrentKi()
+					targetThreshold = math.max(150, maxKi * 0.50)
+					local kiPct = math.floor((curKi / math.max(maxKi, 1)) * 100)
+					SetStatus(string.format("⚡ Ricarica Ki (%d%% / 50%%)...", kiPct), hpRatio)
+
+					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+
+					if curKi >= targetThreshold then break end
+					if math.abs(curKi - lastVal) < 1 and curKi > lowThreshold then
+						stagnantTicks += 1
+						if stagnantTicks >= 6 then
+							maxKiSeen = math.max(curKi, 100)
+							break
+						end
+					else
+						stagnantTicks = 0
+					end
+					lastVal = curKi
+					task.wait(0.08)
 				end
+
+				-- Pausa fondamentale per sbloccare lo stato di Charging sul server
+				task.wait(0.15)
+				isRechargingKi = false
 			else
 				isCurrentlyAttacking = true
 				local hpPct = math.floor(hpRatio * 100)
-				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+				local kiPct = math.floor((curKi / math.max(maxKi, 1)) * 100)
+				SetStatus(string.format("⚔️ %s [%d%%] • Ki %d%%", bossEntry.Name, hpPct, kiPct), hpRatio)
 				DoFullAttack(currentBoss, bossEntry)
 			end
 		end
 
-		task.wait(0.1)
+		task.wait(0.12)
 	end
 
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 	StopActiveTween()
@@ -2065,6 +2119,7 @@ end
 
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 
@@ -2114,6 +2169,7 @@ end
 local function CheckAndFightBoss(bossEntry)
 	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	isCurrentlyAttacking = false
+	isRechargingKi = false
 
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return false end
@@ -2168,6 +2224,7 @@ local function CheckAndFightBoss(bossEntry)
 			end
 
 			isCurrentlyAttacking = false
+			isRechargingKi = false
 			currentLockedBoss = nil
 			lastServerLockedBoss = nil
 			SetStatus("✈️ Quest: " .. bossEntry.Name, 0)
@@ -2240,6 +2297,7 @@ task.spawn(function()
 									local fought = CheckAndFightBoss(bEntry)
 									if not fought and getgenv().AutoFarmActive then
 										isCurrentlyAttacking = false
+										isRechargingKi = false
 										SetStatus("⏳ Attesa: " .. bEntry.Name, 0)
 									end
 									break
@@ -2272,11 +2330,13 @@ task.spawn(function()
 								local fought = CheckAndFightBoss(targetBoss)
 								if not fought and getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
+									isRechargingKi = false
 									SetStatus("⏳ Attesa: " .. targetBoss.Name, 0)
 								end
 							else
 								if getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
+									isRechargingKi = false
 									SetStatus("🔍 Cerco Boss (Def: " .. FormatStat(myDef) .. ")...", 0)
 								end
 							end
