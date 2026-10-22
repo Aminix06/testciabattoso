@@ -225,7 +225,7 @@ task.spawn(function() CheckAndEquipSkills(true) end)
 local activeChaCalls = 0
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isTransforming then
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
 			if activeChaCalls < 2 then
 				activeChaCalls += 1
 				task.spawn(function()
