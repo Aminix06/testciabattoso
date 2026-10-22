@@ -36,25 +36,6 @@ local multirebRemote = Events:WaitForChild("Multireb")
 local qActionRemote = Events:WaitForChild("Qaction")
 local lockyRemote = Events:WaitForChild("locky")
 
--- 🛡️ SAFE INVOKE CON TIMEOUT (Evita freeze infiniti se il server non risponde)
-local function SafeInvoke(remote, timeout, ...)
-	local args = {...}
-	local done = false
-	local ok, result = false, nil
-	task.spawn(function()
-		ok, result = pcall(function()
-			return remote:InvokeServer(table.unpack(args))
-		end)
-		done = true
-	end)
-	local start = os.clock()
-	local maxWait = timeout or 2.5
-	while not done and (os.clock() - start) < maxWait and IsCurrentSession() do
-		task.wait(0.03)
-	end
-	return (done and ok), result
-end
-
 -- 🔢 GESTIONE REBIRTH E FORMATTAZIONE STATISTICHE
 local SuffixMultipliers = {
 	k = 1e3, m = 1e6, b = 1e9, t = 1e12,
@@ -118,10 +99,8 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
-local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo Rose, Time e God!
+local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo le HighTierSkills!
 local MAX_PLAYERS_IN_SERVER = 1
-local FORM_REJECT_COOLDOWN = 45 -- Secondi prima di riprovare una forma rifiutata
-local KAIOKEN_FAIL_COOLDOWN = 30 -- Secondi di pausa se il Kaioken non è disponibile
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
@@ -176,16 +155,16 @@ local isTransforming = false
 local justRebirthed = false
 local lastTransformClock = 0
 local currentPreviewRebs = 0
-local rejectedForms = {} -- [formName] = os.clock()
-local kaiokenCooldownUntil = 0
+local rejectedForms = {}
 local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
--- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (DA BULMA IN SU SOLO TIME, ROSE E GOD)
+-- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (OLTRE I 600QI USA TIME, ROSE, PUNISHER E GOD)
 local SkillRequirements = {
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
 	{Name = "Rose Massacre",     MinStat = 1e18,        MinReb = 50000000},
+	{Name = "PunischerDriver",   MinStat = 13e12,       MinReb = 10000},
 	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
 	{Name = "Super Dragon Fist", MinStat = 650000000,   MinReb = 100},
 	{Name = "Mach Kick",         MinStat = 2100000,     MinReb = 2},
@@ -196,22 +175,17 @@ local SkillRequirements = {
 local HighTierSkills = {
 	["Timeskip Breaker"] = true,
 	["Rose Massacre"] = true,
+	["PunischerDriver"] = true,
 	["God Slicer"] = true
 }
 
 local equippedSkills = {}
-local isEquippingSkills = false
 
 local function CheckAndEquipSkills(forceReEquip)
-	if isTransforming or isEquippingSkills then return end
-	isEquippingSkills = true
-
+	if isTransforming then return end
 	if forceReEquip then table.clear(equippedSkills) end
 	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-	if not playerData then
-		isEquippingSkills = false
-		return
-	end
+	if not playerData then return end
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
@@ -220,23 +194,21 @@ local function CheckAndEquipSkills(forceReEquip)
 	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
 
 	for _, skill in ipairs(SkillRequirements) do
-		if isTransforming or not IsCurrentSession() then break end
+		if isTransforming then break end
 		if onlyHighTier and not HighTierSkills[skill.Name] then
 			equippedSkills[skill.Name] = false
 		elseif myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
 			if not equippedSkills[skill.Name] then
-				local ok = SafeInvoke(equipRemote, 1.5, skill.Name)
-				if ok then
+				pcall(function()
+					equipRemote:InvokeServer(skill.Name)
 					equippedSkills[skill.Name] = true
-				end
+				end)
 				task.wait(0.08)
 			end
 		else
 			equippedSkills[skill.Name] = false
 		end
 	end
-
-	isEquippingSkills = false
 end
 
 task.spawn(function() CheckAndEquipSkills(true) end)
@@ -524,7 +496,7 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 		hrp.AssemblyAngularVelocity = Vector3.zero
 
 		local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * behindDistance)
-		hrp.CFrame = CFrame.new(behindPos, eHrp.Position)
+		hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(behindPos, eHrp.Position), 0.95)
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
 end))
@@ -1134,7 +1106,6 @@ StartBtn.MouseButton1Click:Connect(function()
 		TweenService:Create(StartBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(0, 180, 105)}):Play()
 		StartBtn.Text = "▶️ FARM ON"
 		table.clear(rejectedForms)
-		kaiokenCooldownUntil = 0
 		lastServerLockedBoss = nil
 		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
@@ -1519,10 +1490,10 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 	end
 end))
 
--- 👑 LOOP AUTO-REBIRTH (CON SAFE INVOKE)
+-- 👑 LOOP AUTO-REBIRTH
 task.spawn(function()
 	while IsCurrentSession() do
-		local ok, res = SafeInvoke(previewRemote, 2.0)
+		local ok, res = pcall(function() return previewRemote:InvokeServer() end)
 		if ok then
 			local previewNum = ParseRebirthInt(res)
 			currentPreviewRebs = previewNum
@@ -1540,12 +1511,11 @@ task.spawn(function()
 				StopActiveTween()
 
 				SetStatus("👑 MULTIREB (+" .. FormatReb(previewNum) .. " Reb)!", 1)
-				SafeInvoke(multirebRemote, 3.0)
+				pcall(function() multirebRemote:InvokeServer() end)
 
 				task.wait(1.0)
 				table.clear(equippedSkills)
 				table.clear(rejectedForms)
-				kaiokenCooldownUntil = 0
 				CheckAndEquipSkills(true)
 				justRebirthed = false
 			end
@@ -1608,7 +1578,7 @@ task.spawn(function()
 					localPlayer.Character.HumanoidRootPart.Anchored = true
 				end
 			end)
-			SafeInvoke(TPEvent, 3.0, "Earth")
+			pcall(function() TPEvent:InvokeServer("Earth") end)
 			task.delay(5, function()
 				localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito. Disconnessione di emergenza.")
 			end)
@@ -1634,16 +1604,18 @@ task.spawn(function()
 
 	task.wait(1)
 	local StartEvent = Events:WaitForChild("Start")
-	SafeInvoke(StartEvent, 2.0)
-	task.wait()
-	SafeInvoke(StartEvent, 2.0)
+	pcall(function()
+		StartEvent:InvokeServer()
+		task.wait()
+		StartEvent:InvokeServer()
+	end)
 	local bruhButton = mainGui:FindFirstChild("bruh")
 	if bruhButton then
 		bruhButton.Disabled = true
 		bruhButton.Disabled = false
 	end
 	task.wait()
-	SafeInvoke(StartEvent, 2.0)
+	pcall(function() StartEvent:InvokeServer() end)
 end)
 
 -- ⚡ ANTIAFK & AUTO-CHARGE ("cha") SOLO QUANDO NON ATTACCA E NON SI TRASFORMA!
@@ -1660,7 +1632,6 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	lastTransformClock = 0
 	lastServerLockedBoss = nil
 	table.clear(rejectedForms)
-	kaiokenCooldownUntil = 0
 	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
 	task.wait(0.3)
@@ -1682,20 +1653,10 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (CON SCADENZA REJECT E FALLBACK)
-local function IsFormCurrentlyRejected(formName)
-	local rejectedAt = rejectedForms[formName]
-	if not rejectedAt then return false end
-	if (os.clock() - rejectedAt) >= FORM_REJECT_COOLDOWN then
-		rejectedForms[formName] = nil
-		return false
-	end
-	return true
-end
-
+-- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (ORIGINALE)
 local function GetBestAvailableCandidate(defVal, rebVal)
 	for _, f in ipairs(FormProgression) do
-		if defVal >= f.MinDef and rebVal >= (f.MinReb or 0) and not IsFormCurrentlyRejected(f.Name) then
+		if defVal >= f.MinDef and rebVal >= (f.MinReb or 0) and not rejectedForms[f.Name] then
 			return f.Name
 		end
 	end
@@ -1720,7 +1681,7 @@ local function NeedsFormOrKaiokenRightNow()
 	if bestCandidate and actual.Value ~= bestCandidate then
 		return true
 	end
-	if not IsKaiokenCurrentlyActive() and os.clock() >= kaiokenCooldownUntil then
+	if not IsKaiokenCurrentlyActive() then
 		return true
 	end
 	return false
@@ -1772,23 +1733,23 @@ local function EnsureFormAndKaioken()
 			SetStatus("⚡ Equip Forma: " .. targetForm .. "...", 0.3)
 
 			if selected.Value ~= targetForm then
-				for _ = 1, 4 do
-					SafeInvoke(equipRemote, 1.5, targetForm)
+				for _ = 1, 2 do
+					pcall(function() equipRemote:InvokeServer(targetForm) end)
 					if selected.Value == targetForm then break end
-					task.wait(0.15)
+					task.wait(0.12)
 				end
 			end
 
 			if selected.Value == targetForm then
 				local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 				local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-				if kiObj and (tonumber(kiObj.Value) or 100) < 25 then
-					SafeInvoke(chaRemote, 1.0, "Blacknwhite27")
+				if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
+					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 					task.wait(0.08)
 				end
 
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
-				SafeInvoke(transformRemote, 2.0)
+				pcall(function() transformRemote:InvokeServer() end)
 
 				local checkWait = 0
 				while actual.Value ~= targetForm and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
@@ -1799,11 +1760,9 @@ local function EnsureFormAndKaioken()
 				if actual.Value == targetForm then
 					lastTransformClock = os.clock()
 					break
-				else
-					rejectedForms[targetForm] = os.clock()
 				end
 			else
-				rejectedForms[targetForm] = os.clock()
+				rejectedForms[targetForm] = true
 			end
 		end
 
@@ -1813,7 +1772,7 @@ local function EnsureFormAndKaioken()
 		end
 	end
 
-	if not IsKaiokenCurrentlyActive() and os.clock() >= kaiokenCooldownUntil then
+	if not IsKaiokenCurrentlyActive() then
 		isCurrentlyAttacking = false
 		isTransforming = true
 		currentLockedBoss = nil
@@ -1855,7 +1814,7 @@ local function EnsureFormAndKaioken()
 			end
 
 			SetStatus("🔥 Attivazione Kaioken (schtah)...", 1)
-			SafeInvoke(kaiokenRemote, 1.5)
+			pcall(function() kaiokenRemote:InvokeServer() end)
 
 			local checkKK = 0
 			while not IsKaiokenCurrentlyActive() and checkKK < 5 do
@@ -1865,19 +1824,14 @@ local function EnsureFormAndKaioken()
 			attempts += 1
 		end
 
-		if not IsKaiokenCurrentlyActive() then
-			-- Se dopo 5 tentativi il Kaioken non si attiva, evita loop infiniti e riprova tra 30s
-			kaiokenCooldownUntil = os.clock() + KAIOKEN_FAIL_COOLDOWN
-		end
-
 		isTransforming = false
 		CheckAndEquipSkills(true)
 	end
 
-	return (not targetForm or actual.Value == targetForm)
+	return ((not targetForm or actual.Value == targetForm) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO: RAFFICA TIMESKIP (x3) -> ROSE -> GOD SLICER
+-- ⚔️ SISTEMA DI COMBATTIMENTO: RAFFICA TIMESKIP (x3) -> ROSE -> PUNISHER + GOD SLICER
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -1949,8 +1903,8 @@ local function DoFullAttack(bossModel, bossEntry)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
-		-- 1° PASSO: 8 tentativi rapidi di TIMESKIP BREAKER
-		for _ = 1, 8 do
+		-- 1° PASSO: 3 tentativi rapidi di TIMESKIP BREAKER
+		for _ = 1, 3 do
 			if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then return end
 			coroutine.wrap(function()
 				pcall(function() skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27") end)
@@ -1966,7 +1920,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.20)
 		end
 
-		-- 3° PASSO: Lancia GOD SLICER (+ altre skill solo sotto Bulma) + Pugni
+		-- 3° PASSO: Lancia PUNISHER + GOD SLICER (+ altre skill solo sotto Bulma) + Pugni
 		if getgenv().AutoFarmActive and not justRebirthed and bossHum and bossHum.Health > 0 then
 			for _, skill in ipairs(SkillRequirements) do
 				if skill.Name ~= "Timeskip Breaker" and skill.Name ~= "Rose Massacre" then
@@ -2004,7 +1958,6 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	local questVal = playerData and playerData:FindFirstChild("Quest")
 
-	-- Assicura che tutte le skill sbloccate siano equipaggiate prima di ingaggiare
 	CheckAndEquipSkills(false)
 
 	while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
@@ -2048,12 +2001,11 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
 			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
-				-- Isteresi ricarica Ki: ricarica fino a >= 90 (o max 2.5s) per evitare attacchi a singhiozzo
 				isCurrentlyAttacking = false
 				local chargeStart = os.clock()
 				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 2.5 do
 					local curKi = tonumber(kiObj.Value) or 100
-					if curKi >= 90 or not bossHum or bossHum.Health <= 0 then break end
+					if curKi >= 75 or not bossHum or bossHum.Health <= 0 then break end
 					SetStatus(string.format("⚡ Ricarica Ki (%d%%)...", math.floor(curKi)), hpRatio)
 					coroutine.wrap(function()
 						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
@@ -2159,8 +2111,7 @@ local function CheckAndFightBoss(bossEntry)
 	if not EnsureFormAndKaioken() then return true end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-		local questVal = playerData:WaitForChild("Quest", 5)
-		if not questVal then return false end
+		local questVal = playerData:WaitForChild("Quest")
 
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
@@ -2190,7 +2141,7 @@ local function CheckAndFightBoss(bossEntry)
 
 			if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
 				if (localPlayer.Character.HumanoidRootPart.Position - npcCF.Position).Magnitude <= 12 then
-					SafeInvoke(qActionRemote, 2.0, bossNpc)
+					pcall(function() qActionRemote:InvokeServer(bossNpc) end)
 				end
 			end
 
