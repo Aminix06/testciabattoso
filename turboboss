@@ -222,24 +222,6 @@ end
 
 task.spawn(function() CheckAndEquipSkills(true) end)
 
-local activeChaCalls = 0
-task.spawn(function()
-	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
-			if activeChaCalls < 2 then
-				activeChaCalls += 1
-				task.spawn(function()
-					pcall(function()
-						chaRemote:InvokeServer("Blacknwhite27")
-					end)
-					activeChaCalls = math.max(0, activeChaCalls - 1)
-				end)
-			end
-		end
-		task.wait(0.03)
-	end
-end)
-
 -- ==============================================================================
 -- 🔥 TABELLA FORME E LISTA BOSS
 -- ==============================================================================
@@ -358,6 +340,15 @@ local BossList = {
 	{Name = "X Fighter Trainer",                      Boss = "X Fighter",                              MinDef = 0}
 }
 
+-- Tabella Lookup O(1) per i Boss NoQuest
+local NoQuestBossLookup = {}
+for _, bEntry in ipairs(BossList) do
+	if bEntry.NoQuest then
+		NoQuestBossLookup[bEntry.Boss] = bEntry.Name
+		NoQuestBossLookup[bEntry.Name] = bEntry.Name
+	end
+end
+
 local function GetLiveStatus()
 	return localPlayer:FindFirstChild("Status")
 		or (localPlayer.Character and localPlayer.Character:FindFirstChild("Status"))
@@ -392,7 +383,15 @@ local activeTween = nil
 local currentLockedBoss = nil
 local behindDistance = -3.5
 local connections = {}
+local charConnections = {}
 local cachedCharParts = {}
+
+local function ClearCharConnections()
+	for _, conn in ipairs(charConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	table.clear(charConnections)
+end
 
 local function DisableChair(obj)
 	if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
@@ -411,21 +410,24 @@ table.insert(connections, workspace.DescendantAdded:Connect(DisableChair))
 
 local function SetupAntiSitOnCharacter(char)
 	if not char then return end
+	ClearCharConnections()
 	table.clear(cachedCharParts)
+
 	for _, part in ipairs(char:GetDescendants()) do
 		if part:IsA("BasePart") then table.insert(cachedCharParts, part) end
 	end
-	table.insert(connections, char.DescendantAdded:Connect(function(part)
+	table.insert(charConnections, char.DescendantAdded:Connect(function(part)
 		if part:IsA("BasePart") then table.insert(cachedCharParts, part) end
 	end))
+
 	task.spawn(function()
 		local hum = char:WaitForChild("Humanoid", 8)
-		if hum then
+		if hum and char.Parent then
 			pcall(function()
 				hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 				hum.Sit = false
 			end)
-			table.insert(connections, hum:GetPropertyChangedSignal("Sit"):Connect(function()
+			table.insert(charConnections, hum:GetPropertyChangedSignal("Sit"):Connect(function()
 				if hum.Sit then hum.Sit = false end
 			end))
 		end
@@ -667,7 +669,7 @@ local function SetupConcentricCornerResize(winFrame, initialScale, refSize, acce
 			local dy = input.Position.Y - startPos.Y
 			local combinedDelta = (dx + dy) * 0.5
 			local newScale = math.clamp(startScale + (combinedDelta / refSize), 0.65, 1.55)
-			TweenService:Create(uiScale, TweenInfo.new(0.05, Enum.EasingStyle.Linear), {Scale = newScale}):Play()
+			uiScale.Scale = newScale
 			if onScaleChanged then onScaleChanged(newScale) end
 		end
 	end))
@@ -703,6 +705,7 @@ getgenv().CiabCleanup = function()
 	lastActiveNoQuestBoss = nil
 	StopActiveTween()
 	UpdateFloatState()
+	ClearCharConnections()
 	for _, conn in ipairs(connections) do pcall(function() conn:Disconnect() end) end
 	table.clear(connections)
 	if ScreenGui and ScreenGui.Parent then ScreenGui:Destroy() end
@@ -1592,6 +1595,11 @@ task.spawn(function()
 			end)
 			pcall(function() TPEvent:InvokeServer("Earth") end)
 			task.delay(5, function()
+				pcall(function()
+					if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
+						localPlayer.Character.HumanoidRootPart.Anchored = false
+					end
+				end)
 				localPlayer:Kick("⚠️ Il teletrasporto interno ha fallito. Disconnessione di emergenza.")
 			end)
 		end
@@ -1631,7 +1639,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- ⚡ ANTIAFK & AUTO-CHARGE ("cha") ULTRA-VELOCIZZATO COME LO SCRIPT 9:30PM
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") UNIFICATO E PROTETTO DA OVERFLOW
 -- ==============================================================================
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
@@ -1653,16 +1661,20 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	CheckAndEquipSkills(true)
 end))
 
--- Ricarica Ki continua in background (anche mentre attacca, come nello script 9:30PM)
+-- Ricarica Ki continua in background (anche mentre attacca, senza accumulare coroutine bloccate)
+local activeChaCalls = 0
 task.spawn(function()
 	while IsCurrentSession() do
 		if getgenv().AutoFarmActive and not isTransforming then
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
+			for _ = 1, 2 do
+				if activeChaCalls < 4 then
+					activeChaCalls += 1
+					task.spawn(function()
+						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+						activeChaCalls = math.max(0, activeChaCalls - 1)
+					end)
+				end
+			end
 		end
 		task.wait(0.03)
 	end
@@ -1701,7 +1713,7 @@ local function NeedsFormOrKaiokenRightNow()
 	local actual = status:FindFirstChild("Transformation")
 	if not actual then return false end
 
-	if defVal <= NO_FORM_MAX_DEF and not (defVal >= 1e12 and rebVal >= 500000) then
+	if defVal <= NO_FORM_MAX_DEF then
 		return false
 	end
 
@@ -1730,7 +1742,7 @@ local function EnsureFormAndKaioken()
 	local actual = status:FindFirstChild("Transformation")
 	if not selected or not actual then return false end
 
-	if defVal <= NO_FORM_MAX_DEF and not (defVal >= 1e12 and rebVal >= 500000) then
+	if defVal <= NO_FORM_MAX_DEF then
 		return true
 	end
 
@@ -1856,14 +1868,15 @@ local function EnsureFormAndKaioken()
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO (STILE 9:30PM + COLPI SEPARATI SENZA STOP KI)
+-- ⚔️ SISTEMA DI COMBATTIMENTO (INTATTO COME RICHIESTO)
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
-	if not workspace:FindFirstChild("Living") then return nil end
+	local livingFolder = workspace:FindFirstChild("Living")
+	if not livingFolder then return nil end
 
-	for _, obj in pairs(workspace.Living:GetChildren()) do
+	for _, obj in ipairs(livingFolder:GetChildren()) do
 		if obj.Name == bossEntry.Boss or obj.Name == bossEntry.Name then
 			local bossHumanoid = obj:FindFirstChildOfClass("Humanoid")
 			local bossHRP = obj:FindFirstChild("HumanoidRootPart")
@@ -1878,17 +1891,15 @@ local function FindLivingBoss(bossEntry)
 	return nil
 end
 
+-- Scanner O(N) ultra-leggero tramite Lookup Table
 task.spawn(function()
 	while IsCurrentSession() do
-		if workspace:FindFirstChild("Living") then
-			for _, bEntry in ipairs(BossList) do
-				if bEntry.NoQuest and not confirmedNoQuestBosses[bEntry.Name] then
-					for _, obj in pairs(workspace.Living:GetChildren()) do
-						if obj.Name == bEntry.Boss or obj.Name == bEntry.Name then
-							confirmedNoQuestBosses[bEntry.Name] = true
-							break
-						end
-					end
+		local livingFolder = workspace:FindFirstChild("Living")
+		if livingFolder then
+			for _, obj in ipairs(livingFolder:GetChildren()) do
+				local matchedName = NoQuestBossLookup[obj.Name]
+				if matchedName then
+					confirmedNoQuestBosses[matchedName] = true
 				end
 			end
 		end
@@ -1923,7 +1934,7 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
--- Combattimento stile 9:30PM ma con ogni colpo/skill separato
+-- Combattimento stile 9:30PM ma con ogni colpo/skill separato (INVARIATO)
 local skillBusy = {}
 local currentSkillIndex = 1
 
@@ -2134,7 +2145,8 @@ local function CheckAndFightBoss(bossEntry)
 	if not EnsureFormAndKaioken() then return true end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-		local questVal = playerData:WaitForChild("Quest")
+		local questVal = playerData:WaitForChild("Quest", 5)
+		if not questVal then return false end
 
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
