@@ -1932,7 +1932,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.20)
 		end
 
-		-- 3° PASSO: Lancia PUNISHER + GOD SLICER (+ altre skill solo sotto Bulma) + Pugni
+		-- 3° PASSO: Lancia PUNISHER + GOD SLICER (+ altre skill solo sotto Bulma), poi Pugni
 		if getgenv().AutoFarmActive and not justRebirthed and bossHum and bossHum.Health > 0 then
 			for _, skill in ipairs(SkillRequirements) do
 				if skill.Name ~= "Timeskip Breaker" and skill.Name ~= "Rose Massacre" then
@@ -1943,32 +1943,35 @@ local function DoFullAttack(bossModel, bossEntry)
 					end
 				end
 			end
+			task.wait(0.05) -- Evita che il pugno istantaneo blocchi la partenza delle skill
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
 			end)
-			task.wait(0.15)
+			task.wait(0.10)
 		end
 	else
-		-- Rotazione rapida standard quando non hai ancora i 10Qi per Timeskip Breaker
+		-- Rotazione rapida quando non hai ancora i 10Qi per Timeskip Breaker
+		for _, skill in ipairs(SkillRequirements) do
+			if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+				coroutine.wrap(function()
+					pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
+				end)()
+			end
+		end
+		task.wait(0.05)
 		pcall(function()
 			punchRemote:FireServer("Blacknwhite27", 1, false)
 			punchRemote:FireServer("Blacknwhite27", 1)
-
-			for _, skill in ipairs(SkillRequirements) do
-				if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
-					coroutine.wrap(function()
-						pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
-					end)()
-				end
-			end
 		end)
+		task.wait(0.10)
 	end
 end
 
 local function TweenAndFight(bossEntry, hasQuestNpc)
 	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	local questVal = playerData and playerData:FindFirstChild("Quest")
+	local lastTweenTargetPos = nil
 
 	CheckAndEquipSkills(false)
 
@@ -1994,7 +1997,6 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		if not bossHRP or not bossHum or not hrp then break end
 
 		currentLockedBoss = currentBoss
-		EnsureServerLockOn(currentBoss)
 
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
@@ -2002,14 +2004,20 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 		if distToBoss > 30 then
 			isCurrentlyAttacking = false
+			lastServerLockedBoss = nil -- Resetta il lock finché sei lontano, così lo riaggancia appena arrivi!
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
-			pcall(function() MoveToTarget(targetCF, false) end)
+			if not activeTween or activeTween.PlaybackState ~= Enum.PlaybackState.Playing or not lastTweenTargetPos or (lastTweenTargetPos - targetCF.Position).Magnitude > 6 then
+				lastTweenTargetPos = targetCF.Position
+				pcall(function() MoveToTarget(targetCF, false) end)
+			end
 		elseif distToBoss > requiredCloseDist then
 			isCurrentlyAttacking = false
+			EnsureServerLockOn(currentBoss)
 			SetStatus("🎯 Mi incollo a " .. bossEntry.Name .. "...", hpRatio)
 		else
+			EnsureServerLockOn(currentBoss)
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
 			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
@@ -2024,7 +2032,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 					end)()
 					task.wait(0.08)
 				end
-				task.wait(0.12) -- Aspetta che il server esca dallo stato di ricarica prima di attaccare
+				task.wait(0.12)
 			else
 				isCurrentlyAttacking = true
 				local hpPct = math.floor(hpRatio * 100)
