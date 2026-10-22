@@ -1949,8 +1949,8 @@ local function DoFullAttack(bossModel, bossEntry)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
-		-- 1° PASSO: 3 tentativi rapidi di TIMESKIP BREAKER
-		for _ = 1, 3 do
+		-- 1° PASSO: 8 tentativi rapidi di TIMESKIP BREAKER
+		for _ = 1, 8 do
 			if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then return end
 			coroutine.wrap(function()
 				pcall(function() skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27") end)
