@@ -2023,14 +2023,14 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
 				isCurrentlyAttacking = false
 				local chargeStart = os.clock()
-				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 2.5 do
+				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 8 do
 					local curKi = tonumber(kiObj.Value) or 100
 					if curKi >= 500 or not bossHum or bossHum.Health <= 0 then break end
-					SetStatus(string.format("⚡ Ricarica Ki (%d%%)...", math.floor(curKi)), hpRatio)
+					SetStatus(string.format("⚡ Ricarica Ki (%d / 500)...", math.floor(curKi)), hpRatio)
 					coroutine.wrap(function()
 						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 					end)()
-					task.wait(0.08)
+					task.wait(0.04)
 				end
 				task.wait(0.12)
 			else
