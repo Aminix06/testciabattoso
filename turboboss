@@ -106,7 +106,7 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
-local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo le HighTierSkills!
+local BULMA_MIN_DEF = 600e18
 local MAX_PLAYERS_IN_SERVER = 1
 
 getgenv().AutoFarmActive = true
@@ -158,31 +158,17 @@ local function SaveConfig()
 end
 
 local isCurrentlyAttacking = false
-local isRechargingKi = false
 local isTransforming = false
 local justRebirthed = false
 local lastTransformClock = 0
 local currentPreviewRebs = 0
-local maxKiSeen = 200
 local rejectedForms = {}
 local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
-local function GetCurrentKi()
-	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-	local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-	if not kiObj then return 100, 100 end
-
-	local cur = tonumber(kiObj.Value) or 0
-	if cur > maxKiSeen then
-		maxKiSeen = cur
-	end
-	return cur, maxKiSeen
-end
-
 -- ==============================================================================
--- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (OLTRE I 600QI USA TIME, ROSE, PUNISHER E GOD)
+-- 🗡️ REQUISITI SKILL + FILTRO ENDGAME
 -- ==============================================================================
 local SkillRequirements = {
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
@@ -238,7 +224,7 @@ task.spawn(function() CheckAndEquipSkills(true) end)
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isRechargingKi then
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
 			CheckAndEquipSkills(false)
 		end
 		task.wait(1.5)
@@ -246,7 +232,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- 🔥 TABELLA FORME ESATTA (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
+-- 🔥 TABELLA FORME E LISTA BOSS
 -- ==============================================================================
 local FormProgression = {
 	{Name = "Corrupted Universal",   MinDef = 1.5e24, MinReb = 0},
@@ -287,9 +273,6 @@ local FormProgression = {
 	{Name = "FSSJ",                  MinDef = 10e3,   MinReb = 0}
 }
 
--- ==============================================================================
--- 🎯 LISTA BOSS (ORDINATI DAL PIÙ FORTE AL PIÙ DEBOLE)
--- ==============================================================================
 local BossList = {
 	{Name = "Lady Aeos",                              Boss = "Lady Aeos",                              MinDef = 700e24},
 	{Name = "Lucif",                                  Boss = "Lucif",                                  MinDef = 30e24},
@@ -382,7 +365,6 @@ local function EnsureServerLockOn(bossModel)
 	if not bossModel then return end
 	local status = GetLiveStatus()
 	local lockedObj = status and (status:FindFirstChild("LockedOn") or status:FindFirstChild("LockOn") or status:FindFirstChild("Target"))
-
 	if lockedObj then
 		if lockedObj.Value ~= bossModel then
 			pcall(function() lockyRemote:FireServer(bossModel) end)
@@ -395,7 +377,7 @@ local function EnsureServerLockOn(bossModel)
 end
 
 -- ==============================================================================
--- ✈️ SISTEMA TWEEN, ANTI-SEDIE TOTALE, FLOAT AUTO-RIPARANTE & LOCK-ON RAPIDO
+-- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON RAPIDO
 -- ==============================================================================
 local activeTween = nil
 local currentLockedBoss = nil
@@ -427,7 +409,6 @@ local function SetupAntiSitOnCharacter(char)
 	table.insert(connections, char.DescendantAdded:Connect(function(part)
 		if part:IsA("BasePart") then table.insert(cachedCharParts, part) end
 	end))
-
 	task.spawn(function()
 		local hum = char:WaitForChild("Humanoid", 8)
 		if hum then
@@ -488,15 +469,12 @@ end
 table.insert(connections, RunService.Stepped:Connect(function()
 	local char = localPlayer.Character
 	if not char then return end
-
 	local hum = char:FindFirstChildOfClass("Humanoid")
 	if hum then
 		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
 		if hum.Sit then hum.Sit = false end
 	end
-
 	if not getgenv().AutoFarmActive then return end
-
 	local root = char:FindFirstChild("HumanoidRootPart")
 	if root and not root:FindFirstChild("FloatVelocity") then UpdateFloatState() end
 	for i = 1, #cachedCharParts do
@@ -509,7 +487,6 @@ end))
 
 table.insert(connections, RunService.RenderStepped:Connect(function()
 	if not getgenv().AutoFarmActive or not currentLockedBoss then return end
-
 	local char = localPlayer.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -609,9 +586,6 @@ local function MakeDraggable(dragHandle, targetFrame)
 	end))
 end
 
--- ==============================================================================
--- 📐 MANIGLIA ANGOLARE CURVA CONCENTRICA
--- ==============================================================================
 local function SetupConcentricCornerResize(winFrame, initialScale, refSize, accentCol, onScaleChanged)
 	local uiScale = Instance.new("UIScale", winFrame)
 	uiScale.Scale = initialScale
@@ -714,7 +688,6 @@ getgenv().CiabCleanup = function()
 	getgenv().AutoFarmActive = false
 	getgenv().AutoRebActive = false
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 	isTransforming = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
@@ -739,9 +712,7 @@ local function AddAuroraGradient(parent, c1, c2, c3, c4)
 	return grad
 end
 
--- ------------------------------------------------------------------------------
--- 🍱 1. SINISTRA: "HOLO-BENTO STATS"
--- ------------------------------------------------------------------------------
+-- 1. SINISTRA: "HOLO-BENTO STATS"
 local StatsWin = Instance.new("Frame", ScreenGui)
 StatsWin.Name = "BentoStats"
 StatsWin.Size = UDim2.new(0, 238, 0, 218)
@@ -833,23 +804,15 @@ local lastStatsMinClick = 0
 StatsMinBtn.MouseButton1Click:Connect(function()
 	if os.clock() - lastStatsMinClick < 0.2 then return end
 	lastStatsMinClick = os.clock()
-
 	statsMinimized = not statsMinimized
 	StatsMinBtn.Text = statsMinimized and "+" or "—"
 	setStatsGripVis(not statsMinimized)
-
 	if statsMinimized then
 		StatsContent.Visible = false
-		TweenService:Create(StatsWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 238, 0, 38)
-		}):Play()
+		TweenService:Create(StatsWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 238, 0, 38)}):Play()
 	else
-		TweenService:Create(StatsWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 238, 0, 218)
-		}):Play()
-		task.delay(0.08, function()
-			if not statsMinimized then StatsContent.Visible = true end
-		end)
+		TweenService:Create(StatsWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 238, 0, 218)}):Play()
+		task.delay(0.08, function() if not statsMinimized then StatsContent.Visible = true end end)
 	end
 end)
 
@@ -967,9 +930,7 @@ task.spawn(function()
 	end
 end)
 
--- ------------------------------------------------------------------------------
--- 🔮 2. DESTRA: "CIAB HOLO-DECK"
--- ------------------------------------------------------------------------------
+-- 2. DESTRA: "CIAB HOLO-DECK"
 local MainWin = Instance.new("Frame", ScreenGui)
 MainWin.Name = "HoloDeckHub"
 MainWin.Size = UDim2.new(0, 275, 0, 268)
@@ -1076,23 +1037,15 @@ local lastHubMinClick = 0
 MinBtn.MouseButton1Click:Connect(function()
 	if os.clock() - lastHubMinClick < 0.2 then return end
 	lastHubMinClick = os.clock()
-
 	minimized = not minimized
 	MinBtn.Text = minimized and "+" or "—"
 	setHubGripVis(not minimized)
-
 	if minimized then
 		HubContent.Visible = false
-		TweenService:Create(MainWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 275, 0, 40)
-		}):Play()
+		TweenService:Create(MainWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 275, 0, 40)}):Play()
 	else
-		TweenService:Create(MainWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 275, 0, 268)
-		}):Play()
-		task.delay(0.08, function()
-			if not minimized then HubContent.Visible = true end
-		end)
+		TweenService:Create(MainWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Size = UDim2.new(0, 275, 0, 268)}):Play()
+		task.delay(0.08, function() if not minimized then HubContent.Visible = true end end)
 	end
 end)
 
@@ -1140,7 +1093,6 @@ local lastStartClick = 0
 StartBtn.MouseButton1Click:Connect(function()
 	if os.clock() - lastStartClick < 0.2 then return end
 	lastStartClick = os.clock()
-
 	getgenv().AutoFarmActive = not getgenv().AutoFarmActive
 	UpdateFloatState()
 	if getgenv().AutoFarmActive then
@@ -1151,7 +1103,6 @@ StartBtn.MouseButton1Click:Connect(function()
 		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
 		isCurrentlyAttacking = false
-		isRechargingKi = false
 		isTransforming = false
 		currentLockedBoss = nil
 		lastServerLockedBoss = nil
@@ -1169,9 +1120,6 @@ StartBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- ------------------------------------------------------------------------------
--- 🔀 BARRA DI NAVIGAZIONE SEGMENTATA: [ ⚙️ CONFIG ] | [ 🎯 BOSSES ]
--- ------------------------------------------------------------------------------
 local TabBar = Instance.new("Frame", HubContent)
 TabBar.Size = UDim2.new(1, -16, 0, 26)
 TabBar.Position = UDim2.new(0, 8, 0, 42)
@@ -1223,9 +1171,7 @@ TabBossBtn.MouseButton1Click:Connect(function()
 	TweenService:Create(TabConfigBtn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(16, 19, 30), TextColor3 = Color3.fromRGB(160, 175, 205)}):Play()
 end)
 
--- ==============================================================================
--- ⚙️ PAGINA 1: CONFIG
--- ==============================================================================
+-- PAGINA 1: CONFIG
 local RebCard = Instance.new("Frame", ConfigPage)
 RebCard.Size = UDim2.new(1, 0, 0, 42)
 RebCard.Position = UDim2.new(0, 0, 0, 0)
@@ -1406,9 +1352,7 @@ table.insert(connections, UserInputService.InputChanged:Connect(function(input)
 end))
 SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text, true) end)
 
--- ==============================================================================
--- 🎯 PAGINA 2: BOSSES (MODO AUTO/MANUALE + RICERCA + LISTA)
--- ==============================================================================
+-- PAGINA 2: BOSSES
 local ModeBtn = Instance.new("TextButton", BossPage)
 ModeBtn.Size = UDim2.new(1, 0, 0, 24)
 ModeBtn.Position = UDim2.new(0, 0, 0, 0)
@@ -1465,7 +1409,6 @@ end
 ModeBtn.MouseButton1Click:Connect(function()
 	getgenv().ManualBoss = nil
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 	StopActiveTween()
@@ -1513,7 +1456,6 @@ for _, bData in ipairs(BossList) do
 			getgenv().ManualBoss = bData.Name
 		end
 		isCurrentlyAttacking = false
-		isRechargingKi = false
 		currentLockedBoss = nil
 		lastServerLockedBoss = nil
 		StopActiveTween()
@@ -1559,7 +1501,6 @@ task.spawn(function()
 			local targetReb = tonumber(getgenv().TargetRebAmount) or 1
 			if getgenv().AutoRebActive and previewNum >= targetReb and targetReb > 0 then
 				isCurrentlyAttacking = false
-				isRechargingKi = false
 				isTransforming = false
 				currentLockedBoss = nil
 				lastServerLockedBoss = nil
@@ -1572,7 +1513,6 @@ task.spawn(function()
 				end)
 
 				task.wait(1.0)
-				maxKiSeen = 200 -- Reset Ki massimo dopo il Rebirth
 				table.clear(equippedSkills)
 				table.clear(rejectedForms)
 				CheckAndEquipSkills(true)
@@ -1682,7 +1622,7 @@ task.spawn(function()
 end)
 
 -- ==============================================================================
--- ⚡ ANTIAFK & AUTO-CHARGE PULITO (SENZA INTASARE LA CODA REMOTE)
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha") ULTRA-VELOCIZZATO COME LO SCRIPT 9:30PM
 -- ==============================================================================
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
@@ -1693,11 +1633,9 @@ end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 	isTransforming = false
 	lastTransformClock = 0
 	lastServerLockedBoss = nil
-	maxKiSeen = 200
 	table.clear(rejectedForms)
 	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
@@ -1706,17 +1644,23 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	CheckAndEquipSkills(true)
 end))
 
+-- Ricarica Ki continua in background (anche mentre attacca, come nello script 9:30PM)
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isRechargingKi then
-			pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+		if getgenv().AutoFarmActive and not isTransforming then
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
 		end
-		task.wait(0.1)
+		task.wait(0.03)
 	end
 end)
 
 -- ==============================================================================
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (CON FIX PER "Universal Bluei")
+-- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN
 -- ==============================================================================
 local FormAliases = {
 	["Universal Blue"] = "Universal Bluei"
@@ -1785,7 +1729,6 @@ local function EnsureFormAndKaioken()
 
 	if targetForm and not MatchesForm(actual.Value, targetForm) then
 		isCurrentlyAttacking = false
-		isRechargingKi = false
 		isTransforming = true
 		currentLockedBoss = nil
 		StopActiveTween()
@@ -1817,11 +1760,8 @@ local function EnsureFormAndKaioken()
 			end
 
 			if MatchesForm(selected.Value, targetForm) then
-				local curKi, maxKi = GetCurrentKi()
-				if curKi < math.max(50, maxKi * 0.15) then
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-					task.wait(0.1)
-				end
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+				task.wait(0.06)
 
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
 				pcall(function() transformRemote:InvokeServer() end)
@@ -1849,7 +1789,6 @@ local function EnsureFormAndKaioken()
 
 	if not IsKaiokenCurrentlyActive() then
 		isCurrentlyAttacking = false
-		isRechargingKi = false
 		isTransforming = true
 		currentLockedBoss = nil
 		StopActiveTween()
@@ -1908,7 +1847,7 @@ local function EnsureFormAndKaioken()
 end
 
 -- ==============================================================================
--- ⚔️ SISTEMA DI COMBATTIMENTO CON RICARICA KI AL 50% E SBLOCCO PULITO
+-- ⚔️ SISTEMA DI COMBATTIMENTO (STILE 9:30PM + COLPI SEPARATI SENZA STOP KI)
 -- ==============================================================================
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
@@ -1975,33 +1914,36 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
+-- Combattimento stile 9:30PM ma con ogni colpo/skill separato
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
-	-- Pugni base puliti
+	-- 1° Pugno separato
+	pcall(function()
+		punchRemote:FireServer("Blacknwhite27", 1, false)
+	end)
+	task.wait(0.03)
+
+	-- 2° Pugno separato
 	pcall(function()
 		punchRemote:FireServer("Blacknwhite27", 1)
 	end)
 
-	-- Lancio skill senza bloccare il ciclo principale
+	-- Skill lanciate separatamente (con equip + invoke staccate tra loro)
 	for _, skill in ipairs(SkillRequirements) do
-		if isRechargingKi or not getgenv().AutoFarmActive then break end
+		if not getgenv().AutoFarmActive or justRebirthed then break end
 		if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
-			task.spawn(function()
+			local skillName = skill.Name
+			coroutine.wrap(function()
 				pcall(function()
-					skillRemote:InvokeServer(skill.Name, "Blacknwhite27")
+					equipRemote:InvokeServer(skillName)
+					skillRemote:InvokeServer(skillName, "Blacknwhite27")
 				end)
-			end)
+			end)()
+			task.wait(0.03)
 		end
 	end
-
-	-- Micro-impulso di carica per sostenere il drain di Forma + Kaioken
-	task.spawn(function()
-		pcall(function()
-			chaRemote:InvokeServer("Blacknwhite27")
-		end)
-	end)
 end
 
 local function TweenAndFight(bossEntry, hasQuestNpc)
@@ -2048,63 +1990,23 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 
 		if distToBoss > 25 then
 			isCurrentlyAttacking = false
-			isRechargingKi = false
 			lastServerLockedBoss = nil
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
 			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
 		else
-			local curKi, maxKi = GetCurrentKi()
-			local lowThreshold = math.max(40, maxKi * 0.15)     -- Sotto il 15% avvia la ricarica
-			local targetThreshold = math.max(150, maxKi * 0.50) -- Ricarica fino al 50%
-
-			if curKi < lowThreshold then
-				isCurrentlyAttacking = false
-				isRechargingKi = true
-				local lastVal = curKi
-				local stagnantTicks = 0
-
-				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
-					if not bossHum or bossHum.Health <= 0 then break end
-					curKi, maxKi = GetCurrentKi()
-					targetThreshold = math.max(150, maxKi * 0.50)
-					local kiPct = math.floor((curKi / math.max(maxKi, 1)) * 100)
-					SetStatus(string.format("⚡ Ricarica Ki (%d%% / 50%%)...", kiPct), hpRatio)
-
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-
-					if curKi >= targetThreshold then break end
-					if math.abs(curKi - lastVal) < 1 and curKi > lowThreshold then
-						stagnantTicks += 1
-						if stagnantTicks >= 6 then
-							maxKiSeen = math.max(curKi, 100)
-							break
-						end
-					else
-						stagnantTicks = 0
-					end
-					lastVal = curKi
-					task.wait(0.08)
-				end
-
-				-- Pausa fondamentale per sbloccare lo stato di Charging sul server
-				task.wait(0.15)
-				isRechargingKi = false
-			else
-				isCurrentlyAttacking = true
-				local hpPct = math.floor(hpRatio * 100)
-				local kiPct = math.floor((curKi / math.max(maxKi, 1)) * 100)
-				SetStatus(string.format("⚔️ %s [%d%%] • Ki %d%%", bossEntry.Name, hpPct, kiPct), hpRatio)
-				DoFullAttack(currentBoss, bossEntry)
-			end
+			-- Identico allo script 9:30PM: nessuna pausa di ricarica, attacca direttamente
+			isCurrentlyAttacking = true
+			local hpPct = math.floor(hpRatio * 100)
+			SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+			DoFullAttack(currentBoss, bossEntry)
 		end
 
-		task.wait(0.12)
+		task.wait(0.08)
 	end
 
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 	StopActiveTween()
@@ -2119,7 +2021,6 @@ end
 
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 
@@ -2169,7 +2070,6 @@ end
 local function CheckAndFightBoss(bossEntry)
 	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	isCurrentlyAttacking = false
-	isRechargingKi = false
 
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return false end
@@ -2224,7 +2124,6 @@ local function CheckAndFightBoss(bossEntry)
 			end
 
 			isCurrentlyAttacking = false
-			isRechargingKi = false
 			currentLockedBoss = nil
 			lastServerLockedBoss = nil
 			SetStatus("✈️ Quest: " .. bossEntry.Name, 0)
@@ -2297,7 +2196,6 @@ task.spawn(function()
 									local fought = CheckAndFightBoss(bEntry)
 									if not fought and getgenv().AutoFarmActive then
 										isCurrentlyAttacking = false
-										isRechargingKi = false
 										SetStatus("⏳ Attesa: " .. bEntry.Name, 0)
 									end
 									break
@@ -2313,7 +2211,6 @@ task.spawn(function()
 
 							local targetBoss = nil
 
-							-- Se il boss migliore della mappa è PIÙ FORTE della vecchia quest, IGNORA la quest e vai al nuovo!
 							if activeQuestEntry and bestMapBoss then
 								if bestMapBoss.MinDef > activeQuestEntry.MinDef then
 									targetBoss = bestMapBoss
@@ -2330,13 +2227,11 @@ task.spawn(function()
 								local fought = CheckAndFightBoss(targetBoss)
 								if not fought and getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
-									isRechargingKi = false
 									SetStatus("⏳ Attesa: " .. targetBoss.Name, 0)
 								end
 							else
 								if getgenv().AutoFarmActive then
 									isCurrentlyAttacking = false
-									isRechargingKi = false
 									SetStatus("🔍 Cerco Boss (Def: " .. FormatStat(myDef) .. ")...", 0)
 								end
 							end
