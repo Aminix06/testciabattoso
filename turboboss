@@ -162,9 +162,10 @@ local lastServerLockedBoss = nil
 
 -- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (OLTRE I 600QI USA TIME, ROSE, PUNISHER E GOD)
 local SkillRequirements = {
+	{Name = "Elder Erasure",     MinStat = 30e24,       MinReb = 200000000},
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
 	{Name = "Rose Massacre",     MinStat = 1e18,        MinReb = 50000000},
-	{Name = "PunischerDrive",   MinStat = 13e12,       MinReb = 10000},
+	{Name = "PunisherDrive",     MinStat = 13e12,       MinReb = 10000},
 	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
 	{Name = "Super Dragon Fist", MinStat = 650000000,   MinReb = 100},
 	{Name = "Mach Kick",         MinStat = 2100000,     MinReb = 2},
@@ -174,8 +175,9 @@ local SkillRequirements = {
 
 local HighTierSkills = {
 	["Timeskip Breaker"] = true,
+	["Elder Erasure"] = true,
 	["Rose Massacre"] = true,
-	["PunischerDrive"] = true,
+	["PunisherDrive"] = true,
 	["God Slicer"] = true
 }
 
