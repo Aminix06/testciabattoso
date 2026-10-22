@@ -2048,12 +2048,12 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
 			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
-				-- Isteresi ricarica Ki: ricarica fino a >= 75 (o max 2.5s) per evitare attacchi a singhiozzo
+				-- Isteresi ricarica Ki: ricarica fino a >= 90 (o max 2.5s) per evitare attacchi a singhiozzo
 				isCurrentlyAttacking = false
 				local chargeStart = os.clock()
 				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 2.5 do
 					local curKi = tonumber(kiObj.Value) or 100
-					if curKi >= 75 or not bossHum or bossHum.Health <= 0 then break end
+					if curKi >= 90 or not bossHum or bossHum.Health <= 0 then break end
 					SetStatus(string.format("⚡ Ricarica Ki (%d%%)...", math.floor(curKi)), hpRatio)
 					coroutine.wrap(function()
 						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
