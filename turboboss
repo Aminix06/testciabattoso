@@ -2035,7 +2035,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 				local chargeStart = os.clock()
 				while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed and (os.clock() - chargeStart) < 8 do
 					local curKi = tonumber(kiObj.Value) or 100
-					if curKi >= 500 or not bossHum or bossHum.Health <= 0 then break end
+					if curKi >= 200 or not bossHum or bossHum.Health <= 0 then break end
 					SetStatus(string.format("⚡ Ricarica Ki (%d / 500)...", math.floor(curKi)), hpRatio)
 					task.wait(0.05)
 				end
