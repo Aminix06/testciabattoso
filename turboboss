@@ -2030,7 +2030,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		else
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			if kiObj and (tonumber(kiObj.Value) or 1000) < 500 then
+			if kiObj and (tonumber(kiObj.Value) or 1000) < 200 then
 				isCurrentlyAttacking = false
 				SetStatus("⚡ Ricarica rapida Ki...", hpRatio)
 				task.wait(0.35)
