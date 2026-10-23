@@ -1,8 +1,9 @@
 -- ⚡ PULIZIA AUTOMATICA VECCHIE ESECUZIONI E SCRIPT DI TEST
 local CoreGui = game:GetService("CoreGui")
-for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScanner", "CiabRaceTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub"}) do
+for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScanner", "CiabRaceTester", "UnifiedFarmGUI", "HealthAndEnergy", "AUTOFARM", "CiabCyberHub", "CiabMiniHub", "GMTestGUI"}) do
 	if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
 end
+if getgenv().StopGMTest then pcall(getgenv().StopGMTest) end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
 if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
 if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
@@ -152,8 +153,10 @@ end
 
 local isCurrentlyAttacking = false
 local isTransforming = false
+local isEquippingSkills = false
 local justRebirthed = false
 local lastTransformClock = 0
+local lastForcedSkillRefresh = 0
 local currentPreviewRebs = 0
 local rejectedForms = {}
 local confirmedNoQuestBosses = {}
@@ -181,11 +184,28 @@ local HighTierSkills = {
 
 local equippedSkills = {}
 
+local function ResetSkillCache()
+	table.clear(equippedSkills)
+	lastForcedSkillRefresh = os.clock()
+end
+
 local function CheckAndEquipSkills(forceReEquip)
-	if isTransforming then return end
-	if forceReEquip then table.clear(equippedSkills) end
+	-- IMPORTANTE: Se viene chiesto un forceReEquip (morte, rebirth, avvio), svuota SUBITO la cache
+	-- anche se in quel millisecondo si sta trasformando, così al ciclo successivo le riequipaggia tutte!
+	if forceReEquip then
+		ResetSkillCache()
+	end
+
+	if isTransforming or isEquippingSkills then return end
+
+	local char = localPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not hum or hum.Health <= 0 then return end
+
 	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not playerData then return end
+
+	isEquippingSkills = true
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
@@ -194,31 +214,43 @@ local function CheckAndEquipSkills(forceReEquip)
 	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
 
 	for _, skill in ipairs(SkillRequirements) do
-		if isTransforming then break end
+		if isTransforming or not IsCurrentSession() then break end
+		if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+			ResetSkillCache()
+			break
+		end
+
 		if onlyHighTier and not HighTierSkills[skill.Name] then
 			equippedSkills[skill.Name] = false
 		elseif myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
 			if not equippedSkills[skill.Name] then
-				pcall(function()
+				local ok = pcall(function()
 					equipRemote:InvokeServer(skill.Name)
-					equippedSkills[skill.Name] = true
 				end)
-				task.wait(0.08)
+				if ok and not isTransforming then
+					equippedSkills[skill.Name] = true
+				end
+				task.wait(0.06)
 			end
 		else
 			equippedSkills[skill.Name] = false
 		end
 	end
+
+	isEquippingSkills = false
 end
 
 task.spawn(function() CheckAndEquipSkills(true) end)
 
+-- Loop continuo ed intelligente: equipaggia le skill anche mentre attacchi o sali di stat post-rebirth,
+-- e fa un refresh forzato di sicurezza ogni 20 secondi per garantire che nessuna skill si perda mai.
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
-			CheckAndEquipSkills(false)
+		if getgenv().AutoFarmActive and not isTransforming and not justRebirthed then
+			local forceRefresh = (os.clock() - lastForcedSkillRefresh) >= 20
+			CheckAndEquipSkills(forceRefresh)
 		end
-		task.wait(1.5)
+		task.wait(0.8)
 	end
 end)
 
@@ -409,6 +441,14 @@ local function SetupAntiSitOnCharacter(char)
 			end)
 			table.insert(connections, hum:GetPropertyChangedSignal("Sit"):Connect(function()
 				if hum.Sit then hum.Sit = false end
+			end))
+			-- Reset immediato delle skill alla morte!
+			table.insert(connections, hum.Died:Connect(function()
+				ResetSkillCache()
+				isCurrentlyAttacking = false
+				isTransforming = false
+				currentLockedBoss = nil
+				lastServerLockedBoss = nil
 			end))
 		end
 	end)
@@ -680,6 +720,7 @@ getgenv().CiabCleanup = function()
 	getgenv().AutoRebActive = false
 	isCurrentlyAttacking = false
 	isTransforming = false
+	isEquippingSkills = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
 	lastActiveNoQuestBoss = nil
@@ -1108,6 +1149,7 @@ StartBtn.MouseButton1Click:Connect(function()
 		StartBtn.Text = "▶️ FARM ON"
 		table.clear(rejectedForms)
 		lastServerLockedBoss = nil
+		ResetSkillCache()
 		task.spawn(function() CheckAndEquipSkills(true) end)
 	else
 		isCurrentlyAttacking = false
@@ -1509,15 +1551,17 @@ task.spawn(function()
 				currentLockedBoss = nil
 				lastServerLockedBoss = nil
 				justRebirthed = true
+				ResetSkillCache()
 				StopActiveTween()
 
 				SetStatus("👑 MULTIREB (+" .. FormatReb(previewNum) .. " Reb)!", 1)
 				pcall(function() multirebRemote:InvokeServer() end)
 
 				task.wait(1.0)
-				table.clear(equippedSkills)
-				CheckAndEquipSkills(true)
+				ResetSkillCache()
+				table.clear(rejectedForms)
 				justRebirthed = false
+				task.spawn(function() CheckAndEquipSkills(true) end)
 			end
 		end
 		task.wait(0.4)
@@ -1628,13 +1672,17 @@ table.insert(connections, localPlayer.Idled:Connect(function()
 end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
+	-- Svuota ISTANTANEAMENTE la cache delle skill e delle forme rifiutate appena rinasce il personaggio!
+	ResetSkillCache()
+	table.clear(rejectedForms)
 	isCurrentlyAttacking = false
 	isTransforming = false
 	lastTransformClock = 0
 	lastServerLockedBoss = nil
 	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
-	task.wait(0.3)
+	newChar:WaitForChild("Humanoid", 8)
+	task.wait(0.2)
 	UpdateFloatState()
 	CheckAndEquipSkills(true)
 end))
@@ -1653,7 +1701,18 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN
+-- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (CON FIX UNIVERSAL BLUE -> UNIVERSAL BLUEI)
+local FormAliases = {
+	["Universal Blue"] = "Universal Bluei"
+}
+
+local function MatchesForm(currentVal, targetForm)
+	if not currentVal or not targetForm then return false end
+	if currentVal == targetForm then return true end
+	if FormAliases[targetForm] and currentVal == FormAliases[targetForm] then return true end
+	return false
+end
+
 local function GetBestAvailableCandidate(defVal, rebVal)
 	for _, f in ipairs(FormProgression) do
 		if defVal >= f.MinDef and rebVal >= (f.MinReb or 0) and not rejectedForms[f.Name] then
@@ -1673,12 +1732,12 @@ local function NeedsFormOrKaiokenRightNow()
 	local actual = status:FindFirstChild("Transformation")
 	if not actual then return false end
 
-	if defVal <= NO_FORM_MAX_DEF and not (defVal >= 1e12 and rebVal >= 500000) then
+	if defVal <= NO_FORM_MAX_DEF then
 		return false
 	end
 
 	local bestCandidate = GetBestAvailableCandidate(defVal, rebVal)
-	if bestCandidate and actual.Value ~= bestCandidate then
+	if bestCandidate and not MatchesForm(actual.Value, bestCandidate) then
 		return true
 	end
 	if not IsKaiokenCurrentlyActive() then
@@ -1702,13 +1761,14 @@ local function EnsureFormAndKaioken()
 	local actual = status:FindFirstChild("Transformation")
 	if not selected or not actual then return false end
 
-	if defVal <= NO_FORM_MAX_DEF and not (defVal >= 1e12 and rebVal >= 500000) then
+	if defVal <= NO_FORM_MAX_DEF then
+		CheckAndEquipSkills(false)
 		return true
 	end
 
 	local targetForm = GetBestAvailableCandidate(defVal, rebVal)
 
-	if targetForm and actual.Value ~= targetForm then
+	if targetForm and not MatchesForm(actual.Value, targetForm) then
 		isCurrentlyAttacking = false
 		isTransforming = true
 		currentLockedBoss = nil
@@ -1725,39 +1785,35 @@ local function EnsureFormAndKaioken()
 			targetForm = GetBestAvailableCandidate(defVal, rebVal)
 
 			if not targetForm then break end
-			if actual.Value == targetForm then
+			if MatchesForm(actual.Value, targetForm) then
 				lastTransformClock = os.clock()
 				break
 			end
 
 			SetStatus("⚡ Equip Forma: " .. targetForm .. "...", 0.3)
 
-			if selected.Value ~= targetForm then
+			if not MatchesForm(selected.Value, targetForm) then
 				for _ = 1, 2 do
 					pcall(function() equipRemote:InvokeServer(targetForm) end)
-					if selected.Value == targetForm then break end
+					if MatchesForm(selected.Value, targetForm) then break end
 					task.wait(0.12)
 				end
 			end
 
-			if selected.Value == targetForm then
-				local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-				local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-				if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-					task.wait(0.08)
-				end
+			if MatchesForm(selected.Value, targetForm) then
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+				task.wait(0.06)
 
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
 				pcall(function() transformRemote:InvokeServer() end)
 
 				local checkWait = 0
-				while actual.Value ~= targetForm and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
+				while not MatchesForm(actual.Value, targetForm) and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
 					task.wait(0.12)
 					checkWait += 1
 				end
 
-				if actual.Value == targetForm then
+				if MatchesForm(actual.Value, targetForm) then
 					lastTransformClock = os.clock()
 					break
 				end
@@ -1767,9 +1823,11 @@ local function EnsureFormAndKaioken()
 		end
 
 		isTransforming = false
-		if targetForm and actual.Value ~= targetForm then
+		if targetForm and not MatchesForm(actual.Value, targetForm) then
 			return false
 		end
+		-- Riequipaggia subito le skill dopo aver finito la trasformazione
+		CheckAndEquipSkills(false)
 	end
 
 	if not IsKaiokenCurrentlyActive() then
@@ -1789,7 +1847,7 @@ local function EnsureFormAndKaioken()
 					isTransforming = false
 					return false
 				end
-				if targetForm and actual.Value ~= targetForm then
+				if targetForm and not MatchesForm(actual.Value, targetForm) then
 					isTransforming = false
 					return false
 				end
@@ -1808,7 +1866,7 @@ local function EnsureFormAndKaioken()
 				isTransforming = false
 				return false
 			end
-			if targetForm and actual.Value ~= targetForm then
+			if targetForm and not MatchesForm(actual.Value, targetForm) then
 				isTransforming = false
 				return false
 			end
@@ -1828,7 +1886,7 @@ local function EnsureFormAndKaioken()
 		CheckAndEquipSkills(true)
 	end
 
-	return ((not targetForm or actual.Value == targetForm) and IsKaiokenCurrentlyActive())
+	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
 
 -- ⚔️ SISTEMA DI COMBATTIMENTO: RAFFICA TIMESKIP (x3) -> ROSE -> GOD SLICER
@@ -1899,6 +1957,9 @@ end
 
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
+	-- Controlla ed equipaggia eventuali nuove skill sbloccate prima di lanciare la raffica
+	CheckAndEquipSkills(false)
+
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
@@ -2104,7 +2165,8 @@ local function CheckAndFightBoss(bossEntry)
 	if not EnsureFormAndKaioken() then return true end
 
 	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-		local questVal = playerData:WaitForChild("Quest")
+		local questVal = playerData:WaitForChild("Quest", 5)
+		if not questVal then return false end
 
 		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
