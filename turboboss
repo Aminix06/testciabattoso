@@ -156,7 +156,6 @@ local isTransforming = false
 local isEquippingSkills = false
 local justRebirthed = false
 local lastTransformClock = 0
-local lastForcedSkillRefresh = 0
 local currentPreviewRebs = 0
 local rejectedForms = {}
 local confirmedNoQuestBosses = {}
@@ -186,7 +185,6 @@ local pendingForceReEquip = false
 local function ResetSkillCache()
 	table.clear(equippedSkills)
 	pendingForceReEquip = true
-	lastForcedSkillRefresh = os.clock()
 end
 
 local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
@@ -218,7 +216,6 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 	if pendingForceReEquip then
 		table.clear(equippedSkills)
 		pendingForceReEquip = false
-		lastForcedSkillRefresh = os.clock()
 	end
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
@@ -261,13 +258,11 @@ end
 
 task.spawn(function() CheckAndEquipSkills(true, true) end)
 
--- Loop continuo ed intelligente: equipaggia le skill anche mentre attacchi o sali di stat post-rebirth,
--- e fa un refresh forzato di sicurezza ogni 20 secondi per garantire che nessuna skill si perda mai.
+-- Loop continuo: controlla solo se hai sbloccato nuove skill salendo di stat (SENZA resettare quelle già equipaggiate)
 task.spawn(function()
 	while IsCurrentSession() do
 		if getgenv().AutoFarmActive and not isTransforming and not justRebirthed then
-			local forceRefresh = (os.clock() - lastForcedSkillRefresh) >= 20
-			CheckAndEquipSkills(forceRefresh, false)
+			CheckAndEquipSkills(false, false)
 		end
 		task.wait(0.8)
 	end
@@ -340,7 +335,7 @@ local BossList = {
 	{Name = "Wukong (LBSSJ4)",                        Boss = "Wukong (LBSSJ4)",                        MinDef = 4.8e12},
 	{Name = "Vegetable (LBSSJ4)",                     Boss = "Vegetable (LBSSJ4)",                     MinDef = 3.6e12},
 	{Name = "Vis (40%)",                              Boss = "Vis (40%)",                              MinDef = 2.4e12, NoQuest = true},
-	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.3e12},
+	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.2e12},
 	{Name = "Vills 50%",                              Boss = "Vills 50%",                              MinDef = 912e9},
 	{Name = "Nohag (Beast)",                          Boss = "Nohag (Beast)",                          MinDef = 712e9},
 	{Name = "SSJG Kakata",                            Boss = "SSJG Kakata",                            MinDef = 560e9},
