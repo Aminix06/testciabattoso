@@ -4,6 +4,7 @@ for _, guiName in ipairs({"TestOnlyAttackGUI", "CiabRebTester", "CiabKaiokenScan
 	if CoreGui:FindFirstChild(guiName) then CoreGui[guiName]:Destroy() end
 end
 if getgenv().StopGMTest then pcall(getgenv().StopGMTest) end
+if getgenv().StopElderTest then pcall(getgenv().StopElderTest) end
 if getgenv().CleanupModularTest then pcall(getgenv().CleanupModularTest) end
 if getgenv().CleanupCombatTest then pcall(getgenv().CleanupCombatTest) end
 if getgenv().CleanupTweenTest then pcall(getgenv().CleanupTweenTest) end
@@ -100,11 +101,18 @@ end
 local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
-local BULMA_MIN_DEF = 600e18 -- Da Summer Bulma (Full Power) in su usa solo Rose, Time e God!
+local BULMA_MIN_DEF = 600e18
 local MAX_PLAYERS_IN_SERVER = 1
+
+-- Costanti Elder Erasure
+local ELDER_MIN_STAT = 30e24       -- 30 Sp
+local ELDER_MIN_REB = 200000000    -- 200M Reb
+local ELDER_DISTANCE = -50         -- 50 stud di distanza
+local ELDER_COOLDOWN = 32          -- 1 colpo ogni 32 secondi
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
+getgenv().ElderErasureMode = false
 getgenv().TargetRebAmount = 20e6
 getgenv().KaiokenWaitTime = 1
 getgenv().TweenSpeed = 300
@@ -132,6 +140,9 @@ if isfile and isfile(ConfigFileName) then
 		if tonumber(decoded.HubUIScale) then
 			getgenv().HubUIScale = math.clamp(tonumber(decoded.HubUIScale), 0.65, 1.55)
 		end
+		if type(decoded.ElderErasureMode) == "boolean" then
+			getgenv().ElderErasureMode = decoded.ElderErasureMode
+		end
 	end
 end
 
@@ -144,7 +155,8 @@ local function SaveConfig()
 				KaiokenWaitTime = getgenv().KaiokenWaitTime,
 				TargetRebAmount = getgenv().TargetRebAmount,
 				StatsUIScale = tonumber(string.format("%.2f", getgenv().StatsUIScale)),
-				HubUIScale = tonumber(string.format("%.2f", getgenv().HubUIScale))
+				HubUIScale = tonumber(string.format("%.2f", getgenv().HubUIScale)),
+				ElderErasureMode = getgenv().ElderErasureMode
 			}))
 		end)
 		if onConfigSavedCallback then task.spawn(onConfigSavedCallback) end
@@ -156,14 +168,32 @@ local isTransforming = false
 local isEquippingSkills = false
 local justRebirthed = false
 local lastTransformClock = 0
+local lastElderCastClock = 0
 local currentPreviewRebs = 0
 local rejectedForms = {}
 local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
--- 🗡️ REQUISITI SKILL + FILTRO ENDGAME (DA BULMA IN SU SOLO TIME, ROSE E GOD)
+-- Controlla se il giocatore possiede almeno 30Sp e 200M Reb
+local function HasElderRequirements()
+	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not pData then return false end
+	local myStr = tonumber(pData:FindFirstChild("Strength") and pData.Strength.Value) or 0
+	local mySpd = tonumber(pData:FindFirstChild("Speed") and pData.Speed.Value) or 0
+	local myDef = tonumber(pData:FindFirstChild("Defense") and pData.Defense.Value) or 0
+	local myReb = tonumber(pData:FindFirstChild("Rebirth") and pData.Rebirth.Value) or 0
+	return (myStr >= ELDER_MIN_STAT and mySpd >= ELDER_MIN_STAT and myDef >= ELDER_MIN_STAT and myReb >= ELDER_MIN_REB)
+end
+
+-- Restituisce true SOLO se il tasto Elder è ON e si hanno almeno 30Sp e 200M Reb
+local function IsElderModeActiveNow()
+	return getgenv().ElderErasureMode == true and HasElderRequirements()
+end
+
+-- 🗡️ REQUISITI SKILL + FILTRO ENDGAME
 local SkillRequirements = {
+	{Name = "Elder Erasure",     MinStat = 30e24,       MinReb = 200000000},
 	{Name = "Timeskip Breaker",  MinStat = 10e18,       MinReb = 100000000},
 	{Name = "Rose Massacre",     MinStat = 1e18,        MinReb = 50000000},
 	{Name = "God Slicer",        MinStat = 15000000000, MinReb = 1000},
@@ -174,6 +204,7 @@ local SkillRequirements = {
 }
 
 local HighTierSkills = {
+	["Elder Erasure"] = true,
 	["Timeskip Breaker"] = true,
 	["Rose Massacre"] = true,
 	["God Slicer"] = true
@@ -194,7 +225,6 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 
 	if isTransforming then return end
 
-	-- Se un altro thread sta già equipaggiando le skill, aspetta che finisca se richiesto (es. prima di attaccare)
 	if isEquippingSkills then
 		if waitForCompletion then
 			while isEquippingSkills and IsCurrentSession() and not isTransforming do
@@ -223,6 +253,7 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 	local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
 	local myReb = tonumber(playerData:FindFirstChild("Rebirth") and playerData.Rebirth.Value) or 0
 	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
+	local elderOnly = IsElderModeActiveNow()
 
 	for _, skill in ipairs(SkillRequirements) do
 		if isTransforming or not IsCurrentSession() then
@@ -234,7 +265,11 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 			break
 		end
 
-		if onlyHighTier and not HighTierSkills[skill.Name] then
+		if elderOnly and skill.Name ~= "Elder Erasure" then
+			equippedSkills[skill.Name] = false
+		elseif not elderOnly and skill.Name == "Elder Erasure" then
+			equippedSkills[skill.Name] = false
+		elseif onlyHighTier and not HighTierSkills[skill.Name] then
 			equippedSkills[skill.Name] = false
 		elseif myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
 			if not equippedSkills[skill.Name] then
@@ -258,7 +293,6 @@ end
 
 task.spawn(function() CheckAndEquipSkills(true, true) end)
 
--- Loop continuo: controlla solo se hai sbloccato nuove skill salendo di stat (SENZA resettare quelle già equipaggiate)
 task.spawn(function()
 	while IsCurrentSession() do
 		if getgenv().AutoFarmActive and not isTransforming and not justRebirthed then
@@ -397,7 +431,7 @@ local function IsKaiokenCurrentlyActive()
 	return (kk and kk.Value == true) or false
 end
 
--- 🎯 FUNZIONE LOCK-ON LATO SERVER ("locky") PER ROSE MASSACRE & TIMESKIP BREAKER
+-- 🎯 FUNZIONE LOCK-ON LATO SERVER ("locky")
 local function EnsureServerLockOn(bossModel)
 	if not bossModel then return end
 	local status = GetLiveStatus()
@@ -414,12 +448,16 @@ local function EnsureServerLockOn(bossModel)
 	end
 end
 
--- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON INCOLLATO (-2.2 STUD PER TIMESKIP)
+-- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON (-2.2 STUD MELEE / -50 STUD ELDER)
 local activeTween = nil
 local currentLockedBoss = nil
 local behindDistance = -2.2
 local connections = {}
 local cachedCharParts = {}
+
+local function GetCurrentBehindDistance()
+	return IsElderModeActiveNow() and ELDER_DISTANCE or behindDistance
+end
 
 local function DisableChair(obj)
 	if obj:IsA("Seat") or obj:IsA("VehicleSeat") then
@@ -456,13 +494,13 @@ local function SetupAntiSitOnCharacter(char)
 			table.insert(connections, hum:GetPropertyChangedSignal("Sit"):Connect(function()
 				if hum.Sit then hum.Sit = false end
 			end))
-			-- Reset immediato delle skill alla morte!
 			table.insert(connections, hum.Died:Connect(function()
 				ResetSkillCache()
 				isCurrentlyAttacking = false
 				isTransforming = false
 				currentLockedBoss = nil
 				lastServerLockedBoss = nil
+				lastElderCastClock = 0
 			end))
 		end
 	end)
@@ -544,13 +582,15 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 
 	if not hrp or not hum or hum.Health <= 0 or not eHrp or not eHum or eHum.Health <= 0 then return end
 
-	if (hrp.Position - eHrp.Position).Magnitude <= 30 then
+	local distOffset = GetCurrentBehindDistance()
+	local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * distOffset)
+
+	if (hrp.Position - behindPos).Magnitude <= 30 then
 		StopActiveTween()
 		hum.AutoRotate = false
 		hrp.AssemblyLinearVelocity = Vector3.zero
 		hrp.AssemblyAngularVelocity = Vector3.zero
 
-		local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * behindDistance)
 		hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(behindPos, eHrp.Position), 0.95)
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
@@ -952,43 +992,11 @@ rbVal.TextXAlignment = Enum.TextXAlignment.Right
 
 StatValueLabels["Rebirth"] = {Label = rbVal, IsReb = true}
 
-task.spawn(function()
-	while IsCurrentSession() do
-		local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
-		local elapsed = os.time() - SessionStartTime
-		local m = math.floor(elapsed / 60)
-		local s = elapsed % 60
-
-		local status = GetLiveStatus()
-		local actualForm = status and status:FindFirstChild("Transformation") and status.Transformation.Value or "Base"
-		if actualForm == "" or actualForm == "None" then actualForm = "Base" end
-		local kkTag = IsKaiokenCurrentlyActive() and " + 🔥KK" or ""
-		if FormPill and FormPill.Parent then
-			FormPill.Text = string.format("⚡ %s%s • %02d:%02d", tostring(actualForm), kkTag, m, s)
-		end
-
-		if pData then
-			for key, info in pairs(StatValueLabels) do
-				local valObj = pData:FindFirstChild(key)
-				if valObj and info.Label and info.Label.Parent then
-					if info.IsReb then
-						local suffix = (currentPreviewRebs > 0) and (" (+" .. FormatReb(currentPreviewRebs) .. ")") or ""
-						info.Label.Text = FormatReb(valObj.Value) .. suffix
-					else
-						info.Label.Text = FormatStat(valObj.Value)
-					end
-				end
-			end
-		end
-		task.wait(0.25)
-	end
-end)
-
 -- 🔮 2. DESTRA: "CIAB HOLO-DECK"
 local MainWin = Instance.new("Frame", ScreenGui)
 MainWin.Name = "HoloDeckHub"
-MainWin.Size = UDim2.new(0, 275, 0, 268)
-MainWin.Position = UDim2.new(1, -293, 0.5, -134)
+MainWin.Size = UDim2.new(0, 275, 0, 306)
+MainWin.Position = UDim2.new(1, -293, 0.5, -153)
 MainWin.BackgroundColor3 = Color3.fromRGB(11, 13, 22)
 MainWin.BackgroundTransparency = 0.04
 MainWin.Active = true
@@ -1071,7 +1079,7 @@ Instance.new("UICorner", StartBtn).CornerRadius = UDim.new(1, 0)
 
 local HubContent = Instance.new("Frame", MainWin)
 HubContent.Name = "HubContent"
-HubContent.Size = UDim2.new(1, 0, 0, 228)
+HubContent.Size = UDim2.new(1, 0, 0, 266)
 HubContent.Position = UDim2.new(0, 0, 0, 40)
 HubContent.BackgroundTransparency = 1
 
@@ -1103,7 +1111,7 @@ MinBtn.MouseButton1Click:Connect(function()
 		}):Play()
 	else
 		TweenService:Create(MainWin, TweenInfo.new(0.28, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-			Size = UDim2.new(0, 275, 0, 268)
+			Size = UDim2.new(0, 275, 0, 306)
 		}):Play()
 		task.delay(0.08, function()
 			if not minimized then HubContent.Visible = true end
@@ -1163,6 +1171,7 @@ StartBtn.MouseButton1Click:Connect(function()
 		StartBtn.Text = "▶️ FARM ON"
 		table.clear(rejectedForms)
 		lastServerLockedBoss = nil
+		lastElderCastClock = 0
 		ResetSkillCache()
 		task.spawn(function() CheckAndEquipSkills(true, true) end)
 	else
@@ -1212,12 +1221,12 @@ TabBossBtn.TextSize = 10
 Instance.new("UICorner", TabBossBtn).CornerRadius = UDim.new(0, 6)
 
 local ConfigPage = Instance.new("Frame", HubContent)
-ConfigPage.Size = UDim2.new(1, -16, 0, 148)
+ConfigPage.Size = UDim2.new(1, -16, 0, 186)
 ConfigPage.Position = UDim2.new(0, 8, 0, 74)
 ConfigPage.BackgroundTransparency = 1
 
 local BossPage = Instance.new("Frame", HubContent)
-BossPage.Size = UDim2.new(1, -16, 0, 148)
+BossPage.Size = UDim2.new(1, -16, 0, 186)
 BossPage.Position = UDim2.new(0, 8, 0, 74)
 BossPage.BackgroundTransparency = 1
 BossPage.Visible = false
@@ -1417,6 +1426,99 @@ table.insert(connections, UserInputService.InputChanged:Connect(function(input)
 end))
 SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text, true) end)
 
+-- 🔮 TASTO MODALITÀ ELDER ERASURE (50 STUD / 32s - SOLO CON >= 30Sp & 200M REB)
+local ElderCard = Instance.new("Frame", ConfigPage)
+ElderCard.Size = UDim2.new(1, 0, 0, 34)
+ElderCard.Position = UDim2.new(0, 0, 0, 150)
+ElderCard.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
+Instance.new("UICorner", ElderCard).CornerRadius = UDim.new(0, 10)
+local ecStroke = Instance.new("UIStroke", ElderCard)
+ecStroke.Color = Color3.fromRGB(185, 85, 255)
+ecStroke.Thickness = 1.2
+ecStroke.Transparency = 0.35
+
+local ElderModeBtn = Instance.new("TextButton", ElderCard)
+ElderModeBtn.Size = UDim2.new(1, -12, 1, -8)
+ElderModeBtn.Position = UDim2.new(0, 6, 0, 4)
+ElderModeBtn.BackgroundColor3 = Color3.fromRGB(55, 35, 85)
+ElderModeBtn.Font = Enum.Font.GothamBlack
+ElderModeBtn.Text = "🔮 ELDER ERASURE (50s / 32s): OFF"
+ElderModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ElderModeBtn.TextSize = 10
+Instance.new("UICorner", ElderModeBtn).CornerRadius = UDim.new(0, 7)
+
+local elderWarnLock = false
+local function RefreshElderButtonUI()
+	if elderWarnLock then return end
+	if getgenv().ElderErasureMode then
+		if HasElderRequirements() then
+			ElderModeBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 235)
+			ElderModeBtn.Text = "🔮 ELDER ERASURE (50s / 32s): ON"
+		else
+			ElderModeBtn.BackgroundColor3 = Color3.fromRGB(195, 125, 20)
+			ElderModeBtn.Text = "🔮 ELDER: ATTESA 30Sp & 200M REB"
+		end
+	else
+		ElderModeBtn.BackgroundColor3 = Color3.fromRGB(55, 35, 85)
+		ElderModeBtn.Text = "🔮 ELDER ERASURE (50s / 32s): OFF"
+	end
+end
+RefreshElderButtonUI()
+
+ElderModeBtn.MouseButton1Click:Connect(function()
+	if not getgenv().ElderErasureMode and not HasElderRequirements() then
+		elderWarnLock = true
+		ElderModeBtn.BackgroundColor3 = Color3.fromRGB(195, 35, 60)
+		ElderModeBtn.Text = "⚠️ SERVONO 30Sp E 200M REB!"
+		task.delay(1.4, function()
+			elderWarnLock = false
+			RefreshElderButtonUI()
+		end)
+		return
+	end
+
+	getgenv().ElderErasureMode = not getgenv().ElderErasureMode
+	lastElderCastClock = 0
+	ResetSkillCache()
+	RefreshElderButtonUI()
+	SaveConfig()
+	task.spawn(function() CheckAndEquipSkills(true, true) end)
+end)
+
+task.spawn(function()
+	while IsCurrentSession() do
+		local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+		local elapsed = os.time() - SessionStartTime
+		local m = math.floor(elapsed / 60)
+		local s = elapsed % 60
+
+		local status = GetLiveStatus()
+		local actualForm = status and status:FindFirstChild("Transformation") and status.Transformation.Value or "Base"
+		if actualForm == "" or actualForm == "None" then actualForm = "Base" end
+		local kkTag = IsKaiokenCurrentlyActive() and " + 🔥KK" or ""
+		if FormPill and FormPill.Parent then
+			FormPill.Text = string.format("⚡ %s%s • %02d:%02d", tostring(actualForm), kkTag, m, s)
+		end
+
+		RefreshElderButtonUI()
+
+		if pData then
+			for key, info in pairs(StatValueLabels) do
+				local valObj = pData:FindFirstChild(key)
+				if valObj and info.Label and info.Label.Parent then
+					if info.IsReb then
+						local suffix = (currentPreviewRebs > 0) and (" (+" .. FormatReb(currentPreviewRebs) .. ")") or ""
+						info.Label.Text = FormatReb(valObj.Value) .. suffix
+					else
+						info.Label.Text = FormatStat(valObj.Value)
+					end
+				end
+			end
+		end
+		task.wait(0.25)
+	end
+end)
+
 -- 🎯 PAGINA 2: BOSSES
 local ModeBtn = Instance.new("TextButton", BossPage)
 ModeBtn.Size = UDim2.new(1, 0, 0, 24)
@@ -1442,7 +1544,7 @@ SearchBox.ClearTextOnFocus = false
 Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 7)
 
 local BossScroll = Instance.new("ScrollingFrame", BossPage)
-BossScroll.Size = UDim2.new(1, -6, 0, 92)
+BossScroll.Size = UDim2.new(1, -6, 0, 130)
 BossScroll.Position = UDim2.new(0, 0, 0, 56)
 BossScroll.BackgroundColor3 = Color3.fromRGB(14, 16, 26)
 BossScroll.ScrollBarThickness = 2
@@ -1677,7 +1779,7 @@ task.spawn(function()
 	pcall(function() StartEvent:InvokeServer() end)
 end)
 
--- ⚡ ANTIAFK & AUTO-CHARGE ("cha") SOLO QUANDO NON ATTACCA E NON SI TRASFORMA!
+-- ⚡ ANTIAFK & AUTO-CHARGE ("cha")
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
 	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
@@ -1686,13 +1788,13 @@ table.insert(connections, localPlayer.Idled:Connect(function()
 end))
 
 table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
-	-- Svuota ISTANTANEAMENTE la cache delle skill e delle forme rifiutate appena rinasce il personaggio!
 	ResetSkillCache()
 	table.clear(rejectedForms)
 	isCurrentlyAttacking = false
 	isTransforming = false
 	lastTransformClock = 0
 	lastServerLockedBoss = nil
+	lastElderCastClock = 0
 	SetupAntiSitOnCharacter(newChar)
 	newChar:WaitForChild("HumanoidRootPart", 8)
 	newChar:WaitForChild("Humanoid", 8)
@@ -1703,19 +1805,22 @@ end))
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
-			coroutine.wrap(function()
-				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-			end)()
+		if getgenv().AutoFarmActive and not isTransforming then
+			local canChargeInElderWait = IsElderModeActiveNow() and ((os.clock() - lastElderCastClock) > 2.0)
+			if not isCurrentlyAttacking or canChargeInElderWait then
+				coroutine.wrap(function()
+					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+				end)()
+				coroutine.wrap(function()
+					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+				end)()
+			end
 		end
 		task.wait(0.04)
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN (CON FIX UNIVERSAL BLUE -> UNIVERSAL BLUEI)
+-- 🔥 CONTROLLO FORMA RAPIDO + KAIOKEN
 local FormAliases = {
 	["Universal Blue"] = "Universal Bluei"
 }
@@ -1840,7 +1945,6 @@ local function EnsureFormAndKaioken()
 		if targetForm and not MatchesForm(actual.Value, targetForm) then
 			return false
 		end
-		-- Riequipaggia subito le skill dopo aver finito la trasformazione e aspetta che finisca
 		CheckAndEquipSkills(false, true)
 	end
 
@@ -1899,13 +2003,12 @@ local function EnsureFormAndKaioken()
 		isTransforming = false
 	end
 
-	-- Garantisce al 100% che tutte le skill siano equipaggiate prima di andare a combattere
 	CheckAndEquipSkills(false, true)
 
 	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO: RAFFICA TIMESKIP (x3) -> ROSE -> GOD SLICER
+-- ⚔️ SISTEMA DI COMBATTIMENTO (MELEE O ELDER ERASURE 50s / 32s)
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -1971,11 +2074,11 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
--- 👊 THREAD PUGNI INDIPENDENTE (Tira pugni di continuo ogni 0.05s anche mentre carica/lancia Timeskip e Rose)
+-- 👊 THREAD PUGNI INDIPENDENTE (Disattivato automaticamente quando Elder Erasure Mode è attivo)
 task.spawn(function()
 	local comboStep = false
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and isCurrentlyAttacking and currentLockedBoss and not isTransforming and not justRebirthed then
+		if getgenv().AutoFarmActive and isCurrentlyAttacking and currentLockedBoss and not isTransforming and not justRebirthed and not IsElderModeActiveNow() then
 			EnsureServerLockOn(currentLockedBoss)
 			comboStep = not comboStep
 			pcall(function()
@@ -1992,10 +2095,33 @@ end)
 
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
-	-- Controlla ed equipaggia eventuali nuove skill sbloccate (aspettando il completamento) prima di lanciare la raffica
 	CheckAndEquipSkills(false, true)
 
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
+	if not bossHum or bossHum.Health <= 0 then return end
+
+	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - 1 COLPO OGNI 32 SECONDI)
+	if IsElderModeActiveNow() and equippedSkills["Elder Erasure"] then
+		local elapsed = os.clock() - lastElderCastClock
+		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
+		local hpPct = math.floor(hpRatio * 100)
+
+		if lastElderCastClock == 0 or elapsed >= ELDER_COOLDOWN then
+			lastElderCastClock = os.clock()
+			SetStatus(string.format("🔮 ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+			coroutine.wrap(function()
+				pcall(function()
+					skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
+				end)
+			end)()
+		else
+			local rem = math.max(0, ELDER_COOLDOWN - elapsed)
+			SetStatus(string.format("🔮 %s [%d%%] • Prossimo: %.1fs", bossEntry.Name, hpPct, rem), hpRatio)
+		end
+		return
+	end
+
+	-- ⚔️ MODALITÀ MELEE STANDARD
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
@@ -2024,14 +2150,14 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.20)
 		end
 
-		-- 3° PASSO: Lancia GOD SLICER & PUNISHER DRIVE (+ altre skill solo sotto Bulma) + PUGNI
+		-- 3° PASSO: Lancia GOD SLICER (+ altre skill solo sotto Bulma) + PUGNI
 		if getgenv().AutoFarmActive and not justRebirthed and bossHum and bossHum.Health > 0 then
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
 			end)
 			for _, skill in ipairs(SkillRequirements) do
-				if skill.Name ~= "Timeskip Breaker" and skill.Name ~= "Rose Massacre" then
+				if skill.Name ~= "Elder Erasure" and skill.Name ~= "Timeskip Breaker" and skill.Name ~= "Rose Massacre" then
 					if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
 						coroutine.wrap(function()
 							pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
@@ -2048,7 +2174,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			punchRemote:FireServer("Blacknwhite27", 1)
 
 			for _, skill in ipairs(SkillRequirements) do
-				if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+				if skill.Name ~= "Elder Erasure" and equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
 					coroutine.wrap(function()
 						pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
 					end)()
@@ -2088,18 +2214,20 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		currentLockedBoss = currentBoss
 		EnsureServerLockOn(currentBoss)
 
+		local elderActive = IsElderModeActiveNow()
+		local distOffset = GetCurrentBehindDistance()
+		local targetBehindPos = bossHRP.Position + (bossHRP.CFrame.LookVector * distOffset)
+		local distToSpot = (hrp.Position - targetBehindPos).Magnitude
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 		local requiredCloseDist = equippedSkills["Timeskip Breaker"] and 4.5 or 18
 
-		if distToBoss > 30 then
+		if distToSpot > 30 then
 			isCurrentlyAttacking = false
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
-			local behindOffset = bossHRP.CFrame.LookVector * behindDistance
-			local targetCF = CFrame.new(bossHRP.Position + behindOffset, bossHRP.Position)
+			local targetCF = CFrame.new(targetBehindPos, bossHRP.Position)
 			pcall(function() MoveToTarget(targetCF, false) end)
-		elseif distToBoss > requiredCloseDist then
-			-- Aspetta di essere incollato a <= 4.5 stud quando hai Timeskip Breaker, così non parte prima Rose!
+		elseif not elderActive and distToBoss > requiredCloseDist then
 			isCurrentlyAttacking = false
 			SetStatus("🎯 Mi incollo a " .. bossEntry.Name .. "...", hpRatio)
 		else
@@ -2111,8 +2239,10 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 				task.wait(0.3)
 			else
 				isCurrentlyAttacking = true
-				local hpPct = math.floor(hpRatio * 100)
-				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+				if not elderActive then
+					local hpPct = math.floor(hpRatio * 100)
+					SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+				end
 				DoFullAttack(currentBoss, bossEntry)
 			end
 		end
@@ -2201,7 +2331,6 @@ local function CheckAndFightBoss(bossEntry)
 	local bossNpc = (not bossEntry.NoQuest and npcFolder) and (npcFolder:FindFirstChild(bossEntry.Name) or npcFolder:FindFirstChild(bossEntry.Boss)) or nil
 	local livingBoss = FindLivingBoss(bossEntry)
 
-	-- Se non hai già la quest, verifica che il boss o l'NPC esistano nella mappa
 	if not alreadyHasThisQuest and not bossEntry.NoQuest and not bossNpc and not livingBoss then
 		return false
 	end
@@ -2219,13 +2348,12 @@ local function CheckAndFightBoss(bossEntry)
 
 	if not EnsureFormAndKaioken() then return true end
 
-	-- ✅ SE HAI GIÀ LA QUEST ATTIVA (es. dopo essere morto), VAI DIRETTO DAL BOSS!
+	-- ✅ SE HAI GIÀ LA QUEST ATTIVA, VAI DIRETTO DAL BOSS!
 	if alreadyHasThisQuest or HasQuestForBoss(questVal, bossEntry) then
 		SetStatus("⚔️ Quest già attiva! Vado da " .. bossEntry.Name, 0)
 		return WaitForBossToSpawnAndCompleteQuest(bossEntry, true, questVal)
 	end
 
-	-- Altrimenti, se il boss richiede la quest e non ce l'hai, vai dall'NPC a prenderla
 	if not bossEntry.NoQuest then
 		if not bossNpc or not bossNpc:FindFirstChild("HumanoidRootPart") or not questVal then
 			return false
