@@ -112,7 +112,7 @@ local ELDER_DISTANCE = 50          -- 50 = 50 stud DAVANTI al boss (metti -50 se
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
 getgenv().ForceMeleeMode = false   -- false = usa Elder Erasure in automatico appena hai 30Sp e 200M Reb
-getgenv().ElderCooldown = 32       -- Secondi tra un colpo e l'altro di Elder Erasure (modificabile in GUI)
+getgenv().ElderCooldown = 31       -- Cooldown di base 31 secondi (modificabile dalla GUI)
 getgenv().TargetRebAmount = 20e6
 getgenv().KaiokenWaitTime = 1
 getgenv().TweenSpeed = 300
@@ -190,7 +190,7 @@ local function HasElderRequirements()
 	return (myStr >= ELDER_MIN_STAT and mySpd >= ELDER_MIN_STAT and myDef >= ELDER_MIN_STAT and myReb >= ELDER_MIN_REB)
 end
 
--- Attiva SEMPRE Elder Erasure quando hai 30Sp e 200M Reb, a meno che tu non abbia scelto "Forza Melee" nella GUI
+-- Attiva SEMPRE Elder Erasure quando hai 30Sp e 200M Reb, a meno che tu non abbia scelto "Solo Melee" nella GUI
 local function IsElderModeActiveNow()
 	return (not getgenv().ForceMeleeMode) and HasElderRequirements()
 end
@@ -253,7 +253,7 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 	if not playerData then return end
 
 	isEquippingSkills = true
-	task.wait(0.1) -- Piccola pausa per assicurarsi che il server non sia in ricarica Ki
+	task.wait(0.1)
 
 	if pendingForceReEquip then
 		table.clear(equippedSkills)
@@ -381,7 +381,7 @@ local BossList = {
 	{Name = "Wukong (LBSSJ4)",                        Boss = "Wukong (LBSSJ4)",                        MinDef = 4.8e12},
 	{Name = "Vegetable (LBSSJ4)",                     Boss = "Vegetable (LBSSJ4)",                     MinDef = 3.6e12},
 	{Name = "Vis (40%)",                              Boss = "Vis (40%)",                              MinDef = 2.4e12, NoQuest = true},
-	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.3e12},
+	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.2e12},
 	{Name = "Vills 50%",                              Boss = "Vills 50%",                              MinDef = 912e9},
 	{Name = "Nohag (Beast)",                          Boss = "Nohag (Beast)",                          MinDef = 712e9},
 	{Name = "SSJG Kakata",                            Boss = "SSJG Kakata",                            MinDef = 560e9},
@@ -596,8 +596,9 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 
 	local distOffset = GetCurrentBehindDistance()
 	local behindPos = eHrp.Position + (eHrp.CFrame.LookVector * distOffset)
+	local snapDist = IsElderModeActiveNow() and 110 or 30
 
-	if (hrp.Position - behindPos).Magnitude <= 30 then
+	if (hrp.Position - behindPos).Magnitude <= snapDist then
 		StopActiveTween()
 		hum.AutoRotate = false
 		hrp.AssemblyLinearVelocity = Vector3.zero
@@ -1483,7 +1484,7 @@ Instance.new("UICorner", ElderCdInput).CornerRadius = UDim.new(0, 6)
 ElderCdInput.FocusLost:Connect(function()
 	local txt = string.gsub(ElderCdInput.Text, ",", ".")
 	local n = tonumber(txt)
-	getgenv().ElderCooldown = (n and n >= 0.5) and n or 32
+	getgenv().ElderCooldown = (n and n >= 0.5) and n or 31
 	ElderCdInput.Text = tostring(getgenv().ElderCooldown)
 	SaveConfig()
 end)
@@ -1807,7 +1808,7 @@ task.spawn(function()
 	pcall(function() StartEvent:InvokeServer() end)
 end)
 
--- ⚡ ANTIAFK & AUTO-CHARGE INTELLIGENTE (NON CARICA QUANDO IL KI È AL MASSIMO O STA EQUIPAGGIANDO)
+-- ⚡ ANTIAFK & AUTO-CHARGE INTELLIGENTE (MAX KI = 1000)
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
 	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
@@ -2106,11 +2107,17 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
--- 👊 THREAD PUGNI INDIPENDENTE (Disattivato automaticamente quando Elder Erasure è attivo)
+local function IsPlayerAliveForAttack()
+	local char = localPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	return (char and hum and hum.Health > 0) and getgenv().AutoFarmActive and not justRebirthed and not isTransforming
+end
+
+-- 👊 THREAD PUGNI INDIPENDENTE (Si ferma all'istante se muori o se sei in Elder Erasure)
 task.spawn(function()
 	local comboStep = false
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and isCurrentlyAttacking and currentLockedBoss and not isTransforming and not justRebirthed and not IsElderModeActiveNow() then
+		if IsPlayerAliveForAttack() and isCurrentlyAttacking and currentLockedBoss and not IsElderModeActiveNow() then
 			EnsureServerLockOn(currentLockedBoss)
 			comboStep = not comboStep
 			pcall(function()
@@ -2126,11 +2133,12 @@ task.spawn(function()
 end)
 
 local function DoFullAttack(bossModel, bossEntry)
+	if not IsPlayerAliveForAttack() then return end
 	EnsureServerLockOn(bossModel)
 	CheckAndEquipSkills(false, true)
 
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
-	if not bossHum or bossHum.Health <= 0 then return end
+	if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
 
 	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN 31s DALLA GUI)
 	if IsElderModeActiveNow() and equippedSkills["Elder Erasure"] then
@@ -2144,11 +2152,12 @@ local function DoFullAttack(bossModel, bossEntry)
 				isCurrentlyAttacking = true
 				task.wait(0.15)
 			end
+			if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
 			isCurrentlyAttacking = true
 			lastElderCastClock = os.clock()
 			SetStatus(string.format("🔮 LANCIO ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 			for _ = 1, 3 do
-				if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then break end
+				if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then break end
 				coroutine.wrap(function()
 					pcall(function()
 						skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
@@ -2158,7 +2167,6 @@ local function DoFullAttack(bossModel, bossEntry)
 			end
 		else
 			local rem = math.max(0, cooldownSec - elapsed)
-			-- Tra 1.5s dopo lo sparo e 0.8s prima del prossimo sparo (30.2s su 31s), ricarica il Ki!
 			if elapsed > 1.5 and rem > 0.8 then
 				isCurrentlyAttacking = false
 				SetStatus(string.format("⚡ %s [%d%%] • Carico Ki (%.1fs)", bossEntry.Name, hpPct, rem), hpRatio)
@@ -2175,7 +2183,7 @@ local function DoFullAttack(bossModel, bossEntry)
 
 	if equippedSkills["Timeskip Breaker"] then
 		for _ = 1, 3 do
-			if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then return end
+			if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
@@ -2186,7 +2194,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.12)
 		end
 
-		if equippedSkills["Rose Massacre"] and getgenv().AutoFarmActive and not justRebirthed and bossHum and bossHum.Health > 0 then
+		if equippedSkills["Rose Massacre"] and IsPlayerAliveForAttack() and bossHum and bossHum.Health > 0 then
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
@@ -2197,7 +2205,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.20)
 		end
 
-		if getgenv().AutoFarmActive and not justRebirthed and bossHum and bossHum.Health > 0 then
+		if IsPlayerAliveForAttack() and bossHum and bossHum.Health > 0 then
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
@@ -2214,6 +2222,7 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.15)
 		end
 	else
+		if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
 		pcall(function()
 			punchRemote:FireServer("Blacknwhite27", 1, false)
 			punchRemote:FireServer("Blacknwhite27", 1)
@@ -2308,6 +2317,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		end
 	end)
 end
+
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
