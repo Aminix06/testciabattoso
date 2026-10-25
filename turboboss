@@ -2129,14 +2129,20 @@ local function DoFullAttack(bossModel, bossEntry)
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
 	if not bossHum or bossHum.Health <= 0 then return end
 
-	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN DALLA GUI)
+	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN 31s DALLA GUI)
 	if IsElderModeActiveNow() and equippedSkills["Elder Erasure"] then
-		local cooldownSec = tonumber(getgenv().ElderCooldown) or 32
+		local cooldownSec = tonumber(getgenv().ElderCooldown) or 31
 		local elapsed = os.clock() - lastElderCastClock
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 		local hpPct = math.floor(hpRatio * 100)
 
 		if lastElderCastClock == 0 or elapsed >= cooldownSec then
+			if lastElderCastClock == 0 then
+				isCurrentlyAttacking = true
+				task.wait(0.15)
+			end
+			isCurrentlyAttacking = true
+			lastElderCastClock = os.clock()
 			SetStatus(string.format("🔮 LANCIO ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 			for _ = 1, 3 do
 				if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then break end
@@ -2147,10 +2153,16 @@ local function DoFullAttack(bossModel, bossEntry)
 				end)()
 				task.wait(0.12)
 			end
-			lastElderCastClock = os.clock()
 		else
 			local rem = math.max(0, cooldownSec - elapsed)
-			SetStatus(string.format("🔮 %s [%d%%] • Prossimo: %.1fs", bossEntry.Name, hpPct, rem), hpRatio)
+			-- Tra 1.5s dopo lo sparo e 0.8s prima del prossimo sparo (30.2s su 31s), ricarica il Ki!
+			if elapsed > 1.5 and rem > 0.8 then
+				isCurrentlyAttacking = false
+				SetStatus(string.format("⚡ %s [%d%%] • Carico Ki (%.1fs)", bossEntry.Name, hpPct, rem), hpRatio)
+			else
+				isCurrentlyAttacking = true
+				SetStatus(string.format("🔮 %s [%d%%] • Pronto tra: %.1fs", bossEntry.Name, hpPct, rem), hpRatio)
+			end
 		end
 		return
 	end
@@ -2251,8 +2263,9 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		local distToBoss = (hrp.Position - bossHRP.Position).Magnitude
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 		local requiredCloseDist = equippedSkills["Timeskip Breaker"] and 4.5 or 18
+		local snapDist = elderActive and 110 or 30
 
-		if distToSpot > 30 then
+		if distToSpot > snapDist then
 			isCurrentlyAttacking = false
 			SetStatus("✈️ Tween -> " .. bossEntry.Name, hpRatio)
 			local targetCF = CFrame.new(targetBehindPos, bossHRP.Position)
@@ -2263,13 +2276,13 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		else
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
+			if not elderActive and kiObj and (tonumber(kiObj.Value) or 100) < 15 then
 				isCurrentlyAttacking = false
 				SetStatus("⚡ Ricarica rapida Ki...", hpRatio)
 				task.wait(0.3)
 			else
-				isCurrentlyAttacking = true
 				if not elderActive then
+					isCurrentlyAttacking = true
 					local hpPct = math.floor(hpRatio * 100)
 					SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 				end
@@ -2292,7 +2305,6 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		end
 	end)
 end
-
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
