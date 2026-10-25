@@ -1805,16 +1805,13 @@ end))
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isTransforming then
-			local canChargeInElderWait = IsElderModeActiveNow() and ((os.clock() - lastElderCastClock) > 2.0)
-			if not isCurrentlyAttacking or canChargeInElderWait then
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-				end)()
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-				end)()
-			end
+		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming then
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
+			coroutine.wrap(function()
+				pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+			end)()
 		end
 		task.wait(0.04)
 	end
@@ -2107,13 +2104,18 @@ local function DoFullAttack(bossModel, bossEntry)
 		local hpPct = math.floor(hpRatio * 100)
 
 		if lastElderCastClock == 0 or elapsed >= ELDER_COOLDOWN then
+			SetStatus(string.format("🔮 LANCIO ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+			-- 3 impulsi rapidi per garantire che il server prenda il colpo al 100%
+			for _ = 1, 3 do
+				if not getgenv().AutoFarmActive or justRebirthed or not bossHum or bossHum.Health <= 0 then break end
+				coroutine.wrap(function()
+					pcall(function()
+						skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
+					end)
+				end)()
+				task.wait(0.12)
+			end
 			lastElderCastClock = os.clock()
-			SetStatus(string.format("🔮 ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
-			coroutine.wrap(function()
-				pcall(function()
-					skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
-				end)
-			end)()
 		else
 			local rem = math.max(0, ELDER_COOLDOWN - elapsed)
 			SetStatus(string.format("🔮 %s [%d%%] • Prossimo: %.1fs", bossEntry.Name, hpPct, rem), hpRatio)
