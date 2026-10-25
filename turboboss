@@ -1581,7 +1581,6 @@ task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
 	local function IsPublicServer()
-		if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then return false end
 		local jobId = game.JobId
 		local placeId = game.PlaceId
 		local cursor = ""
@@ -1600,12 +1599,13 @@ task.spawn(function()
 			cursor = data.nextPageCursor
 			if not cursor or cursor == "" then break end
 			pages += 1
-			task.wait(0.15)
+			task.wait(0.1)
 		end
 		return false
 	end
 
 	if IsPublicServer() then
+		StopActiveTween()
 		localPlayer:Kick("SEI IN UN SERVER PUBBLICO! Kick di sicurezza attivato.")
 	else
 		local TPEvent = Events:WaitForChild("TP")
