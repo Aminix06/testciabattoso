@@ -1836,16 +1836,19 @@ task.spawn(function()
 		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isEquippingSkills and not pendingForceReEquip then
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
 			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			local currentKi = kiObj and tonumber(kiObj.Value) or 100
-			local maxKi = (kiObj and kiObj:FindFirstChild("MaxValue") and tonumber(kiObj.MaxValue.Value)) or 100
+			local currentKi = kiObj and tonumber(kiObj.Value) or 1000
+			local maxKi = 1000
 
-			if currentKi < (maxKi * 0.9) then
+			if currentKi < maxKi then
+				coroutine.wrap(function()
+					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+				end)()
 				coroutine.wrap(function()
 					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
 				end)()
 			end
 		end
-		task.wait(0.05)
+		task.wait(0.04)
 	end
 end)
 
