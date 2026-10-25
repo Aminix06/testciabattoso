@@ -2159,6 +2159,12 @@ local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questV
 	return true
 end
 
+local function HasQuestForBoss(questVal, bossEntry)
+	if not questVal or not bossEntry then return false end
+	local q = tostring(questVal.Value or "")
+	return (q ~= "" and q ~= "None" and (q == bossEntry.Name or q == bossEntry.Boss))
+end
+
 local function CheckAndFightBoss(bossEntry)
 	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	isCurrentlyAttacking = false
@@ -2170,11 +2176,17 @@ local function CheckAndFightBoss(bossEntry)
 	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not playerData or not hrp then return false end
 
+	local questVal = playerData:FindFirstChild("Quest") or playerData:WaitForChild("Quest", 5)
+	local alreadyHasThisQuest = (not bossEntry.NoQuest) and HasQuestForBoss(questVal, bossEntry)
+
 	local npcFolder = workspace:FindFirstChild("Others") and workspace.Others:FindFirstChild("NPCs")
 	local bossNpc = (not bossEntry.NoQuest and npcFolder) and (npcFolder:FindFirstChild(bossEntry.Name) or npcFolder:FindFirstChild(bossEntry.Boss)) or nil
 	local livingBoss = FindLivingBoss(bossEntry)
 
-	if not bossEntry.NoQuest and not bossNpc and not livingBoss then return false end
+	-- Se non hai già la quest, verifica che il boss o l'NPC esistano nella mappa
+	if not alreadyHasThisQuest and not bossEntry.NoQuest and not bossNpc and not livingBoss then
+		return false
+	end
 
 	if bossEntry.NoQuest then
 		local isKnownInMap = (livingBoss ~= nil)
@@ -2187,13 +2199,22 @@ local function CheckAndFightBoss(bossEntry)
 		lastActiveNoQuestBoss = bossEntry.Name
 	end
 
+	-- Si trasforma e attiva il Kaioken appena rinasce
 	if not EnsureFormAndKaioken() then return true end
 
-	if bossNpc and bossNpc:FindFirstChild("HumanoidRootPart") then
-		local questVal = playerData:WaitForChild("Quest", 5)
-		if not questVal then return false end
+	-- ✅ SE HAI GIÀ LA QUEST ATTIVA (es. dopo essere morto), VAI DIRETTO DAL BOSS!
+	if alreadyHasThisQuest or HasQuestForBoss(questVal, bossEntry) then
+		SetStatus("⚔️ Quest già attiva! Vado da " .. bossEntry.Name, 0)
+		return WaitForBossToSpawnAndCompleteQuest(bossEntry, true, questVal)
+	end
 
-		while questVal.Value ~= bossEntry.Name and questVal.Value ~= bossEntry.Boss do
+	-- Altrimenti, se il boss richiede la quest e non ce l'hai, vai dall'NPC a prenderla
+	if not bossEntry.NoQuest then
+		if not bossNpc or not bossNpc:FindFirstChild("HumanoidRootPart") or not questVal then
+			return false
+		end
+
+		while not HasQuestForBoss(questVal, bossEntry) do
 			if not IsCurrentSession() or not getgenv().AutoFarmActive or justRebirthed then
 				StopActiveTween()
 				return true
@@ -2228,10 +2249,7 @@ local function CheckAndFightBoss(bossEntry)
 			task.wait(0.2)
 		end
 
-		if questVal.Value == bossEntry.Name or questVal.Value == bossEntry.Boss then
-			return WaitForBossToSpawnAndCompleteQuest(bossEntry, true, questVal)
-		end
-		return true
+		return WaitForBossToSpawnAndCompleteQuest(bossEntry, true, questVal)
 	else
 		return WaitForBossToSpawnAndCompleteQuest(bossEntry, false, nil)
 	end
