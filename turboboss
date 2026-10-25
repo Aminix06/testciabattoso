@@ -381,7 +381,7 @@ local BossList = {
 	{Name = "Wukong (LBSSJ4)",                        Boss = "Wukong (LBSSJ4)",                        MinDef = 4.8e12},
 	{Name = "Vegetable (LBSSJ4)",                     Boss = "Vegetable (LBSSJ4)",                     MinDef = 3.6e12},
 	{Name = "Vis (40%)",                              Boss = "Vis (40%)",                              MinDef = 2.4e12, NoQuest = true},
-	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.2e12},
+	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.3e12},
 	{Name = "Vills 50%",                              Boss = "Vills 50%",                              MinDef = 912e9},
 	{Name = "Nohag (Beast)",                          Boss = "Nohag (Beast)",                          MinDef = 712e9},
 	{Name = "SSJG Kakata",                            Boss = "SSJG Kakata",                            MinDef = 560e9},
