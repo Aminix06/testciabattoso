@@ -107,7 +107,7 @@ local MAX_PLAYERS_IN_SERVER = 1
 -- Costanti Elder Erasure
 local ELDER_MIN_STAT = 30e24       -- 30 Sp
 local ELDER_MIN_REB = 200000000    -- 200M Reb
-local ELDER_DISTANCE = -50         -- 50 stud di distanza (metti 50 senza meno se lo vuoi davanti)
+local ELDER_DISTANCE = 50          -- 50 stud di distanza (metti 50 senza meno se lo vuoi davanti)
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
