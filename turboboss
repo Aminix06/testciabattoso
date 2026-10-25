@@ -181,20 +181,30 @@ local HighTierSkills = {
 }
 
 local equippedSkills = {}
+local pendingForceReEquip = false
 
 local function ResetSkillCache()
 	table.clear(equippedSkills)
+	pendingForceReEquip = true
 	lastForcedSkillRefresh = os.clock()
 end
 
-local function CheckAndEquipSkills(forceReEquip)
-	-- IMPORTANTE: Se viene chiesto un forceReEquip (morte, rebirth, avvio), svuota SUBITO la cache
-	-- anche se in quel millisecondo si sta trasformando, così al ciclo successivo le riequipaggia tutte!
+local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 	if forceReEquip then
-		ResetSkillCache()
+		pendingForceReEquip = true
 	end
 
-	if isTransforming or isEquippingSkills then return end
+	if isTransforming then return end
+
+	-- Se un altro thread sta già equipaggiando le skill, aspetta che finisca se richiesto (es. prima di attaccare)
+	if isEquippingSkills then
+		if waitForCompletion then
+			while isEquippingSkills and IsCurrentSession() and not isTransforming do
+				task.wait(0.03)
+			end
+		end
+		if not pendingForceReEquip then return end
+	end
 
 	local char = localPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -205,6 +215,12 @@ local function CheckAndEquipSkills(forceReEquip)
 
 	isEquippingSkills = true
 
+	if pendingForceReEquip then
+		table.clear(equippedSkills)
+		pendingForceReEquip = false
+		lastForcedSkillRefresh = os.clock()
+	end
+
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
 	local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
@@ -212,7 +228,10 @@ local function CheckAndEquipSkills(forceReEquip)
 	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
 
 	for _, skill in ipairs(SkillRequirements) do
-		if isTransforming or not IsCurrentSession() then break end
+		if isTransforming or not IsCurrentSession() then
+			pendingForceReEquip = true
+			break
+		end
 		if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
 			ResetSkillCache()
 			break
@@ -227,8 +246,10 @@ local function CheckAndEquipSkills(forceReEquip)
 				end)
 				if ok and not isTransforming then
 					equippedSkills[skill.Name] = true
+				else
+					pendingForceReEquip = true
 				end
-				task.wait(0.06)
+				task.wait(0.05)
 			end
 		else
 			equippedSkills[skill.Name] = false
@@ -238,7 +259,7 @@ local function CheckAndEquipSkills(forceReEquip)
 	isEquippingSkills = false
 end
 
-task.spawn(function() CheckAndEquipSkills(true) end)
+task.spawn(function() CheckAndEquipSkills(true, true) end)
 
 -- Loop continuo ed intelligente: equipaggia le skill anche mentre attacchi o sali di stat post-rebirth,
 -- e fa un refresh forzato di sicurezza ogni 20 secondi per garantire che nessuna skill si perda mai.
@@ -246,7 +267,7 @@ task.spawn(function()
 	while IsCurrentSession() do
 		if getgenv().AutoFarmActive and not isTransforming and not justRebirthed then
 			local forceRefresh = (os.clock() - lastForcedSkillRefresh) >= 20
-			CheckAndEquipSkills(forceRefresh)
+			CheckAndEquipSkills(forceRefresh, false)
 		end
 		task.wait(0.8)
 	end
@@ -1148,7 +1169,7 @@ StartBtn.MouseButton1Click:Connect(function()
 		table.clear(rejectedForms)
 		lastServerLockedBoss = nil
 		ResetSkillCache()
-		task.spawn(function() CheckAndEquipSkills(true) end)
+		task.spawn(function() CheckAndEquipSkills(true, true) end)
 	else
 		isCurrentlyAttacking = false
 		isTransforming = false
@@ -1559,7 +1580,7 @@ task.spawn(function()
 				ResetSkillCache()
 				table.clear(rejectedForms)
 				justRebirthed = false
-				task.spawn(function() CheckAndEquipSkills(true) end)
+				task.spawn(function() CheckAndEquipSkills(true, true) end)
 			end
 		end
 		task.wait(0.4)
@@ -1682,7 +1703,7 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	newChar:WaitForChild("Humanoid", 8)
 	task.wait(0.2)
 	UpdateFloatState()
-	CheckAndEquipSkills(true)
+	CheckAndEquipSkills(true, true)
 end))
 
 task.spawn(function()
@@ -1760,7 +1781,7 @@ local function EnsureFormAndKaioken()
 	if not selected or not actual then return false end
 
 	if defVal <= NO_FORM_MAX_DEF then
-		CheckAndEquipSkills(false)
+		CheckAndEquipSkills(false, true)
 		return true
 	end
 
@@ -1824,8 +1845,8 @@ local function EnsureFormAndKaioken()
 		if targetForm and not MatchesForm(actual.Value, targetForm) then
 			return false
 		end
-		-- Riequipaggia subito le skill dopo aver finito la trasformazione
-		CheckAndEquipSkills(false)
+		-- Riequipaggia subito le skill dopo aver finito la trasformazione e aspetta che finisca
+		CheckAndEquipSkills(false, true)
 	end
 
 	if not IsKaiokenCurrentlyActive() then
@@ -1881,8 +1902,10 @@ local function EnsureFormAndKaioken()
 		end
 
 		isTransforming = false
-		CheckAndEquipSkills(true)
 	end
+
+	-- Garantisce al 100% che tutte le skill siano equipaggiate prima di andare a combattere
+	CheckAndEquipSkills(false, true)
 
 	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
@@ -1974,8 +1997,8 @@ end)
 
 local function DoFullAttack(bossModel, bossEntry)
 	EnsureServerLockOn(bossModel)
-	-- Controlla ed equipaggia eventuali nuove skill sbloccate prima di lanciare la raffica
-	CheckAndEquipSkills(false)
+	-- Controlla ed equipaggia eventuali nuove skill sbloccate (aspettando il completamento) prima di lanciare la raffica
+	CheckAndEquipSkills(false, true)
 
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
@@ -2044,7 +2067,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 	local playerData = ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	local questVal = playerData and playerData:FindFirstChild("Quest")
 
-	CheckAndEquipSkills(false)
+	CheckAndEquipSkills(false, true)
 
 	while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
@@ -2199,7 +2222,6 @@ local function CheckAndFightBoss(bossEntry)
 		lastActiveNoQuestBoss = bossEntry.Name
 	end
 
-	-- Si trasforma e attiva il Kaioken appena rinasce
 	if not EnsureFormAndKaioken() then return true end
 
 	-- ✅ SE HAI GIÀ LA QUEST ATTIVA (es. dopo essere morto), VAI DIRETTO DAL BOSS!
