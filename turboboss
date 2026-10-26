@@ -171,6 +171,7 @@ local isCurrentlyAttacking = false
 local isTransforming = false
 local isEquippingSkills = false
 local justRebirthed = false
+local combatSessionId = 0
 local lastTransformClock = 0
 local lastElderCastClock = 0
 local currentPreviewRebs = 0
@@ -215,23 +216,17 @@ local HighTierSkills = {
 }
 
 local equippedSkills = {}
-local pendingForceReEquip = false
-local lastElderEquipState = nil
+local pendingForceReEquip = true
 
 local function ResetSkillCache()
+	combatSessionId += 1
 	table.clear(equippedSkills)
 	pendingForceReEquip = true
 end
 
 local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
-	local currentElderState = IsElderModeActiveNow()
-	if lastElderEquipState ~= nil and lastElderEquipState ~= currentElderState then
-		pendingForceReEquip = true
-	end
-	lastElderEquipState = currentElderState
-
 	if forceReEquip then
-		pendingForceReEquip = true
+		ResetSkillCache()
 	end
 
 	if isTransforming then return end
@@ -247,13 +242,12 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 
 	local char = localPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not char or not hum or hum.Health <= 0 then return end
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	local wsHum = wsChar and wsChar:FindFirstChildOfClass("Humanoid")
+	if not char or not hum or hum.Health <= 0 or (wsHum and wsHum.Health <= 0) then return end
 
 	local playerData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not playerData then return end
-
-	isEquippingSkills = true
-	task.wait(0.1)
 
 	if pendingForceReEquip then
 		table.clear(equippedSkills)
@@ -262,57 +256,56 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 
 	local myStr = tonumber(playerData:FindFirstChild("Strength") and playerData.Strength.Value) or 0
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
-	local myDef = tonumber(playerData:FindFirstChild("Defense") and playerData.Defense.Value) or 0
 	local myReb = tonumber(playerData:FindFirstChild("Rebirth") and playerData.Rebirth.Value) or 0
-	local onlyHighTier = (myDef >= BULMA_MIN_DEF)
-	local elderOnly = IsElderModeActiveNow()
+
+	-- Controlla prima se c'è davvero almeno una skill sbloccata da equipaggiare
+	local needsToEquipAny = false
+	for _, skill in ipairs(SkillRequirements) do
+		if myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
+			if not equippedSkills[skill.Name] then
+				needsToEquipAny = true
+				break
+			end
+		end
+	end
+
+	-- Se sono già tutte equipaggiate, esce in 0.000s senza fermare né attacchi né Ki
+	if not needsToEquipAny then return end
+
+	isEquippingSkills = true
+	task.wait(0.12)
 
 	for _, skill in ipairs(SkillRequirements) do
 		if isTransforming or not IsCurrentSession() then
 			pendingForceReEquip = true
 			break
 		end
-		if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+		local c = localPlayer.Character
+		local h = c and c:FindFirstChildOfClass("Humanoid")
+		local wc = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+		local wh = wc and wc:FindFirstChildOfClass("Humanoid")
+		if not c or not h or h.Health <= 0 or (wh and wh.Health <= 0) then
 			ResetSkillCache()
 			break
 		end
 
-		if elderOnly and skill.Name ~= "Elder Erasure" then
-			equippedSkills[skill.Name] = false
-		elseif not elderOnly and skill.Name == "Elder Erasure" then
-			equippedSkills[skill.Name] = false
-		elseif onlyHighTier and not HighTierSkills[skill.Name] then
-			equippedSkills[skill.Name] = false
-		elseif myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
+		if myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
 			if not equippedSkills[skill.Name] then
-				local ok = pcall(function()
-					equipRemote:InvokeServer(skill.Name)
+				local ok, res = pcall(function()
+					return equipRemote:InvokeServer(skill.Name)
 				end)
-				if ok and not isTransforming then
+				if ok and res ~= false and not isTransforming then
 					equippedSkills[skill.Name] = true
 				else
 					pendingForceReEquip = true
 				end
-				task.wait(0.05)
+				task.wait(0.06)
 			end
-		else
-			equippedSkills[skill.Name] = false
 		end
 	end
 
 	isEquippingSkills = false
 end
-
-task.spawn(function() CheckAndEquipSkills(true, true) end)
-
-task.spawn(function()
-	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isTransforming and not justRebirthed then
-			CheckAndEquipSkills(false, false)
-		end
-		task.wait(0.8)
-	end
-end)
 
 -- 🔥 TABELLA FORME ESATTA (DALLA PIÙ FORTE ALLA PIÙ DEBOLE)
 local FormProgression = {
@@ -563,13 +556,22 @@ end
 
 table.insert(connections, RunService.Stepped:Connect(function()
 	local char = localPlayer.Character
-	if not char then return end
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	local wsHum = wsChar and wsChar:FindFirstChildOfClass("Humanoid")
 
-	local hum = char:FindFirstChildOfClass("Humanoid")
-	if hum then
-		hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-		if hum.Sit then hum.Sit = false end
+	-- Blocco istantaneo di qualsiasi attacco nel frame stesso in cui la vita scende a 0
+	if not char or not hum or hum.Health <= 0 or (wsHum and wsHum.Health <= 0) then
+		if isCurrentlyAttacking or next(equippedSkills) ~= nil then
+			isCurrentlyAttacking = false
+			currentLockedBoss = nil
+			ResetSkillCache()
+		end
+		return
 	end
+
+	hum:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+	if hum.Sit then hum.Sit = false end
 
 	if not getgenv().AutoFarmActive then return end
 
@@ -608,7 +610,7 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
 end))
-
+-- INIZIO PARTE 2
 local function MoveToTarget(targetCFrame, waitForCompletion)
 	if not getgenv().AutoFarmActive or not IsCurrentSession() then
 		StopActiveTween()
@@ -1185,9 +1187,8 @@ StartBtn.MouseButton1Click:Connect(function()
 		table.clear(rejectedForms)
 		lastServerLockedBoss = nil
 		lastElderCastClock = 0
-		ResetSkillCache()
-		task.spawn(function() CheckAndEquipSkills(true, true) end)
 	else
+		combatSessionId += 1
 		isCurrentlyAttacking = false
 		isTransforming = false
 		currentLockedBoss = nil
@@ -1508,10 +1509,8 @@ RefreshElderButtonUI()
 ElderModeBtn.MouseButton1Click:Connect(function()
 	getgenv().ForceMeleeMode = not getgenv().ForceMeleeMode
 	lastElderCastClock = 0
-	ResetSkillCache()
 	RefreshElderButtonUI()
 	SaveConfig()
-	task.spawn(function() CheckAndEquipSkills(true, true) end)
 end)
 
 task.spawn(function()
@@ -1604,6 +1603,7 @@ end
 
 ModeBtn.MouseButton1Click:Connect(function()
 	getgenv().ManualBoss = nil
+	combatSessionId += 1
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
@@ -1651,6 +1651,7 @@ for _, bData in ipairs(BossList) do
 		else
 			getgenv().ManualBoss = bData.Name
 		end
+		combatSessionId += 1
 		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		lastServerLockedBoss = nil
@@ -1691,13 +1692,14 @@ task.spawn(function()
 
 			local targetReb = tonumber(getgenv().TargetRebAmount) or 1
 			if getgenv().AutoRebActive and previewNum >= targetReb and targetReb > 0 then
+				justRebirthed = true
 				isCurrentlyAttacking = false
 				isTransforming = false
 				currentLockedBoss = nil
 				lastServerLockedBoss = nil
-				justRebirthed = true
 				ResetSkillCache()
 				StopActiveTween()
+				task.wait(0.3)
 
 				SetStatus("👑 MULTIREB (+" .. FormatReb(previewNum) .. " Reb)!", 1)
 				pcall(function() multirebRemote:InvokeServer() end)
@@ -1706,7 +1708,6 @@ task.spawn(function()
 				ResetSkillCache()
 				table.clear(rejectedForms)
 				justRebirthed = false
-				task.spawn(function() CheckAndEquipSkills(true, true) end)
 			end
 		end
 		task.wait(0.4)
@@ -1829,24 +1830,28 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	newChar:WaitForChild("Humanoid", 8)
 	task.wait(0.2)
 	UpdateFloatState()
-	CheckAndEquipSkills(true, true)
 end))
 
 task.spawn(function()
 	while IsCurrentSession() do
 		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isEquippingSkills and not pendingForceReEquip then
+			local char = localPlayer.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
 			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			local currentKi = kiObj and tonumber(kiObj.Value) or 1000
-			local maxKi = 1000
+			local wsHum = wsChar and wsChar:FindFirstChildOfClass("Humanoid")
+			if char and hum and hum.Health > 0 and wsChar and wsHum and wsHum.Health > 0 then
+				local kiObj = wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
+				local currentKi = kiObj and tonumber(kiObj.Value) or 1000
+				local maxKi = 1000
 
-			if currentKi < maxKi then
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-				end)()
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
-				end)()
+				if currentKi < maxKi then
+					coroutine.wrap(function()
+						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+					end)()
+					coroutine.wrap(function()
+						pcall(function() chaRemote:InvokeServer("Blacknwhite27") end)
+					end)()
+				end
 			end
 		end
 		task.wait(0.04)
@@ -1926,6 +1931,10 @@ local function EnsureFormAndKaioken()
 		currentLockedBoss = nil
 		StopActiveTween()
 
+		while isEquippingSkills and IsCurrentSession() do
+			task.wait(0.05)
+		end
+
 		while getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
 			if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
 				isTransforming = false
@@ -1978,7 +1987,6 @@ local function EnsureFormAndKaioken()
 		if targetForm and not MatchesForm(actual.Value, targetForm) then
 			return false
 		end
-		CheckAndEquipSkills(false, true)
 	end
 
 	if not IsKaiokenCurrentlyActive() then
@@ -2036,12 +2044,13 @@ local function EnsureFormAndKaioken()
 		isTransforming = false
 	end
 
+	-- Equipaggia le skill SOLO DOPO che Forma e Kaioken sono completati al 100%
 	CheckAndEquipSkills(false, true)
 
 	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO (ELDER ERASURE AUTOMATICO >=30Sp O MELEE)
+-- ⚔️ SISTEMA DI COMBATTIMENTO CON BLOCCO ANTI-KICK 267 (CanAttackNow)
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -2107,20 +2116,37 @@ local function GetStrongerNoQuestBoss(myDef, minDefToBeat)
 	return nil
 end
 
-local function IsPlayerAliveForAttack()
+local function CanAttackNow(expectedSession, requiredSkill)
+	if expectedSession and expectedSession ~= combatSessionId then return false end
+	if not getgenv().AutoFarmActive or not isCurrentlyAttacking or isTransforming or justRebirthed or isEquippingSkills then
+		return false
+	end
 	local char = localPlayer.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	return (char and hum and hum.Health > 0) and getgenv().AutoFarmActive and not justRebirthed and not isTransforming
+	if not char or not hum or hum.Health <= 0 or hum:GetState() == Enum.HumanoidStateType.Dead then
+		return false
+	end
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	local wsHum = wsChar and wsChar:FindFirstChildOfClass("Humanoid")
+	if not wsChar or not wsHum or wsHum.Health <= 0 then
+		return false
+	end
+	if requiredSkill and not equippedSkills[requiredSkill] then
+		return false
+	end
+	return true
 end
 
--- 👊 THREAD PUGNI INDIPENDENTE (Si ferma all'istante se muori o se sei in Elder Erasure)
+-- 👊 THREAD PUGNI INDIPENDENTE (Bloccato all'istante da CanAttackNow)
 task.spawn(function()
 	local comboStep = false
 	while IsCurrentSession() do
-		if IsPlayerAliveForAttack() and isCurrentlyAttacking and currentLockedBoss and not IsElderModeActiveNow() then
+		local mySession = combatSessionId
+		if CanAttackNow(mySession, nil) and currentLockedBoss and not IsElderModeActiveNow() then
 			EnsureServerLockOn(currentLockedBoss)
 			comboStep = not comboStep
 			pcall(function()
+				if not CanAttackNow(mySession, nil) then return end
 				if comboStep then
 					punchRemote:FireServer("Blacknwhite27", 1, false)
 				else
@@ -2133,12 +2159,18 @@ task.spawn(function()
 end)
 
 local function DoFullAttack(bossModel, bossEntry)
-	if not IsPlayerAliveForAttack() then return end
+	local mySession = combatSessionId
+	local char = localPlayer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not hum or hum.Health <= 0 or not getgenv().AutoFarmActive or justRebirthed or isTransforming then
+		return
+	end
+
 	EnsureServerLockOn(bossModel)
 	CheckAndEquipSkills(false, true)
 
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
-	if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
+	if mySession ~= combatSessionId or not bossHum or bossHum.Health <= 0 then return end
 
 	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN 31s DALLA GUI)
 	if IsElderModeActiveNow() and equippedSkills["Elder Erasure"] then
@@ -2152,16 +2184,18 @@ local function DoFullAttack(bossModel, bossEntry)
 				isCurrentlyAttacking = true
 				task.wait(0.15)
 			end
-			if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
+			if not CanAttackNow(mySession, "Elder Erasure") or not bossHum or bossHum.Health <= 0 then return end
 			isCurrentlyAttacking = true
 			lastElderCastClock = os.clock()
 			SetStatus(string.format("🔮 LANCIO ELDER ERASURE -> %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 			for _ = 1, 3 do
-				if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then break end
+				if not CanAttackNow(mySession, "Elder Erasure") or not bossHum or bossHum.Health <= 0 then break end
 				coroutine.wrap(function()
-					pcall(function()
-						skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
-					end)
+					if CanAttackNow(mySession, "Elder Erasure") and bossHum and bossHum.Health > 0 then
+						pcall(function()
+							skillRemote:InvokeServer("Elder Erasure", "Blacknwhite27")
+						end)
+					end
 				end)()
 				task.wait(0.12)
 			end
@@ -2179,42 +2213,50 @@ local function DoFullAttack(bossModel, bossEntry)
 	end
 
 	-- ⚔️ MODALITÀ MELEE STANDARD
+	if not CanAttackNow(mySession, nil) then return end
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
 		for _ = 1, 3 do
-			if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
+			if not CanAttackNow(mySession, "Timeskip Breaker") or not bossHum or bossHum.Health <= 0 then return end
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
 			end)
 			coroutine.wrap(function()
-				pcall(function() skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27") end)
+				if CanAttackNow(mySession, "Timeskip Breaker") and bossHum and bossHum.Health > 0 then
+					pcall(function() skillRemote:InvokeServer("Timeskip Breaker", "Blacknwhite27") end)
+				end
 			end)()
 			task.wait(0.12)
 		end
 
-		if equippedSkills["Rose Massacre"] and IsPlayerAliveForAttack() and bossHum and bossHum.Health > 0 then
+		if equippedSkills["Rose Massacre"] and CanAttackNow(mySession, "Rose Massacre") and bossHum and bossHum.Health > 0 then
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
 			end)
 			coroutine.wrap(function()
-				pcall(function() skillRemote:InvokeServer("Rose Massacre", "Blacknwhite27") end)
+				if CanAttackNow(mySession, "Rose Massacre") and bossHum and bossHum.Health > 0 then
+					pcall(function() skillRemote:InvokeServer("Rose Massacre", "Blacknwhite27") end)
+				end
 			end)()
 			task.wait(0.20)
 		end
 
-		if IsPlayerAliveForAttack() and bossHum and bossHum.Health > 0 then
+		if CanAttackNow(mySession, nil) and bossHum and bossHum.Health > 0 then
 			pcall(function()
 				punchRemote:FireServer("Blacknwhite27", 1, false)
 				punchRemote:FireServer("Blacknwhite27", 1)
 			end)
 			for _, skill in ipairs(SkillRequirements) do
-				if skill.Name ~= "Elder Erasure" and skill.Name ~= "Timeskip Breaker" and skill.Name ~= "Rose Massacre" then
-					if equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+				local sName = skill.Name
+				if sName ~= "Elder Erasure" and sName ~= "Timeskip Breaker" and sName ~= "Rose Massacre" then
+					if equippedSkills[sName] and (not isBulmaOrHigher or HighTierSkills[sName]) then
 						coroutine.wrap(function()
-							pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
+							if CanAttackNow(mySession, sName) and bossHum and bossHum.Health > 0 then
+								pcall(function() skillRemote:InvokeServer(sName, "Blacknwhite27") end)
+							end
 						end)()
 					end
 				end
@@ -2222,15 +2264,18 @@ local function DoFullAttack(bossModel, bossEntry)
 			task.wait(0.15)
 		end
 	else
-		if not IsPlayerAliveForAttack() or not bossHum or bossHum.Health <= 0 then return end
+		if not CanAttackNow(mySession, nil) or not bossHum or bossHum.Health <= 0 then return end
 		pcall(function()
 			punchRemote:FireServer("Blacknwhite27", 1, false)
 			punchRemote:FireServer("Blacknwhite27", 1)
 
 			for _, skill in ipairs(SkillRequirements) do
-				if skill.Name ~= "Elder Erasure" and equippedSkills[skill.Name] and (not isBulmaOrHigher or HighTierSkills[skill.Name]) then
+				local sName = skill.Name
+				if sName ~= "Elder Erasure" and equippedSkills[sName] and (not isBulmaOrHigher or HighTierSkills[sName]) then
 					coroutine.wrap(function()
-						pcall(function() skillRemote:InvokeServer(skill.Name, "Blacknwhite27") end)
+						if CanAttackNow(mySession, sName) and bossHum and bossHum.Health > 0 then
+							pcall(function() skillRemote:InvokeServer(sName, "Blacknwhite27") end)
+						end
 					end)()
 				end
 			end
@@ -2305,6 +2350,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		task.wait(0.05)
 	end
 
+	combatSessionId += 1
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
 	lastServerLockedBoss = nil
@@ -2440,8 +2486,15 @@ local function CheckAndFightBoss(bossEntry)
 			local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
 			MoveToTarget(npcCF, true)
 
-			if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
-				if (localPlayer.Character.HumanoidRootPart.Position - npcCF.Position).Magnitude <= 12 then
+			-- Aspetta 0.3s fermo davanti all'NPC così il server sincronizza la posizione prima di Qaction!
+			local c = localPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+			local r = c and c:FindFirstChild("HumanoidRootPart")
+			if r and h and h.Health > 0 and (r.Position - npcCF.Position).Magnitude <= 10 then
+				r.CFrame = npcCF
+				r.AssemblyLinearVelocity = Vector3.zero
+				task.wait(0.3)
+				if h.Health > 0 and (r.Position - npcCF.Position).Magnitude <= 10 then
 					pcall(function() qActionRemote:InvokeServer(bossNpc) end)
 				end
 			end
