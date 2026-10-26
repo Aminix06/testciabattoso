@@ -2158,6 +2158,10 @@ task.spawn(function()
 	end
 end)
 
+local aeosCurrentSkill = "Timeskip Breaker" -- Alterna tra "Timeskip Breaker" e "Rose Massacre" a ogni quest
+local aeosSkillUsedInThisFight = false
+local aeosSkillCastTime = 0
+
 local function DoFullAttack(bossModel, bossEntry)
 	local mySession = combatSessionId
 	local char = localPlayer.Character
@@ -2212,8 +2216,49 @@ local function DoFullAttack(bossModel, bossEntry)
 		return
 	end
 
-	-- ⚔️ MODALITÀ MELEE STANDARD
+	-- ⚔️ MODALITÀ MELEE
 	if not CanAttackNow(mySession, nil) then return end
+
+	-- 🎯 MELEE SULL'ULTIMO BOSS (LADY AEOS): 1 SOLA SKILL PER QUEST (TIME <-> ROSE) E NIENTE GOD SLICER!
+	if bossEntry and bossEntry.Name == "Lady Aeos" and equippedSkills["Timeskip Breaker"] and equippedSkills["Rose Massacre"] then
+		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
+		local hpPct = math.floor(hpRatio * 100)
+
+		-- Se non ha ancora usato la skill assegnata a questa quest, lancia SOLO quella!
+		if not aeosSkillUsedInThisFight then
+			local skillToUse = aeosCurrentSkill
+			SetStatus(string.format("⚔️ %s [%d%%] • Uso: %s", bossEntry.Name, hpPct, skillToUse), hpRatio)
+
+			for _ = 1, 3 do
+				if not CanAttackNow(mySession, skillToUse) or not bossHum or bossHum.Health <= 0 then return end
+				pcall(function()
+					punchRemote:FireServer("Blacknwhite27", 1, false)
+					punchRemote:FireServer("Blacknwhite27", 1)
+				end)
+				coroutine.wrap(function()
+					if CanAttackNow(mySession, skillToUse) and bossHum and bossHum.Health > 0 then
+						pcall(function() skillRemote:InvokeServer(skillToUse, "Blacknwhite27") end)
+					end
+				end)()
+				task.wait(0.12)
+			end
+
+			aeosSkillUsedInThisFight = true
+			aeosSkillCastTime = os.clock()
+		else
+			-- Ha già lanciato la skill di questa quest: tira solo pugni finché il boss muore
+			-- (Se dopo 4 secondi è ancora vivo perché era in cooldown, passa all'altra tra Time e Rose)
+			SetStatus(string.format("👊 %s [%d%%] • (%s)", bossEntry.Name, hpPct, aeosCurrentSkill), hpRatio)
+			if (os.clock() - aeosSkillCastTime) >= 4.0 then
+				aeosCurrentSkill = (aeosCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
+				aeosSkillUsedInThisFight = false
+			end
+			task.wait(0.1)
+		end
+		return
+	end
+
+	-- ⚔️ MODALITÀ MELEE STANDARD (PER GLI ALTRI BOSS)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
@@ -2288,6 +2333,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 	local questVal = playerData and playerData:FindFirstChild("Quest")
 
 	CheckAndEquipSkills(false, true)
+	aeosSkillUsedInThisFight = false -- Nuovo combattimento: pronto a usare la skill del turno!
 
 	while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
@@ -2340,14 +2386,21 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			else
 				if not elderActive then
 					isCurrentlyAttacking = true
-					local hpPct = math.floor(hpRatio * 100)
-					SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+					if bossEntry.Name ~= "Lady Aeos" then
+						local hpPct = math.floor(hpRatio * 100)
+						SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+					end
 				end
 				DoFullAttack(currentBoss, bossEntry)
 			end
 		end
 
 		task.wait(0.05)
+	end
+
+	-- Se stava combattendo Lady Aeos ed è morta / finita la quest, passa all'altra skill per la prossima quest!
+	if bossEntry and bossEntry.Name == "Lady Aeos" and aeosSkillUsedInThisFight then
+		aeosCurrentSkill = (aeosCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
 	end
 
 	combatSessionId += 1
@@ -2363,7 +2416,6 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		end
 	end)
 end
-
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
