@@ -38,10 +38,11 @@ local multirebRemote = Events:WaitForChild("Multireb")
 local qActionRemote = Events:WaitForChild("Qaction")
 local lockyRemote = Events:WaitForChild("locky")
 
--- 🔢 GESTIONE REBIRTH E FORMATTAZIONE STATISTICHE
+-- 🔢 GESTIONE REBIRTH E FORMATTAZIONE STATISTICHE (FINO A DC)
 local SuffixMultipliers = {
 	k = 1e3, m = 1e6, b = 1e9, t = 1e12,
-	qd = 1e15, qa = 1e15, qi = 1e18, sx = 1e21, sp = 1e24
+	qd = 1e15, qa = 1e15, qi = 1e18, sx = 1e21, sp = 1e24,
+	oc = 1e27, no = 1e30, dc = 1e33
 }
 
 local function ParseRebirthInt(res)
@@ -86,7 +87,10 @@ end
 
 local function FormatStat(n)
 	n = tonumber(n) or 0
-	if n >= 1e24 then return string.format("%.2fSp", n / 1e24)
+	if n >= 1e33 then return string.format("%.2fDc", n / 1e33)
+	elseif n >= 1e30 then return string.format("%.2fNo", n / 1e30)
+	elseif n >= 1e27 then return string.format("%.2fOc", n / 1e27)
+	elseif n >= 1e24 then return string.format("%.2fSp", n / 1e24)
 	elseif n >= 1e21 then return string.format("%.2fSx", n / 1e21)
 	elseif n >= 1e18 then return string.format("%.2fQi", n / 1e18)
 	elseif n >= 1e15 then return string.format("%.2fQd", n / 1e15)
@@ -104,13 +108,17 @@ local NO_FORM_MAX_DEF = 300000
 local BULMA_MIN_DEF = 600e18
 local MAX_PLAYERS_IN_SERVER = 1
 
--- Costanti Modalità 30Sp (Alt Melee & Elder Erasure)
+-- Costanti Soglie Automatiche Modalità (30Sp, 150Sp, 700Sp, 10Oc)
 local ELDER_MIN_STAT = 30e24       -- 30 Sp
-local ELDER_MIN_REB = 200000000    -- 200M Reb
+local LUCIF_ALT_STAT = 150e24      -- 150 Sp
+local AEOS_MIN_STAT  = 700e24      -- 700 Sp
+local AEOS_ALT_STAT  = 10e27       -- 10 Oc
+local ELDER_MIN_REB  = 200000000   -- 200M Reb
 local ELDER_DISTANCE = 50          -- 50 = 50 stud DAVANTI al boss (metti -50 se lo vuoi DIETRO)
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
+getgenv().AutoAttackMode = true    -- true = sceglie in automatico tra Melee 1, Alt 2 ed Elder 3 in base alle stat!
 getgenv().AttackMode = 1           -- 1 = Melee Normale | 2 = Melee Alternato (da 30Sp) | 3 = Elder Erasure (da 30Sp + 200M Reb)
 getgenv().ElderCooldown = 31       -- Cooldown di base 31 secondi (modificabile dalla GUI)
 getgenv().TargetRebAmount = 20e6
@@ -140,6 +148,9 @@ if isfile and isfile(ConfigFileName) then
 		if tonumber(decoded.HubUIScale) then
 			getgenv().HubUIScale = math.clamp(tonumber(decoded.HubUIScale), 0.65, 1.55)
 		end
+		if type(decoded.AutoAttackMode) == "boolean" then
+			getgenv().AutoAttackMode = decoded.AutoAttackMode
+		end
 		if tonumber(decoded.AttackMode) then
 			getgenv().AttackMode = math.clamp(math.floor(tonumber(decoded.AttackMode)), 1, 3)
 		end
@@ -159,6 +170,7 @@ local function SaveConfig()
 				TargetRebAmount = getgenv().TargetRebAmount,
 				StatsUIScale = tonumber(string.format("%.2f", getgenv().StatsUIScale)),
 				HubUIScale = tonumber(string.format("%.2f", getgenv().HubUIScale)),
+				AutoAttackMode = getgenv().AutoAttackMode,
 				AttackMode = getgenv().AttackMode,
 				ElderCooldown = getgenv().ElderCooldown
 			}))
@@ -179,8 +191,13 @@ local rejectedForms = {}
 local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
+local activeTween = nil
+local currentLockedBoss = nil
+local behindDistance = -2.2
+local connections = {}
+local cachedCharParts = {}
 
--- Controlla se il giocatore ha almeno 30Sp (per il 2° punto: Melee Alternato)
+-- Controlla se il giocatore ha almeno 30Sp
 local function Has30SpRequirements()
 	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not pData then return false end
@@ -190,7 +207,7 @@ local function Has30SpRequirements()
 	return (myStr >= ELDER_MIN_STAT and mySpd >= ELDER_MIN_STAT and myDef >= ELDER_MIN_STAT)
 end
 
--- Controlla se il giocatore ha almeno 30Sp e 200M Reb (per il 3° punto: Elder Erasure)
+-- Controlla se il giocatore ha almeno 30Sp e 200M Reb
 local function HasElderRequirements()
 	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not pData then return false end
@@ -198,12 +215,88 @@ local function HasElderRequirements()
 	return Has30SpRequirements() and (myReb >= ELDER_MIN_REB)
 end
 
+-- Controlla se si sta farmando da Lady Aeos (in quel caso Melee 1 è SEMPRE vietato!)
+local function IsFarmingLadyAeos()
+	if getgenv().ManualBoss == "Lady Aeos" then return true end
+	if currentLockedBoss and currentLockedBoss.Name == "Lady Aeos" then return true end
+	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not pData then return false end
+	local qVal = pData:FindFirstChild("Quest") and tostring(pData.Quest.Value or "") or ""
+	if qVal == "Lady Aeos" then return true end
+	if getgenv().ManualBoss == nil then
+		local myDef = tonumber(pData:FindFirstChild("Defense") and pData.Defense.Value) or 0
+		if myDef >= AEOS_MIN_STAT then
+			local npcFolder = workspace:FindFirstChild("Others") and workspace.Others:FindFirstChild("NPCs")
+			local hasAeosNpc = npcFolder and npcFolder:FindFirstChild("Lady Aeos")
+			local hasAeosBoss = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild("Lady Aeos")
+			if hasAeosNpc or hasAeosBoss then return true end
+		end
+	end
+	return false
+end
+
+-- Calcola la modalità automatica in base agli scaglioni richiesti:
+-- 0 - 30Sp -> 1 (Melee) | 30Sp - 150Sp -> 3 (Elder) | 150Sp - 700Sp -> 2 (Alt) | 700Sp - 10Oc -> 3 (Elder) | >= 10Oc -> 2 (Alt)
+local function GetAutoCalculatedMode()
+	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not pData then return 1 end
+	local myStr = tonumber(pData:FindFirstChild("Strength") and pData.Strength.Value) or 0
+	local mySpd = tonumber(pData:FindFirstChild("Speed") and pData.Speed.Value) or 0
+	local myDef = tonumber(pData:FindFirstChild("Defense") and pData.Defense.Value) or 0
+	local minStat = math.min(myStr, mySpd, myDef)
+
+	if minStat < ELDER_MIN_STAT then
+		return 1 -- 0 - 30Sp: Melee 1
+	elseif minStat < LUCIF_ALT_STAT then
+		return HasElderRequirements() and 3 or 2 -- 30Sp - 150Sp: Elder 3
+	elseif minStat < AEOS_MIN_STAT then
+		return 2 -- 150Sp - 700Sp: Alt 2
+	elseif minStat < AEOS_ALT_STAT then
+		return HasElderRequirements() and 3 or 2 -- 700Sp - 10Oc: Elder 3
+	else
+		return 2 -- 10Oc in su: Alt 2
+	end
+end
+
+-- Restituisce la modalità effettiva attuale (1, 2 o 3) garantendo il blocco di Melee 1 su Lady Aeos
+local function GetEffectiveAttackMode()
+	if getgenv().AutoAttackMode then
+		local autoM = GetAutoCalculatedMode()
+		if IsFarmingLadyAeos() and autoM == 1 then
+			autoM = HasElderRequirements() and 3 or 2
+		end
+		getgenv().AttackMode = autoM
+		return autoM
+	end
+
+	local m = getgenv().AttackMode or 1
+	if m == 3 and not HasElderRequirements() then
+		m = Has30SpRequirements() and 2 or 1
+	elseif m == 2 and not Has30SpRequirements() then
+		m = 1
+	end
+
+	-- Blocco assoluto: se stai farmando da Lady Aeos, Melee 1 non può MAI essere attivo!
+	if m == 1 and IsFarmingLadyAeos() then
+		local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+		local myDef = tonumber(pData and pData:FindFirstChild("Defense") and pData.Defense.Value) or 0
+		if myDef < AEOS_ALT_STAT and HasElderRequirements() then
+			m = 3
+		else
+			m = 2
+		end
+		getgenv().AttackMode = m
+	end
+
+	return m
+end
+
 local function IsAltMeleeModeActiveNow()
-	return getgenv().AttackMode == 2 and Has30SpRequirements()
+	return GetEffectiveAttackMode() == 2
 end
 
 local function IsElderModeActiveNow()
-	return getgenv().AttackMode == 3 and HasElderRequirements()
+	return GetEffectiveAttackMode() == 3
 end
 
 -- 🗡️ REQUISITI SKILL + FILTRO ENDGAME
@@ -268,7 +361,6 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 	local mySpd = tonumber(playerData:FindFirstChild("Speed") and playerData.Speed.Value) or 0
 	local myReb = tonumber(playerData:FindFirstChild("Rebirth") and playerData.Rebirth.Value) or 0
 
-	-- Controlla prima se c'è davvero almeno una skill sbloccata da equipaggiare
 	local needsToEquipAny = false
 	for _, skill in ipairs(SkillRequirements) do
 		if myStr >= skill.MinStat and mySpd >= skill.MinStat and myReb >= skill.MinReb then
@@ -279,7 +371,6 @@ local function CheckAndEquipSkills(forceReEquip, waitForCompletion)
 		end
 	end
 
-	-- Se sono già tutte equipaggiate, esce in 0.000s senza fermare né attacchi né Ki
 	if not needsToEquipAny then return end
 
 	isEquippingSkills = true
@@ -464,12 +555,6 @@ local function EnsureServerLockOn(bossModel)
 end
 
 -- ✈️ SISTEMA TWEEN, ANTI-SEDIE, FLOAT & LOCK-ON
-local activeTween = nil
-local currentLockedBoss = nil
-local behindDistance = -2.2
-local connections = {}
-local cachedCharParts = {}
-
 local function GetCurrentBehindDistance()
 	return IsElderModeActiveNow() and ELDER_DISTANCE or behindDistance
 end
@@ -620,7 +705,7 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
 end))
-
+-- INIZIO PARTE 2
 local function MoveToTarget(targetCFrame, waitForCompletion)
 	if not getgenv().AutoFarmActive or not IsCurrentSession() then
 		StopActiveTween()
@@ -1450,7 +1535,7 @@ table.insert(connections, UserInputService.InputChanged:Connect(function(input)
 end))
 SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text, true) end)
 
--- 🍎 SLICER A 3 PUNTI STILE APPLE (1: MELEE | 2: ALT 30Sp | 3: ELDER) + CASELLA CD
+-- 🍎 TASTO AUTO + SLICER A 3 PUNTI STILE APPLE (1: MELEE | 2: ALT | 3: ELDER) + CD
 local ElderCard = Instance.new("Frame", ConfigPage)
 ElderCard.Size = UDim2.new(1, 0, 0, 38)
 ElderCard.Position = UDim2.new(0, 0, 0, 148)
@@ -1461,9 +1546,19 @@ ecStroke.Color = Color3.fromRGB(185, 85, 255)
 ecStroke.Thickness = 1.2
 ecStroke.Transparency = 0.35
 
+local AutoModeBtn = Instance.new("TextButton", ElderCard)
+AutoModeBtn.Size = UDim2.new(0, 48, 0, 28)
+AutoModeBtn.Position = UDim2.new(0, 4, 0.5, -14)
+AutoModeBtn.BackgroundColor3 = getgenv().AutoAttackMode and Color3.fromRGB(0, 175, 115) or Color3.fromRGB(35, 42, 65)
+AutoModeBtn.Font = Enum.Font.GothamBlack
+AutoModeBtn.Text = getgenv().AutoAttackMode and "🤖 AUTO" or "🖐️ MAN"
+AutoModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+AutoModeBtn.TextSize = 8
+Instance.new("UICorner", AutoModeBtn).CornerRadius = UDim.new(0, 7)
+
 local SlicerTrack = Instance.new("Frame", ElderCard)
-SlicerTrack.Size = UDim2.new(1, -86, 0, 28)
-SlicerTrack.Position = UDim2.new(0, 5, 0.5, -14)
+SlicerTrack.Size = UDim2.new(1, -114, 0, 28)
+SlicerTrack.Position = UDim2.new(0, 55, 0.5, -14)
 SlicerTrack.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 SlicerTrack.Active = true
 Instance.new("UICorner", SlicerTrack).CornerRadius = UDim.new(1, 0)
@@ -1506,17 +1601,17 @@ for i = 1, 3 do
 	lbl.Font = Enum.Font.GothamBlack
 	lbl.Text = modeConfigs[i].Text
 	lbl.TextColor3 = Color3.fromRGB(160, 175, 205)
-	lbl.TextSize = 9
+	lbl.TextSize = 8
 	lbl.ZIndex = 3
 	modeLabels[i] = lbl
 end
 
 local ElderCdInput = Instance.new("TextBox", ElderCard)
-ElderCdInput.Size = UDim2.new(0, 72, 0, 26)
-ElderCdInput.Position = UDim2.new(1, -77, 0.5, -13)
+ElderCdInput.Size = UDim2.new(0, 52, 0, 26)
+ElderCdInput.Position = UDim2.new(1, -56, 0.5, -13)
 ElderCdInput.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 ElderCdInput.Font = Enum.Font.GothamBlack
-ElderCdInput.Text = "CD: " .. tostring(getgenv().ElderCooldown) .. "s"
+ElderCdInput.Text = tostring(getgenv().ElderCooldown) .. "s"
 ElderCdInput.TextColor3 = Color3.fromRGB(220, 160, 255)
 ElderCdInput.TextSize = 10
 ElderCdInput.ClearTextOnFocus = true
@@ -1530,9 +1625,16 @@ ElderCdInput.FocusLost:Connect(function()
 	local numStr = string.match(txt, "[%d%.]+")
 	local n = tonumber(numStr)
 	getgenv().ElderCooldown = (n and n >= 0.5) and n or 31
-	ElderCdInput.Text = "CD: " .. tostring(getgenv().ElderCooldown) .. "s"
+	ElderCdInput.Text = tostring(getgenv().ElderCooldown) .. "s"
 	SaveConfig()
 end)
+
+local function RefreshAutoModeBtnUI()
+	TweenService:Create(AutoModeBtn, TweenInfo.new(0.2), {
+		BackgroundColor3 = getgenv().AutoAttackMode and Color3.fromRGB(0, 175, 115) or Color3.fromRGB(35, 42, 65)
+	}):Play()
+	AutoModeBtn.Text = getgenv().AutoAttackMode and "🤖 AUTO" or "🖐️ MAN"
+end
 
 local function AnimateAppleSlicer(targetMode, isDraggingNow)
 	targetMode = math.clamp(targetMode or 1, 1, 3)
@@ -1551,14 +1653,32 @@ local function AnimateAppleSlicer(targetMode, isDraggingNow)
 	for i = 1, 3 do
 		TweenService:Create(modeLabels[i], TweenInfo.new(0.2), {
 			TextColor3 = (i == targetMode) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(145, 160, 190),
-			TextSize = (i == targetMode) and 10 or 9
+			TextSize = (i == targetMode) and 9 or 8
 		}):Play()
 	end
 end
 
 local slicerWarnLock = false
+local lastRenderedAttackMode = nil
+
 local function TrySelectAttackMode(requestedMode, fromDrag)
 	requestedMode = math.clamp(requestedMode, 1, 3)
+
+	-- Blocco assoluto di Melee 1 se stai farmando da Lady Aeos!
+	if requestedMode == 1 and IsFarmingLadyAeos() then
+		if not slicerWarnLock then
+			slicerWarnLock = true
+			modeLabels[1].Text = "🔒 No Lady!"
+			modeLabels[1].TextColor3 = Color3.fromRGB(255, 70, 90)
+			task.delay(1.1, function()
+				modeLabels[1].Text = modeConfigs[1].Text
+				slicerWarnLock = false
+				AnimateAppleSlicer(GetEffectiveAttackMode(), false)
+			end)
+		end
+		AnimateAppleSlicer(GetEffectiveAttackMode(), false)
+		return
+	end
 
 	if requestedMode == 2 and not Has30SpRequirements() then
 		if not slicerWarnLock then
@@ -1568,10 +1688,10 @@ local function TrySelectAttackMode(requestedMode, fromDrag)
 			task.delay(1.1, function()
 				modeLabels[2].Text = modeConfigs[2].Text
 				slicerWarnLock = false
-				AnimateAppleSlicer(getgenv().AttackMode, false)
+				AnimateAppleSlicer(GetEffectiveAttackMode(), false)
 			end)
 		end
-		AnimateAppleSlicer(getgenv().AttackMode, false)
+		AnimateAppleSlicer(GetEffectiveAttackMode(), false)
 		return
 	end
 
@@ -1583,20 +1703,30 @@ local function TrySelectAttackMode(requestedMode, fromDrag)
 			task.delay(1.1, function()
 				modeLabels[3].Text = modeConfigs[3].Text
 				slicerWarnLock = false
-				AnimateAppleSlicer(getgenv().AttackMode, false)
+				AnimateAppleSlicer(GetEffectiveAttackMode(), false)
 			end)
 		end
-		AnimateAppleSlicer(getgenv().AttackMode, false)
+		AnimateAppleSlicer(GetEffectiveAttackMode(), false)
 		return
 	end
 
-	if getgenv().AttackMode ~= requestedMode then
-		getgenv().AttackMode = requestedMode
-		lastElderCastClock = 0
-		SaveConfig()
-	end
+	getgenv().AutoAttackMode = false
+	getgenv().AttackMode = requestedMode
+	lastElderCastClock = 0
+	lastRenderedAttackMode = requestedMode
+	RefreshAutoModeBtnUI()
+	SaveConfig()
 	AnimateAppleSlicer(requestedMode, fromDrag)
 end
+
+AutoModeBtn.MouseButton1Click:Connect(function()
+	getgenv().AutoAttackMode = not getgenv().AutoAttackMode
+	RefreshAutoModeBtnUI()
+	local eff = GetEffectiveAttackMode()
+	lastRenderedAttackMode = eff
+	AnimateAppleSlicer(eff, false)
+	SaveConfig()
+end)
 
 local draggingSlicer = false
 local function UpdateSlicerFromInput(inputPosX, isRelease)
@@ -1633,12 +1763,13 @@ table.insert(connections, UserInputService.InputEnded:Connect(function(input)
 	end
 end))
 
-local lastRenderedAttackMode = nil
 local function RefreshElderButtonUI()
 	if draggingSlicer or slicerWarnLock then return end
-	if lastRenderedAttackMode ~= getgenv().AttackMode then
-		lastRenderedAttackMode = getgenv().AttackMode
-		AnimateAppleSlicer(getgenv().AttackMode, false)
+	RefreshAutoModeBtnUI()
+	local effectiveMode = GetEffectiveAttackMode()
+	if lastRenderedAttackMode ~= effectiveMode then
+		lastRenderedAttackMode = effectiveMode
+		AnimateAppleSlicer(effectiveMode, false)
 	end
 end
 RefreshElderButtonUI()
@@ -2347,8 +2478,9 @@ local function DoFullAttack(bossModel, bossEntry)
 
 	if not CanAttackNow(mySession, nil) then return end
 
-	-- ⚡ PUNTO 2: MELEE ALTERNATO DA 30Sp (1 SKILL PER QUEST: TIME <-> ROSE, NIENTE GOD SLICER!)
-	if IsAltMeleeModeActiveNow() and equippedSkills["Timeskip Breaker"] and equippedSkills["Rose Massacre"] then
+	-- ⚡ PUNTO 2 (O SEMPRE SE CONTRO LADY AEOS): MELEE ALTERNATO (1 SKILL PER QUEST: TIME <-> ROSE, MAI GOD SLICER!)
+	local isAeosBoss = (bossEntry and bossEntry.Name == "Lady Aeos")
+	if (IsAltMeleeModeActiveNow() or isAeosBoss) and equippedSkills["Timeskip Breaker"] and equippedSkills["Rose Massacre"] then
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 		local hpPct = math.floor(hpRatio * 100)
 
@@ -2383,7 +2515,7 @@ local function DoFullAttack(bossModel, bossEntry)
 		return
 	end
 
-	-- 👊 PUNTO 1: MODALITÀ MELEE NORMALE
+	-- 👊 PUNTO 1: MODALITÀ MELEE NORMALE (MAI ATTIVA SU LADY AEOS)
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
@@ -2485,7 +2617,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		EnsureServerLockOn(currentBoss)
 
 		local elderActive = IsElderModeActiveNow()
-		local altActive = IsAltMeleeModeActiveNow()
+		local altActive = IsAltMeleeModeActiveNow() or (bossEntry.Name == "Lady Aeos")
 		local distOffset = GetCurrentBehindDistance()
 		local targetBehindPos = bossHRP.Position + (bossHRP.CFrame.LookVector * distOffset)
 		local distToSpot = (hrp.Position - targetBehindPos).Magnitude
