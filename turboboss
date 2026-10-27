@@ -104,14 +104,14 @@ local NO_FORM_MAX_DEF = 300000
 local BULMA_MIN_DEF = 600e18
 local MAX_PLAYERS_IN_SERVER = 1
 
--- Costanti Elder Erasure
+-- Costanti Modalità 30Sp (Alt Melee & Elder Erasure)
 local ELDER_MIN_STAT = 30e24       -- 30 Sp
 local ELDER_MIN_REB = 200000000    -- 200M Reb
 local ELDER_DISTANCE = 50          -- 50 = 50 stud DAVANTI al boss (metti -50 se lo vuoi DIETRO)
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
-getgenv().ForceMeleeMode = false   -- false = usa Elder Erasure in automatico appena hai 30Sp e 200M Reb
+getgenv().AttackMode = 1           -- 1 = Melee Normale | 2 = Melee Alternato (da 30Sp) | 3 = Elder Erasure (da 30Sp + 200M Reb)
 getgenv().ElderCooldown = 31       -- Cooldown di base 31 secondi (modificabile dalla GUI)
 getgenv().TargetRebAmount = 20e6
 getgenv().KaiokenWaitTime = 1
@@ -140,8 +140,8 @@ if isfile and isfile(ConfigFileName) then
 		if tonumber(decoded.HubUIScale) then
 			getgenv().HubUIScale = math.clamp(tonumber(decoded.HubUIScale), 0.65, 1.55)
 		end
-		if type(decoded.ForceMeleeMode) == "boolean" then
-			getgenv().ForceMeleeMode = decoded.ForceMeleeMode
+		if tonumber(decoded.AttackMode) then
+			getgenv().AttackMode = math.clamp(math.floor(tonumber(decoded.AttackMode)), 1, 3)
 		end
 		if tonumber(decoded.ElderCooldown) then
 			getgenv().ElderCooldown = math.max(0.5, tonumber(decoded.ElderCooldown))
@@ -159,7 +159,7 @@ local function SaveConfig()
 				TargetRebAmount = getgenv().TargetRebAmount,
 				StatsUIScale = tonumber(string.format("%.2f", getgenv().StatsUIScale)),
 				HubUIScale = tonumber(string.format("%.2f", getgenv().HubUIScale)),
-				ForceMeleeMode = getgenv().ForceMeleeMode,
+				AttackMode = getgenv().AttackMode,
 				ElderCooldown = getgenv().ElderCooldown
 			}))
 		end)
@@ -180,20 +180,30 @@ local confirmedNoQuestBosses = {}
 local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 
--- Controlla se il giocatore possiede almeno 30Sp e 200M Reb
-local function HasElderRequirements()
+-- Controlla se il giocatore ha almeno 30Sp (per il 2° punto: Melee Alternato)
+local function Has30SpRequirements()
 	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	if not pData then return false end
 	local myStr = tonumber(pData:FindFirstChild("Strength") and pData.Strength.Value) or 0
 	local mySpd = tonumber(pData:FindFirstChild("Speed") and pData.Speed.Value) or 0
 	local myDef = tonumber(pData:FindFirstChild("Defense") and pData.Defense.Value) or 0
-	local myReb = tonumber(pData:FindFirstChild("Rebirth") and pData.Rebirth.Value) or 0
-	return (myStr >= ELDER_MIN_STAT and mySpd >= ELDER_MIN_STAT and myDef >= ELDER_MIN_STAT and myReb >= ELDER_MIN_REB)
+	return (myStr >= ELDER_MIN_STAT and mySpd >= ELDER_MIN_STAT and myDef >= ELDER_MIN_STAT)
 end
 
--- Attiva SEMPRE Elder Erasure quando hai 30Sp e 200M Reb, a meno che tu non abbia scelto "Solo Melee" nella GUI
+-- Controlla se il giocatore ha almeno 30Sp e 200M Reb (per il 3° punto: Elder Erasure)
+local function HasElderRequirements()
+	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if not pData then return false end
+	local myReb = tonumber(pData:FindFirstChild("Rebirth") and pData.Rebirth.Value) or 0
+	return Has30SpRequirements() and (myReb >= ELDER_MIN_REB)
+end
+
+local function IsAltMeleeModeActiveNow()
+	return getgenv().AttackMode == 2 and Has30SpRequirements()
+end
+
 local function IsElderModeActiveNow()
-	return (not getgenv().ForceMeleeMode) and HasElderRequirements()
+	return getgenv().AttackMode == 3 and HasElderRequirements()
 end
 
 -- 🗡️ REQUISITI SKILL + FILTRO ENDGAME
@@ -374,7 +384,7 @@ local BossList = {
 	{Name = "Wukong (LBSSJ4)",                        Boss = "Wukong (LBSSJ4)",                        MinDef = 4.8e12},
 	{Name = "Vegetable (LBSSJ4)",                     Boss = "Vegetable (LBSSJ4)",                     MinDef = 3.6e12},
 	{Name = "Vis (40%)",                              Boss = "Vis (40%)",                              MinDef = 2.4e12, NoQuest = true},
-	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.2e12},
+	{Name = "Vis (20%)",                              Boss = "Vis (20%)",                              MinDef = 1.3e12},
 	{Name = "Vills 50%",                              Boss = "Vills 50%",                              MinDef = 912e9},
 	{Name = "Nohag (Beast)",                          Boss = "Nohag (Beast)",                          MinDef = 712e9},
 	{Name = "SSJG Kakata",                            Boss = "SSJG Kakata",                            MinDef = 560e9},
@@ -610,7 +620,7 @@ table.insert(connections, RunService.RenderStepped:Connect(function()
 		camera.CFrame = CFrame.new(camera.CFrame.Position, eHrp.Position)
 	end
 end))
--- INIZIO PARTE 2
+
 local function MoveToTarget(targetCFrame, waitForCompletion)
 	if not getgenv().AutoFarmActive or not IsCurrentSession() then
 		StopActiveTween()
@@ -1440,10 +1450,10 @@ table.insert(connections, UserInputService.InputChanged:Connect(function(input)
 end))
 SpeedInput.FocusLost:Connect(function() SetTweenSpeed(SpeedInput.Text, true) end)
 
--- 🔮 TASTO SCELTA (AUTO ELDER / FORZA MELEE) + CASELLA COOLDOWN (s)
+-- 🍎 SLICER A 3 PUNTI STILE APPLE (1: MELEE | 2: ALT 30Sp | 3: ELDER) + CASELLA CD
 local ElderCard = Instance.new("Frame", ConfigPage)
-ElderCard.Size = UDim2.new(1, 0, 0, 36)
-ElderCard.Position = UDim2.new(0, 0, 0, 150)
+ElderCard.Size = UDim2.new(1, 0, 0, 38)
+ElderCard.Position = UDim2.new(0, 0, 0, 148)
 ElderCard.BackgroundColor3 = Color3.fromRGB(18, 22, 36)
 Instance.new("UICorner", ElderCard).CornerRadius = UDim.new(0, 10)
 local ecStroke = Instance.new("UIStroke", ElderCard)
@@ -1451,67 +1461,187 @@ ecStroke.Color = Color3.fromRGB(185, 85, 255)
 ecStroke.Thickness = 1.2
 ecStroke.Transparency = 0.35
 
-local ElderModeBtn = Instance.new("TextButton", ElderCard)
-ElderModeBtn.Size = UDim2.new(1, -130, 0, 26)
-ElderModeBtn.Position = UDim2.new(0, 6, 0.5, -13)
-ElderModeBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 235)
-ElderModeBtn.Font = Enum.Font.GothamBlack
-ElderModeBtn.Text = "🔮 AUTO ELDER"
-ElderModeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-ElderModeBtn.TextSize = 9
-Instance.new("UICorner", ElderModeBtn).CornerRadius = UDim.new(0, 7)
+local SlicerTrack = Instance.new("Frame", ElderCard)
+SlicerTrack.Size = UDim2.new(1, -86, 0, 28)
+SlicerTrack.Position = UDim2.new(0, 5, 0.5, -14)
+SlicerTrack.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
+SlicerTrack.Active = true
+Instance.new("UICorner", SlicerTrack).CornerRadius = UDim.new(1, 0)
+local trackStroke = Instance.new("UIStroke", SlicerTrack)
+trackStroke.Color = Color3.fromRGB(45, 55, 85)
+trackStroke.Thickness = 1
 
-local ElderCdLbl = Instance.new("TextLabel", ElderCard)
-ElderCdLbl.Size = UDim2.new(0, 48, 1, 0)
-ElderCdLbl.Position = UDim2.new(1, -118, 0, 0)
-ElderCdLbl.BackgroundTransparency = 1
-ElderCdLbl.Font = Enum.Font.GothamBlack
-ElderCdLbl.Text = "⏱️ CD(s):"
-ElderCdLbl.TextColor3 = Color3.fromRGB(215, 145, 255)
-ElderCdLbl.TextSize = 9
-ElderCdLbl.TextXAlignment = Enum.TextXAlignment.Right
+local SlicerBubble = Instance.new("Frame", SlicerTrack)
+SlicerBubble.Size = UDim2.new(0.333, -4, 1, -4)
+SlicerBubble.Position = UDim2.new(0, 2, 0, 2)
+SlicerBubble.BackgroundColor3 = Color3.fromRGB(0, 150, 235)
+SlicerBubble.ZIndex = 2
+Instance.new("UICorner", SlicerBubble).CornerRadius = UDim.new(1, 0)
+
+local bubbleGrad = Instance.new("UIGradient", SlicerBubble)
+bubbleGrad.Rotation = 90
+bubbleGrad.Color = ColorSequence.new{
+	ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+	ColorSequenceKeypoint.new(0.25, Color3.fromRGB(210, 230, 255)),
+	ColorSequenceKeypoint.new(1, Color3.fromRGB(150, 175, 220))
+}
+
+local bubbleStroke = Instance.new("UIStroke", SlicerBubble)
+bubbleStroke.Color = Color3.fromRGB(255, 255, 255)
+bubbleStroke.Thickness = 1.4
+bubbleStroke.Transparency = 0.25
+
+local modeConfigs = {
+	[1] = {Text = "👊 Melee",  Color = Color3.fromRGB(0, 150, 235)},
+	[2] = {Text = "⚡ Alt",    Color = Color3.fromRGB(235, 135, 15)},
+	[3] = {Text = "🔮 Elder",  Color = Color3.fromRGB(155, 50, 245)}
+}
+
+local modeLabels = {}
+for i = 1, 3 do
+	local lbl = Instance.new("TextLabel", SlicerTrack)
+	lbl.Size = UDim2.new(0.333, 0, 1, 0)
+	lbl.Position = UDim2.new((i - 1) / 3, 0, 0, 0)
+	lbl.BackgroundTransparency = 1
+	lbl.Font = Enum.Font.GothamBlack
+	lbl.Text = modeConfigs[i].Text
+	lbl.TextColor3 = Color3.fromRGB(160, 175, 205)
+	lbl.TextSize = 9
+	lbl.ZIndex = 3
+	modeLabels[i] = lbl
+end
 
 local ElderCdInput = Instance.new("TextBox", ElderCard)
-ElderCdInput.Size = UDim2.new(0, 58, 0, 24)
-ElderCdInput.Position = UDim2.new(1, -64, 0.5, -12)
+ElderCdInput.Size = UDim2.new(0, 72, 0, 26)
+ElderCdInput.Position = UDim2.new(1, -77, 0.5, -13)
 ElderCdInput.BackgroundColor3 = Color3.fromRGB(10, 12, 20)
 ElderCdInput.Font = Enum.Font.GothamBlack
-ElderCdInput.Text = tostring(getgenv().ElderCooldown)
+ElderCdInput.Text = "CD: " .. tostring(getgenv().ElderCooldown) .. "s"
 ElderCdInput.TextColor3 = Color3.fromRGB(220, 160, 255)
-ElderCdInput.TextSize = 11
-ElderCdInput.ClearTextOnFocus = false
-Instance.new("UICorner", ElderCdInput).CornerRadius = UDim.new(0, 6)
+ElderCdInput.TextSize = 10
+ElderCdInput.ClearTextOnFocus = true
+Instance.new("UICorner", ElderCdInput).CornerRadius = UDim.new(0, 7)
+local cdStroke = Instance.new("UIStroke", ElderCdInput)
+cdStroke.Color = Color3.fromRGB(70, 50, 110)
+cdStroke.Thickness = 1
 
 ElderCdInput.FocusLost:Connect(function()
 	local txt = string.gsub(ElderCdInput.Text, ",", ".")
-	local n = tonumber(txt)
+	local numStr = string.match(txt, "[%d%.]+")
+	local n = tonumber(numStr)
 	getgenv().ElderCooldown = (n and n >= 0.5) and n or 31
-	ElderCdInput.Text = tostring(getgenv().ElderCooldown)
+	ElderCdInput.Text = "CD: " .. tostring(getgenv().ElderCooldown) .. "s"
 	SaveConfig()
 end)
 
-local function RefreshElderButtonUI()
-	if getgenv().ForceMeleeMode then
-		ElderModeBtn.BackgroundColor3 = Color3.fromRGB(215, 85, 30)
-		ElderModeBtn.Text = "👊 MODO: SOLO MELEE"
-	else
-		if HasElderRequirements() then
-			ElderModeBtn.BackgroundColor3 = Color3.fromRGB(140, 45, 235)
-			ElderModeBtn.Text = "🔮 ELDER: ATTIVO (30Sp)"
-		else
-			ElderModeBtn.BackgroundColor3 = Color3.fromRGB(65, 50, 115)
-			ElderModeBtn.Text = "🔮 AUTO ELDER (<30Sp)"
+local function AnimateAppleSlicer(targetMode, isDraggingNow)
+	targetMode = math.clamp(targetMode or 1, 1, 3)
+	local targetScaleX = (targetMode - 1) / 3
+
+	if not isDraggingNow then
+		SlicerBubble.Size = UDim2.new(0.37, -2, 1, -2)
+	end
+
+	TweenService:Create(SlicerBubble, TweenInfo.new(0.32, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+		Position = UDim2.new(targetScaleX, 2, 0, 2),
+		Size = UDim2.new(0.333, -4, 1, -4),
+		BackgroundColor3 = modeConfigs[targetMode].Color
+	}):Play()
+
+	for i = 1, 3 do
+		TweenService:Create(modeLabels[i], TweenInfo.new(0.2), {
+			TextColor3 = (i == targetMode) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(145, 160, 190),
+			TextSize = (i == targetMode) and 10 or 9
+		}):Play()
+	end
+end
+
+local slicerWarnLock = false
+local function TrySelectAttackMode(requestedMode, fromDrag)
+	requestedMode = math.clamp(requestedMode, 1, 3)
+
+	if requestedMode == 2 and not Has30SpRequirements() then
+		if not slicerWarnLock then
+			slicerWarnLock = true
+			modeLabels[2].Text = "🔒 30Sp!"
+			modeLabels[2].TextColor3 = Color3.fromRGB(255, 70, 90)
+			task.delay(1.1, function()
+				modeLabels[2].Text = modeConfigs[2].Text
+				slicerWarnLock = false
+				AnimateAppleSlicer(getgenv().AttackMode, false)
+			end)
 		end
+		AnimateAppleSlicer(getgenv().AttackMode, false)
+		return
+	end
+
+	if requestedMode == 3 and not HasElderRequirements() then
+		if not slicerWarnLock then
+			slicerWarnLock = true
+			modeLabels[3].Text = "🔒 30Sp!"
+			modeLabels[3].TextColor3 = Color3.fromRGB(255, 70, 90)
+			task.delay(1.1, function()
+				modeLabels[3].Text = modeConfigs[3].Text
+				slicerWarnLock = false
+				AnimateAppleSlicer(getgenv().AttackMode, false)
+			end)
+		end
+		AnimateAppleSlicer(getgenv().AttackMode, false)
+		return
+	end
+
+	if getgenv().AttackMode ~= requestedMode then
+		getgenv().AttackMode = requestedMode
+		lastElderCastClock = 0
+		SaveConfig()
+	end
+	AnimateAppleSlicer(requestedMode, fromDrag)
+end
+
+local draggingSlicer = false
+local function UpdateSlicerFromInput(inputPosX, isRelease)
+	local relX = math.clamp((inputPosX - SlicerTrack.AbsolutePosition.X) / math.max(SlicerTrack.AbsoluteSize.X, 1), 0, 0.999)
+	local hoveredMode = math.floor(relX * 3) + 1
+
+	if not isRelease then
+		local bubbleRelX = math.clamp(relX - 0.166, 0, 0.666)
+		TweenService:Create(SlicerBubble, TweenInfo.new(0.08, Enum.EasingStyle.Sine, Enum.EasingDirection.Out), {
+			Position = UDim2.new(bubbleRelX, 2, 0, 1),
+			Size = UDim2.new(0.36, -2, 1, -2),
+			BackgroundColor3 = modeConfigs[hoveredMode].Color
+		}):Play()
+	else
+		TrySelectAttackMode(hoveredMode, false)
+	end
+end
+
+SlicerTrack.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingSlicer = true
+		UpdateSlicerFromInput(input.Position.X, false)
+	end
+end)
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+	if draggingSlicer and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		UpdateSlicerFromInput(input.Position.X, false)
+	end
+end))
+table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+	if draggingSlicer and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+		draggingSlicer = false
+		UpdateSlicerFromInput(input.Position.X, true)
+	end
+end))
+
+local lastRenderedAttackMode = nil
+local function RefreshElderButtonUI()
+	if draggingSlicer or slicerWarnLock then return end
+	if lastRenderedAttackMode ~= getgenv().AttackMode then
+		lastRenderedAttackMode = getgenv().AttackMode
+		AnimateAppleSlicer(getgenv().AttackMode, false)
 	end
 end
 RefreshElderButtonUI()
-
-ElderModeBtn.MouseButton1Click:Connect(function()
-	getgenv().ForceMeleeMode = not getgenv().ForceMeleeMode
-	lastElderCastClock = 0
-	RefreshElderButtonUI()
-	SaveConfig()
-end)
 
 task.spawn(function()
 	while IsCurrentSession() do
@@ -2044,13 +2174,12 @@ local function EnsureFormAndKaioken()
 		isTransforming = false
 	end
 
-	-- Equipaggia le skill SOLO DOPO che Forma e Kaioken sono completati al 100%
 	CheckAndEquipSkills(false, true)
 
 	return ((not targetForm or MatchesForm(actual.Value, targetForm)) and IsKaiokenCurrentlyActive())
 end
 
--- ⚔️ SISTEMA DI COMBATTIMENTO CON BLOCCO ANTI-KICK 267 (CanAttackNow)
+-- ⚔️ SISTEMA DI COMBATTIMENTO (1: MELEE | 2: ALT 30Sp | 3: ELDER ERASURE)
 local function FindLivingBoss(bossEntry)
 	local character = localPlayer.Character
 	if not character or not character:FindFirstChildOfClass("Humanoid") or character.Humanoid.Health <= 0 then return nil end
@@ -2158,9 +2287,9 @@ task.spawn(function()
 	end
 end)
 
-local aeosCurrentSkill = "Timeskip Breaker" -- Alterna tra "Timeskip Breaker" e "Rose Massacre" a ogni quest
-local aeosSkillUsedInThisFight = false
-local aeosSkillCastTime = 0
+local altCurrentSkill = "Timeskip Breaker"
+local altSkillUsedInThisFight = false
+local altSkillCastTime = 0
 
 local function DoFullAttack(bossModel, bossEntry)
 	local mySession = combatSessionId
@@ -2176,7 +2305,7 @@ local function DoFullAttack(bossModel, bossEntry)
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
 	if mySession ~= combatSessionId or not bossHum or bossHum.Health <= 0 then return end
 
-	-- 🔮 MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN 31s DALLA GUI)
+	-- 🔮 PUNTO 3: MODALITÀ ELDER ERASURE (50 STUD - COOLDOWN DALLA GUI)
 	if IsElderModeActiveNow() and equippedSkills["Elder Erasure"] then
 		local cooldownSec = tonumber(getgenv().ElderCooldown) or 31
 		local elapsed = os.clock() - lastElderCastClock
@@ -2216,18 +2345,16 @@ local function DoFullAttack(bossModel, bossEntry)
 		return
 	end
 
-	-- ⚔️ MODALITÀ MELEE
 	if not CanAttackNow(mySession, nil) then return end
 
-	-- 🎯 MELEE SULL'ULTIMO BOSS (LADY AEOS): 1 SOLA SKILL PER QUEST (TIME <-> ROSE) E NIENTE GOD SLICER!
-	if bossEntry and bossEntry.Name == "Lady Aeos" and equippedSkills["Timeskip Breaker"] and equippedSkills["Rose Massacre"] then
+	-- ⚡ PUNTO 2: MELEE ALTERNATO DA 30Sp (1 SKILL PER QUEST: TIME <-> ROSE, NIENTE GOD SLICER!)
+	if IsAltMeleeModeActiveNow() and equippedSkills["Timeskip Breaker"] and equippedSkills["Rose Massacre"] then
 		local hpRatio = bossHum.Health / math.max(bossHum.MaxHealth, 1)
 		local hpPct = math.floor(hpRatio * 100)
 
-		-- Se non ha ancora usato la skill assegnata a questa quest, lancia SOLO quella!
-		if not aeosSkillUsedInThisFight then
-			local skillToUse = aeosCurrentSkill
-			SetStatus(string.format("⚔️ %s [%d%%] • Uso: %s", bossEntry.Name, hpPct, skillToUse), hpRatio)
+		if not altSkillUsedInThisFight then
+			local skillToUse = altCurrentSkill
+			SetStatus(string.format("⚡ %s [%d%%] • Uso: %s", bossEntry.Name, hpPct, skillToUse), hpRatio)
 
 			for _ = 1, 3 do
 				if not CanAttackNow(mySession, skillToUse) or not bossHum or bossHum.Health <= 0 then return end
@@ -2243,22 +2370,20 @@ local function DoFullAttack(bossModel, bossEntry)
 				task.wait(0.12)
 			end
 
-			aeosSkillUsedInThisFight = true
-			aeosSkillCastTime = os.clock()
+			altSkillUsedInThisFight = true
+			altSkillCastTime = os.clock()
 		else
-			-- Ha già lanciato la skill di questa quest: tira solo pugni finché il boss muore
-			-- (Se dopo 4 secondi è ancora vivo perché era in cooldown, passa all'altra tra Time e Rose)
-			SetStatus(string.format("👊 %s [%d%%] • (%s)", bossEntry.Name, hpPct, aeosCurrentSkill), hpRatio)
-			if (os.clock() - aeosSkillCastTime) >= 4.0 then
-				aeosCurrentSkill = (aeosCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
-				aeosSkillUsedInThisFight = false
+			SetStatus(string.format("👊 %s [%d%%] • (%s)", bossEntry.Name, hpPct, altCurrentSkill), hpRatio)
+			if (os.clock() - altSkillCastTime) >= 4.0 then
+				altCurrentSkill = (altCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
+				altSkillUsedInThisFight = false
 			end
 			task.wait(0.1)
 		end
 		return
 	end
 
-	-- ⚔️ MODALITÀ MELEE STANDARD (PER GLI ALTRI BOSS)
+	-- 👊 PUNTO 1: MODALITÀ MELEE NORMALE
 	local isBulmaOrHigher = (bossEntry and bossEntry.MinDef >= BULMA_MIN_DEF)
 
 	if equippedSkills["Timeskip Breaker"] then
@@ -2333,7 +2458,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 	local questVal = playerData and playerData:FindFirstChild("Quest")
 
 	CheckAndEquipSkills(false, true)
-	aeosSkillUsedInThisFight = false -- Nuovo combattimento: pronto a usare la skill del turno!
+	altSkillUsedInThisFight = false
 
 	while IsCurrentSession() and getgenv().AutoFarmActive and not justRebirthed do
 		if getgenv().ManualBoss and getgenv().ManualBoss ~= bossEntry.Name then break end
@@ -2360,6 +2485,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		EnsureServerLockOn(currentBoss)
 
 		local elderActive = IsElderModeActiveNow()
+		local altActive = IsAltMeleeModeActiveNow()
 		local distOffset = GetCurrentBehindDistance()
 		local targetBehindPos = bossHRP.Position + (bossHRP.CFrame.LookVector * distOffset)
 		local distToSpot = (hrp.Position - targetBehindPos).Magnitude
@@ -2386,7 +2512,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			else
 				if not elderActive then
 					isCurrentlyAttacking = true
-					if bossEntry.Name ~= "Lady Aeos" then
+					if not altActive then
 						local hpPct = math.floor(hpRatio * 100)
 						SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
 					end
@@ -2398,9 +2524,9 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		task.wait(0.05)
 	end
 
-	-- Se stava combattendo Lady Aeos ed è morta / finita la quest, passa all'altra skill per la prossima quest!
-	if bossEntry and bossEntry.Name == "Lady Aeos" and aeosSkillUsedInThisFight then
-		aeosCurrentSkill = (aeosCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
+	-- A fine combattimento/quest in modalità Alt, passa all'altra skill tra Time e Rose per la prossima quest!
+	if altSkillUsedInThisFight then
+		altCurrentSkill = (altCurrentSkill == "Timeskip Breaker") and "Rose Massacre" or "Timeskip Breaker"
 	end
 
 	combatSessionId += 1
@@ -2416,6 +2542,7 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 		end
 	end)
 end
+
 local function WaitForBossToSpawnAndCompleteQuest(bossEntry, hasQuestNpc, questVal)
 	isCurrentlyAttacking = false
 	currentLockedBoss = nil
@@ -2538,7 +2665,6 @@ local function CheckAndFightBoss(bossEntry)
 			local npcCF = bossNpc.HumanoidRootPart.CFrame * CFrame.new(0, 0, -3)
 			MoveToTarget(npcCF, true)
 
-			-- Aspetta 0.3s fermo davanti all'NPC così il server sincronizza la posizione prima di Qaction!
 			local c = localPlayer.Character
 			local h = c and c:FindFirstChildOfClass("Humanoid")
 			local r = c and c:FindFirstChild("HumanoidRootPart")
