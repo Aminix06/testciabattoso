@@ -106,7 +106,7 @@ local ConfigFileName = "CiabCelestialConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 300000
 local BULMA_MIN_DEF = 600e18
-local MAX_PLAYERS_IN_SERVER = 3
+local MAX_PLAYERS_IN_SERVER = 1
 
 -- Costanti Soglie Automatiche Modalità (30Sp, 150Sp, 700Sp, 10Oc)
 local ELDER_MIN_STAT = 30e24       -- 30 Sp
