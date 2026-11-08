@@ -917,7 +917,7 @@ StatsWin.Position = UDim2.new(0, 18, 0.5, -109)
 StatsWin.BackgroundColor3 = Color3.fromRGB(11, 13, 22)
 StatsWin.BackgroundTransparency = 0.04
 StatsWin.Active = true
-StatsWin.ClipsDescendants = false
+StatsWin.ClipsDescendants = true
 Instance.new("UICorner", StatsWin).CornerRadius = UDim.new(0, 16)
 
 local sWinGrad = Instance.new("UIGradient", StatsWin)
@@ -1111,7 +1111,7 @@ MainWin.Position = UDim2.new(1, -293, 0.5, -153)
 MainWin.BackgroundColor3 = Color3.fromRGB(11, 13, 22)
 MainWin.BackgroundTransparency = 0.04
 MainWin.Active = true
-MainWin.ClipsDescendants = false
+MainWin.ClipsDescendants = true
 Instance.new("UICorner", MainWin).CornerRadius = UDim.new(0, 16)
 
 local mWinGrad = Instance.new("UIGradient", MainWin)
