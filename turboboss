@@ -112,7 +112,7 @@ local MAX_PLAYERS_IN_SERVER = 1
 local ELDER_MIN_STAT = 30e24       -- 30 Sp
 local LUCIF_ALT_STAT = 150e24      -- 150 Sp
 local AEOS_MIN_STAT  = 700e24      -- 700 Sp
-local AEOS_ALT_STAT  = 10e27       -- 10 Oc
+local AEOS_ALT_STAT  = 15e27       -- 10 Oc
 local ELDER_MIN_REB  = 200000000   -- 200M Reb
 local ELDER_DISTANCE = 50          -- 50 = 50 stud DAVANTI al boss (metti -50 se lo vuoi DIETRO)
 
