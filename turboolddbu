@@ -1620,21 +1620,29 @@ table.insert(connections, localPlayer.CharacterAdded:Connect(function(newChar)
 	UpdateFloatState()
 end))
 
+-- ⚡ AUTO-RICARICA KI ("cha") + AUTO-BLOCK (STRATEGIA DEL 2° SCRIPT)
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isTransforming and not isEquippingSkills then
-			local char = localPlayer.Character
-			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			if char and hum and hum.Health > 0 then
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-				end)()
-				coroutine.wrap(function()
-					pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-				end)()
-			end
+		if getgenv().AutoFarmActive then
+			pcall(function()
+				task.spawn(function() blockRemote:InvokeServer(true) end)
+				task.spawn(function() chaRemote:InvokeServer("Blacknwhite21") end)
+			end)
 		end
-		task.wait(0.04)
+		task.wait(0.15)
+	end
+end)
+
+task.spawn(function()
+	while IsCurrentSession() and task.wait() do
+		if getgenv().AutoFarmActive then
+			pcall(function()
+				local status = GetLiveStatus()
+				if status and status:FindFirstChild("Blocking") then
+					status.Blocking.Value = true
+				end
+			end)
+		end
 	end
 end)
 
