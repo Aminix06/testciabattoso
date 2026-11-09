@@ -144,9 +144,10 @@ local cachedCharParts = {}
 
 -- 🗡️ REQUISITI DELLE 3 SKILL MELEE
 local SkillRequirements = {
-	{Name = "Mach Kick",      MinStat = 90000, MinReb = 0},
-	{Name = "Meteor Crash",   MinStat = 28000, MinReb = 0},
-	{Name = "Wolf Fang Fist", MinStat = 2000,  MinReb = 0}
+	{Name = "Mach Kick",      	MinStat = 90000, MinReb = 0},
+	{Name = "High Power Rush",	MinStat = 65000, MinReb = 0},
+	{Name = "Meteor Crash",   	MinStat = 28000, MinReb = 0},
+	{Name = "Wolf Fang Fist", 	MinStat = 2000,  MinReb = 0}
 }
 
 local equippedSkills = {}
