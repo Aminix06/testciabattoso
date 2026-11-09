@@ -1635,7 +1635,7 @@ task.spawn(function()
 	end
 end)
 
--- 🔥 CONTROLLO FORMA RAPIDO (Events.ta:InvokeServer())
+-- 🔥 CONTROLLO FORMA RAPIDO (Events.ta:InvokeServer()) CON CONTROLLO ENERGY >= 100
 local FormAliases = {
 	["Universal Blue"] = "Universal Bluei"
 }
@@ -1654,6 +1654,60 @@ local function GetBestAvailableCandidate(defVal, rebVal)
 		end
 	end
 	return nil
+end
+
+-- ⚡ LEGGE IL KI/ENERGY ATTUALE IN TEMPO REALE
+local function GetCurrentKi()
+	local status = GetLiveStatus()
+	local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
+	local char = localPlayer.Character
+
+	-- Cerca il valore del Ki attuale nei posti usati da DBU (Status, Stats, Character)
+	for _, container in ipairs({status, wsChar and wsChar:FindFirstChild("Status"), wsChar and wsChar:FindFirstChild("Stats"), wsChar, char}) do
+		if container then
+			for _, name in ipairs({"Ki", "Energy", "CurrentKi", "CurrentEnergy", "ki", "energy"}) do
+				local obj = container:FindFirstChild(name)
+				if obj and (obj:IsA("NumberValue") or obj:IsA("IntValue") or obj:IsA("DoubleConstrainedValue")) then
+					return tonumber(obj.Value) or 0
+				end
+			end
+		end
+	end
+
+	-- Fallback: se non trova l'oggetto del Ki attuale, controlla la statistica Energy in Datas
+	local pData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
+	if pData and pData:FindFirstChild("Energy") then
+		return tonumber(pData.Energy.Value) or 0
+	end
+	return 100
+end
+
+-- 🔋 ASSICURA DI AVERE ALMENO 100 DI ENERGY/KI PRIMA DI TRASFORMARSI
+local function EnsureMinEnergyForForm(minRequired)
+	minRequired = minRequired or 100
+	local startCharge = os.clock()
+
+	while GetCurrentKi() < minRequired and getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
+		local char = localPlayer.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if not char or not hum or hum.Health <= 0 then return false end
+
+		local currentKi = math.floor(GetCurrentKi())
+		SetStatus(string.format("🔋 Ricarica Energy (%d/%d)...", currentKi, minRequired), math.clamp(currentKi / minRequired, 0, 1))
+
+		-- Spamma la ricarica Ki finché non supera 100
+		coroutine.wrap(function()
+			pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
+		end)()
+		pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
+
+		-- Sicurezza: evita loop infiniti se dopo 6 secondi il valore è bloccato
+		if (os.clock() - startCharge) > 6 then
+			break
+		end
+		task.wait(0.05)
+	end
+	return true
 end
 
 local function NeedsFormRightNow()
@@ -1735,14 +1789,25 @@ local function EnsureForm()
 			end
 
 			if MatchesForm(selected.Value, targetForm) then
+				-- 🔋 CONTROLLA CHE L'ENERGY SIA ALMENO A 100 E SE È SOTTO RICARICA FINO A 100
+				if not EnsureMinEnergyForForm(100) then
+					isTransforming = false
+					return false
+				end
+
+				-- Un colpo extra di ricarica subito prima di attivare la forma
 				pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-				task.wait(0.06)
+				task.wait(0.05)
 
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
 				pcall(function() transformRemote:InvokeServer() end)
 
 				local checkWait = 0
 				while not MatchesForm(actual.Value, targetForm) and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
+					-- Continua a tenere il Ki alto anche mentre aspetta che la trasformazione entri
+					if GetCurrentKi() < 100 then
+						pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
+					end
 					task.wait(0.12)
 					checkWait += 1
 				end
