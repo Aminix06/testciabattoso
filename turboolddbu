@@ -320,8 +320,10 @@ local function DisableChair(obj)
 	end
 end
 
-for _, obj in ipairs(workspace:GetDescendants()) do DisableChair(obj) end
-table.insert(connections, workspace.DescendantAdded:Connect(DisableChair))
+task.spawn(function()
+    for _, obj in ipairs(workspace:GetDescendants()) do DisableChair(obj) end
+    table.insert(connections, workspace.DescendantAdded:Connect(DisableChair))
+end)
 
 local function SetupAntiSitOnCharacter(char)
 	if not char then return end
@@ -1410,39 +1412,37 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK TRAMITE NAVIGAZIONE UI (TESTATA E FUNZIONANTE)
-local function PressKey(keyCode, holdTime)
+-- 🚫 FUNZIONE AUTO-BLOCK 100% UI (ISTANTANEA ANCHE APPENA ENTRATI)
+local function PressKey(keyCode)
 	VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-	task.wait(holdTime or 0.05)
+	task.wait(0.015)
 	VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
 end
 
 local function BlockPlayerWithUI(targetPlayer)
 	if not targetPlayer or targetPlayer == localPlayer then return end
 
-	-- 1. Apre il popup di blocco
-	pcall(function()
-		StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
-	end)
-
-	-- 2. Aspetta che il popup compaia e trova il bottone "Blocca" (quello a destra)
+	local robloxGui = CoreGui:FindFirstChild("RobloxGui") or CoreGui
 	local confirmBtn = nil
 	local startWait = os.clock()
-	local viewportCenter = camera.ViewportSize / 2
 
-	while (os.clock() - startWait) < 2.0 do
+	-- 1. Continua a forzare l'apertura del popup finché non compare il bottone
+	-- (Risolve il bug di quando entri nel server e SetCore non è ancora pronto!)
+	while (os.clock() - startWait) < 3.0 do
+		pcall(function()
+			StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
+		end)
+
+		local vpCenter = camera.ViewportSize / 2
 		local candidateButtons = {}
 
-		for _, desc in ipairs(CoreGui:GetDescendants()) do
+		for _, desc in ipairs(robloxGui:GetDescendants()) do
 			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible and desc.Selectable then
-				if not desc:IsDescendantOf(ScreenGui) then
-					local pos = desc.AbsolutePosition
-					local size = desc.AbsoluteSize
-					if size.X >= 45 and size.Y >= 20 and size.Y <= 120 then
-						local btnCenter = pos + (size / 2)
-						if math.abs(btnCenter.Y - viewportCenter.Y) < 250 and math.abs(btnCenter.X - viewportCenter.X) < 350 then
-							table.insert(candidateButtons, desc)
-						end
+				local size = desc.AbsoluteSize
+				if size.X >= 45 and size.Y >= 20 and size.Y <= 120 then
+					local btnCenter = desc.AbsolutePosition + (size / 2)
+					if math.abs(btnCenter.Y - vpCenter.Y) < 260 and math.abs(btnCenter.X - vpCenter.X) < 360 then
+						table.insert(candidateButtons, desc)
 					end
 				end
 			end
@@ -1455,43 +1455,42 @@ local function BlockPlayerWithUI(targetPlayer)
 			confirmBtn = candidateButtons[1] -- Bottone di DESTRA ("Blocca")
 			break
 		end
-		task.wait(0.05)
+
+		RunService.RenderStepped:Wait() -- Controlla a 60+ FPS invece di aspettare 0.05s
 	end
 
-	task.wait(0.2)
+	if not confirmBtn then return end
 
-	-- 🔹 STEP A: Selezione diretta tramite GuiService.SelectedCoreObject + Invio
-	if confirmBtn then
+	-- 2. NON aspettiamo 0.2s! Seleziona e premi Invio ISTANTANEAMENTE in loop finché sparisce
+	for i = 1, 5 do
+		if not confirmBtn.Parent or not confirmBtn.Visible then
+			break -- Chiuso! Il giocatore è stato bloccato!
+		end
+
+		-- 🔹 STEP A: Selezione diretta tramite GuiService + Invio immediato
 		pcall(function()
 			GuiService.GuiNavigationEnabled = true
 			GuiService.AutoSelectGuiEnabled = true
 			GuiService.SelectedCoreObject = confirmBtn
-		end)
-		pcall(function()
 			GuiService.SelectedObject = confirmBtn
 		end)
-		task.wait(0.1)
-		PressKey(Enum.KeyCode.Return, 0.06)
-		task.wait(0.1)
+		RunService.RenderStepped:Wait()
+		PressKey(Enum.KeyCode.Return)
+
+		-- 🔹 STEP B: Se al 2° tentativo è ancora aperto, usa \ + Destra + Invio
+		if i >= 2 and confirmBtn.Parent and confirmBtn.Visible then
+			pcall(function()
+				PressKey(Enum.KeyCode.BackSlash)
+				task.wait(0.02)
+				PressKey(Enum.KeyCode.Right)
+				task.wait(0.02)
+				PressKey(Enum.KeyCode.Return)
+			end)
+		end
+
+		task.wait(0.03)
 	end
-
-	if confirmBtn and (not confirmBtn.Parent or not confirmBtn.Visible) then
-		task.wait(0.4)
-		return
-	end
-
-	-- 🔹 STEP B: Navigazione UI con tasti freccia (\ + Freccia Destra + Invio)
-	pcall(function()
-		PressKey(Enum.KeyCode.BackSlash, 0.05)
-		task.wait(0.1)
-		PressKey(Enum.KeyCode.Right, 0.05)
-		task.wait(0.1)
-		PressKey(Enum.KeyCode.Return, 0.06)
-	end)
-
-	task.wait(0.4)
 end
-
 -- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK UI
 task.spawn(function()
 	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
@@ -1506,7 +1505,7 @@ end)
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
-	local TPEvent = Events:WaitForChild("TP", 10)
+	local TPEvent = Events:FindFirstChild("TP")
 	local isEscaping = false
 
 	local function GetUnauthorizedPlayer()
