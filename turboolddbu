@@ -24,6 +24,10 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local TeleportService = game:GetService("TeleportService")
+local StarterGui = game:GetService("StarterGui")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local GuiService = game:GetService("GuiService")
 local camera = workspace.CurrentCamera
 
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -36,7 +40,7 @@ local rebRemote = Events:WaitForChild("reb")
 local qActionRemote = Events:WaitForChild("Qaction")
 local lockyRemote = Events:FindFirstChild("locky")
 
--- 🛡️ WHITELIST GIOCATORI AMMESSI NEL SERVER
+-- 🛡️ WHITELIST GIOCATORI AMMESSI NEL SERVER (NON VENGONO BLOCCATI)
 local WhitelistedUserIds = {
 	[3798470226] = true
 }
@@ -895,7 +899,7 @@ SaveBadge.Size = UDim2.new(0, 125, 0, 12)
 SaveBadge.Position = UDim2.new(0, 12, 0, 22)
 SaveBadge.BackgroundTransparency = 1
 SaveBadge.Font = Enum.Font.GothamBold
-SaveBadge.Text = "✨ Melee Spam Mode"
+SaveBadge.Text = "🛡️ Auto-Block & Melee"
 SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
 SaveBadge.TextSize = 9
 SaveBadge.TextXAlignment = Enum.TextXAlignment.Left
@@ -910,7 +914,7 @@ onConfigSavedCallback = function()
 		SaveBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
 		task.wait(1.2)
 		if saveBadgeToken == myToken and SaveBadge and SaveBadge.Parent then
-			SaveBadge.Text = "✨ Melee Spam Mode"
+			SaveBadge.Text = "🛡️ Auto-Block & Melee"
 			SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
 		end
 	end
@@ -1405,7 +1409,41 @@ task.spawn(function()
 	end
 end)
 
--- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON WHITELIST
+-- 🚫 FUNZIONE AUTO-BLOCK GIOCATORE + CREAZIONE NUOVO SERVER
+local function BlockPlayerAutomatically(targetPlayer)
+	if not targetPlayer or targetPlayer == localPlayer then return end
+
+	pcall(function()
+		StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
+	end)
+	task.wait(0.25)
+
+	-- Cerca il bottone di conferma del popup di blocco in CoreGui e ci clicca sopra
+	pcall(function()
+		local robloxGui = CoreGui:FindFirstChild("RobloxGui")
+		local promptDialog = robloxGui and robloxGui:FindFirstChild("PromptDialog", true)
+		if promptDialog then
+			for _, desc in ipairs(promptDialog:GetDescendants()) do
+				if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+					local txt = string.lower(desc.Name .. " " .. (desc:IsA("TextButton") and desc.Text or ""))
+					local isCancel = string.find(txt, "cancel") or string.find(txt, "annulla") or string.find(txt, "2")
+					if not isCancel and desc.Visible and desc.AbsoluteSize.X > 10 then
+						local inset = GuiService:GetGuiInset()
+						local centerX = desc.AbsolutePosition.X + (desc.AbsoluteSize.X / 2)
+						local centerY = desc.AbsolutePosition.Y + (desc.AbsoluteSize.Y / 2) + inset.Y
+						VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
+						task.wait(0.05)
+						VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
+						break
+					end
+				end
+			end
+		end
+	end)
+	task.wait(0.35)
+end
+
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK
 task.spawn(function()
 	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 	if queue_on_teleport then
@@ -1422,25 +1460,26 @@ task.spawn(function()
 	local TPEvent = Events:WaitForChild("TP", 10)
 	local isEscaping = false
 
-	local function HasUnauthorizedPlayer()
+	local function GetUnauthorizedPlayer()
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= localPlayer and not WhitelistedUserIds[plr.UserId] then
-				return true, plr.Name
+				return plr
 			end
 		end
-		return false, nil
+		return nil
 	end
 
-	local function FugaSullaTerra(intruderName)
-		if isEscaping then return end
+	local function BloccaEFuggi(intruderPlayer)
+		if isEscaping or not intruderPlayer then return end
 		isEscaping = true
 		getgenv().AutoFarmActive = false
 		isCurrentlyAttacking = false
 		currentLockedBoss = nil
 		StopActiveTween()
 
-		warn("⚠️ Rilevato giocatore non in whitelist (" .. tostring(intruderName) .. ")! Creazione nuovo server Earth...")
-		SetStatus("⚠️ Intruso (" .. tostring(intruderName) .. ")! Creo nuovo server...", 0)
+		local intruderName = intruderPlayer.Name
+		warn("🚫 Rilevato estraneo (" .. tostring(intruderName) .. ")! Blocco utente e creazione nuovo server...")
+		SetStatus("🚫 Blocco " .. tostring(intruderName) .. " & cambio server...", 0)
 
 		pcall(function()
 			if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
@@ -1448,31 +1487,38 @@ task.spawn(function()
 			end
 		end)
 
+		-- 1. Blocca automaticamente l'estraneo così Roblox è costretto a creare un server nuovo senza di lui
+		BlockPlayerAutomatically(intruderPlayer)
+
+		-- 2. Teletrasporta subito verso un nuovo server
 		task.spawn(function()
-			for _ = 1, 8 do
-				if TPEvent then
+			for i = 1, 8 do
+				pcall(function()
+					TeleportService:Teleport(game.PlaceId, localPlayer)
+				end)
+				if TPEvent and i % 2 == 0 then
 					pcall(function() TPEvent:InvokeServer("Earth") end)
 				end
-				task.wait(0.8)
+				task.wait(1)
 			end
 			localPlayer:Kick("⚠️ Il teletrasporto verso un nuovo server ha fallito. Disconnessione di sicurezza.")
 		end)
 	end
 
-	local hasStranger, strangerName = HasUnauthorizedPlayer()
-	if hasStranger then FugaSullaTerra(strangerName) end
+	local initialStranger = GetUnauthorizedPlayer()
+	if initialStranger then BloccaEFuggi(initialStranger) end
 
 	table.insert(connections, Players.PlayerAdded:Connect(function(newPlr)
-		task.wait(0.1)
+		task.wait(0.15)
 		if newPlr ~= localPlayer and not WhitelistedUserIds[newPlr.UserId] then
-			FugaSullaTerra(newPlr.Name)
+			BloccaEFuggi(newPlr)
 		end
 	end))
 
 	task.spawn(function()
 		while IsCurrentSession() and task.wait(0.8) do
-			local stranger, sName = HasUnauthorizedPlayer()
-			if stranger then FugaSullaTerra(sName) end
+			local stranger = GetUnauthorizedPlayer()
+			if stranger then BloccaEFuggi(stranger) end
 		end
 	end)
 end)
