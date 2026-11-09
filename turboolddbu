@@ -1415,7 +1415,7 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK 100% SICURA (NON TOCCA MAI LA TUA GUI E NON RESETTA IL POPUP)
+-- 🚫 FUNZIONE AUTO-BLOCK PER IL NUOVO POPUP ROBLOX (3 BOTTONI VERTICALI: 1° IN ALTO = "BLOCCA")
 local function PressKey(keyCode)
 	VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
 	task.wait(0.02)
@@ -1425,7 +1425,7 @@ end
 local function BlockPlayerWithUI(targetPlayer)
 	if not targetPlayer or targetPlayer == localPlayer then return end
 
-	-- 🛡️ 1. Disabilita temporaneamente la tua GUI così è IMPOSSIBILE cliccare su Auto-Reb o altri tuoi tasti!
+	-- 🛡️ 1. Nasconde temporaneamente la tua GUI così è impossibile cliccare su Auto-Reb
 	local wasGuiEnabled = true
 	if ScreenGui and ScreenGui.Parent then
 		wasGuiEnabled = ScreenGui.Enabled
@@ -1434,30 +1434,35 @@ local function BlockPlayerWithUI(targetPlayer)
 
 	local confirmBtn = nil
 	local startWait = os.clock()
-	local lastPromptCall = 0
+	local promptSent = false
+	local lastTryTime = 0
 
-	-- 🔍 2. Apre il popup SENZA spammarlo ad ogni frame (altrimenti Roblox resetta il popup e lo rallenta!)
+	-- 🔍 2. Apre il popup UNA SOLA VOLTA e cerca i 3 bottoni verticali
 	while (os.clock() - startWait) < 4.0 do
-		-- Chiama PromptBlockPlayer subito, e riprova solo ogni 0.4s se non si è ancora aperto
-		if (os.clock() - lastPromptCall) >= 0.4 then
-			lastPromptCall = os.clock()
-			pcall(function()
+		-- Chiama SetCore solo se non l'ha ancora aperto (o se dopo 1.2s non è comparso nulla)
+		-- Così NON chiude e riapre mai il popup!
+		if not promptSent or (os.clock() - lastTryTime) > 1.2 then
+			local ok = pcall(function()
 				StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
 			end)
+			if ok then
+				promptSent = true
+				lastTryTime = os.clock()
+			end
 		end
 
 		local vpCenter = camera.ViewportSize / 2
 		local candidateButtons = {}
 
 		for _, desc in ipairs(CoreGui:GetDescendants()) do
-			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible and desc.Selectable then
-				-- Ignora completamente la tua ScreenGui
+			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
 				if not ScreenGui or not desc:IsDescendantOf(ScreenGui) then
 					local size = desc.AbsoluteSize
-					-- Il bottone del popup di Roblox ha sempre dimensioni ben precise al centro dello schermo
-					if size.X >= 45 and size.X <= 260 and size.Y >= 24 and size.Y <= 90 then
+					-- I 3 bottoni del nuovo popup sono larghi e impilati al centro dello schermo
+					if size.X >= 80 and size.Y >= 24 and size.Y <= 95 then
 						local btnCenter = desc.AbsolutePosition + (size / 2)
-						if math.abs(btnCenter.Y - vpCenter.Y) < 220 and math.abs(btnCenter.X - vpCenter.X) < 300 then
+						if math.abs(btnCenter.X - vpCenter.X) < 260 and math.abs(btnCenter.Y - vpCenter.Y) < 280 then
+							-- Evita duplicati (es. bottone dentro bottone) tenendo quelli alla stessa X
 							table.insert(candidateButtons, desc)
 						end
 					end
@@ -1465,41 +1470,75 @@ local function BlockPlayerWithUI(targetPlayer)
 			end
 		end
 
-		-- Il popup di blocco ha esattamente 2 bottoni affiancati SULLA STESSA RIGA Y ("Annulla" a sinistra, "Blocca" a destra)
-		if #candidateButtons >= 2 then
-			table.sort(candidateButtons, function(a, b)
-				return a.AbsolutePosition.X > b.AbsolutePosition.X
-			end)
-			local rightBtn = candidateButtons[1]
-			local leftBtn = candidateButtons[2]
-			-- Verifica che i due bottoni siano allineati orizzontalmente (stessa altezza Y): così siamo sicuri al 100% che è il popup di Block!
-			if math.abs(rightBtn.AbsolutePosition.Y - leftBtn.AbsolutePosition.Y) <= 15 then
-				confirmBtn = rightBtn
-				break
+		-- Filtra i bottoni che sono impilati verticalmente (hanno quasi la stessa coordinata X)
+		local verticalStack = {}
+		for _, b1 in ipairs(candidateButtons) do
+			local sameXCount = 0
+			for _, b2 in ipairs(candidateButtons) do
+				if math.abs(b1.AbsolutePosition.X - b2.AbsolutePosition.X) <= 25 and math.abs(b1.AbsolutePosition.Y - b2.AbsolutePosition.Y) >= 20 then
+					sameXCount += 1
+				end
 			end
+			if sameXCount >= 1 then
+				-- Controlla che non ci sia già un bottone alla stessa identica altezza Y
+				local duplicateY = false
+				for _, existing in ipairs(verticalStack) do
+					if math.abs(existing.AbsolutePosition.Y - b1.AbsolutePosition.Y) < 15 then
+						duplicateY = true
+						break
+					end
+				end
+				if not duplicateY then
+					table.insert(verticalStack, b1)
+				end
+			end
+		end
+
+		-- Quando trova i bottoni impilati (2 o 3), li ordina dall'ALTO verso il BASSO (Y crescente)
+		if #verticalStack >= 2 then
+			table.sort(verticalStack, function(a, b)
+				return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+			end)
+			confirmBtn = verticalStack[1] -- 🔼 PRIMO BOTTONE IN ALTO ("Blocca")
+			break
 		end
 
 		RunService.RenderStepped:Wait()
 	end
 
-	-- ⚡ 3. Se ha trovato il vero bottone "Blocca", lo seleziona direttamente e preme Invio (SENZA usare BackSlash che sballa la selezione!)
+	-- ⚡ 3. Seleziona il 1° bottone in alto ("Blocca") e preme Invio (più click diretto di sicurezza)
 	if confirmBtn then
-		task.wait(0.05) -- Piccolo respiro per far attivare il listener del click a Roblox
+		task.wait(0.08) -- Aspetta che il popup finisca il fade-in (80ms)
 		for _ = 1, 6 do
 			if not confirmBtn.Parent or not confirmBtn.Visible then
 				break -- Popup chiuso, giocatore bloccato!
 			end
 
+			-- Metodo 1: Selezione UI + Invio
 			pcall(function()
 				GuiService.GuiNavigationEnabled = true
+				GuiService.AutoSelectGuiEnabled = true
 				GuiService.SelectedCoreObject = confirmBtn
+				GuiService.SelectedObject = confirmBtn
 			end)
 			RunService.RenderStepped:Wait()
 			PressKey(Enum.KeyCode.Return)
-			task.wait(0.05)
+
+			-- Metodo 2: Click diretto al centro del 1° bottone in alto (nel caso SelectedCoreObject venga ignorato dal nuovo popup React)
+			pcall(function()
+				local inset = GuiService:GetGuiInset()
+				local cx = confirmBtn.AbsolutePosition.X + (confirmBtn.AbsoluteSize.X / 2)
+				local cy = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2) + inset.Y
+				VirtualInputManager:SendMouseMoveEvent(cx, cy, game)
+				task.wait(0.01)
+				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+				task.wait(0.02)
+				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
+			end)
+
+			task.wait(0.06)
 		end
 
-		-- Pulisce il cursore di selezione UI
 		pcall(function()
 			GuiService.SelectedCoreObject = nil
 			GuiService.SelectedObject = nil
