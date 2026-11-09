@@ -1770,7 +1770,8 @@ end
 local function EnsureForm()
 	if not getgenv().AutoFarmActive or justRebirthed then return false end
 	local char = localPlayer.Character
-	if not char or not char:FindFirstChildOfClass("Humanoid") or char.Humanoid.Health <= 0 then return false end
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	if not char or not hum or hum.Health <= 0 then return false end
 
 	local folderData = ReplicatedStorage:FindFirstChild("Datas") and ReplicatedStorage.Datas:FindFirstChild(tostring(localPlayer.UserId))
 	local status = GetLiveStatus()
@@ -1782,6 +1783,7 @@ local function EnsureForm()
 	local actual = status:FindFirstChild("Transformation")
 	if not selected or not actual then return false end
 
+	-- Se sei sotto la soglia minima (55k), combatti in Base senza perdere tempo
 	if defVal < NO_FORM_MAX_DEF then
 		CheckAndEquipSkills(false, true)
 		return true
@@ -1800,7 +1802,9 @@ local function EnsureForm()
 		end
 
 		while getgenv().AutoFarmActive and IsCurrentSession() and not justRebirthed do
-			if not localPlayer.Character or not localPlayer.Character:FindFirstChildOfClass("Humanoid") or localPlayer.Character.Humanoid.Health <= 0 then
+			local c = localPlayer.Character
+			local h = c and c:FindFirstChildOfClass("Humanoid")
+			if not c or not h or h.Health <= 0 then
 				isTransforming = false
 				return false
 			end
@@ -1809,42 +1813,44 @@ local function EnsureForm()
 			rebVal = tonumber(folderData:FindFirstChild("Rebirth") and folderData.Rebirth.Value) or 0
 			targetForm = GetBestAvailableCandidate(defVal, rebVal)
 
-			if not targetForm then break end
-			if MatchesForm(actual.Value, targetForm) then
+			if not targetForm or MatchesForm(actual.Value, targetForm) then
 				break
 			end
 
 			SetStatus("⚡ Equip Forma: " .. targetForm .. "...", 0.3)
 
+			-- 1. Equipaggia la forma (come nel 2° script ma con controllo se la possiedi)
 			if not MatchesForm(selected.Value, targetForm) then
-				for _ = 1, 2 do
-					pcall(function() equipRemote:InvokeServer(targetForm) end)
+				for _ = 1, 3 do
+					task.spawn(function()
+						pcall(function() equipRemote:InvokeServer(targetForm) end)
+					end)
+					local waitEquip = 0
+					while not MatchesForm(selected.Value, targetForm) and waitEquip < 5 do
+						task.wait(0.08)
+						waitEquip += 1
+					end
 					if MatchesForm(selected.Value, targetForm) then break end
-					task.wait(0.12)
 				end
 			end
 
+			-- 2. Se si è equipaggiata, controlla Energy >= 100 e attiva con task.spawn (non blocca!)
 			if MatchesForm(selected.Value, targetForm) then
-				-- 🔋 CONTROLLA CHE L'ENERGY SIA ALMENO A 100 E SE È SOTTO RICARICA FINO A 100
 				if not EnsureMinEnergyForForm(100) then
 					isTransforming = false
 					return false
 				end
 
-				-- Un colpo extra di ricarica subito prima di attivare la forma
-				pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-				task.wait(0.05)
-
 				SetStatus("⚡ Attivazione: " .. targetForm .. "...", 0.5)
-				pcall(function() transformRemote:InvokeServer() end)
+
+				-- Lanciato in task.spawn (come nel 2° script) così non congela il thread!
+				task.spawn(function()
+					pcall(function() transformRemote:InvokeServer() end)
+				end)
 
 				local checkWait = 0
-				while not MatchesForm(actual.Value, targetForm) and checkWait < 8 and getgenv().AutoFarmActive and not justRebirthed do
-					-- Continua a tenere il Ki alto anche mentre aspetta che la trasformazione entri
-					if GetCurrentKi() < 100 then
-						pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-					end
-					task.wait(0.12)
+				while not MatchesForm(actual.Value, targetForm) and checkWait < 15 and getgenv().AutoFarmActive and not justRebirthed do
+					task.wait(0.1)
 					checkWait += 1
 				end
 
@@ -1852,6 +1858,7 @@ local function EnsureForm()
 					break
 				end
 			else
+				-- Se il server non te la fa equipaggiare (es. forma non sbloccata), passa subito alla successiva!
 				rejectedForms[targetForm] = true
 			end
 		end
