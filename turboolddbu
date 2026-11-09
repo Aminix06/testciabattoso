@@ -138,7 +138,7 @@ local lastActiveNoQuestBoss = nil
 local lastServerLockedBoss = nil
 local activeTween = nil
 local currentLockedBoss = nil
-local behindDistance = -2.2
+local behindDistance = -5
 local connections = {}
 local cachedCharParts = {}
 
