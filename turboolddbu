@@ -1415,83 +1415,101 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK 100% UI (ISTANTANEA ANCHE APPENA ENTRATI)
+-- 🚫 FUNZIONE AUTO-BLOCK 100% SICURA (NON TOCCA MAI LA TUA GUI E NON RESETTA IL POPUP)
 local function PressKey(keyCode)
 	VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
-	task.wait(0.015)
+	task.wait(0.02)
 	VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
 end
 
 local function BlockPlayerWithUI(targetPlayer)
 	if not targetPlayer or targetPlayer == localPlayer then return end
 
-	local robloxGui = CoreGui:FindFirstChild("RobloxGui") or CoreGui
+	-- 🛡️ 1. Disabilita temporaneamente la tua GUI così è IMPOSSIBILE cliccare su Auto-Reb o altri tuoi tasti!
+	local wasGuiEnabled = true
+	if ScreenGui and ScreenGui.Parent then
+		wasGuiEnabled = ScreenGui.Enabled
+		ScreenGui.Enabled = false
+	end
+
 	local confirmBtn = nil
 	local startWait = os.clock()
+	local lastPromptCall = 0
 
-	-- 1. Continua a forzare l'apertura del popup finché non compare il bottone
-	-- (Risolve il bug di quando entri nel server e SetCore non è ancora pronto!)
-	while (os.clock() - startWait) < 3.0 do
-		pcall(function()
-			StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
-		end)
+	-- 🔍 2. Apre il popup SENZA spammarlo ad ogni frame (altrimenti Roblox resetta il popup e lo rallenta!)
+	while (os.clock() - startWait) < 4.0 do
+		-- Chiama PromptBlockPlayer subito, e riprova solo ogni 0.4s se non si è ancora aperto
+		if (os.clock() - lastPromptCall) >= 0.4 then
+			lastPromptCall = os.clock()
+			pcall(function()
+				StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
+			end)
+		end
 
 		local vpCenter = camera.ViewportSize / 2
 		local candidateButtons = {}
 
-		for _, desc in ipairs(robloxGui:GetDescendants()) do
+		for _, desc in ipairs(CoreGui:GetDescendants()) do
 			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible and desc.Selectable then
-				local size = desc.AbsoluteSize
-				if size.X >= 45 and size.Y >= 20 and size.Y <= 120 then
-					local btnCenter = desc.AbsolutePosition + (size / 2)
-					if math.abs(btnCenter.Y - vpCenter.Y) < 260 and math.abs(btnCenter.X - vpCenter.X) < 360 then
-						table.insert(candidateButtons, desc)
+				-- Ignora completamente la tua ScreenGui
+				if not ScreenGui or not desc:IsDescendantOf(ScreenGui) then
+					local size = desc.AbsoluteSize
+					-- Il bottone del popup di Roblox ha sempre dimensioni ben precise al centro dello schermo
+					if size.X >= 45 and size.X <= 260 and size.Y >= 24 and size.Y <= 90 then
+						local btnCenter = desc.AbsolutePosition + (size / 2)
+						if math.abs(btnCenter.Y - vpCenter.Y) < 220 and math.abs(btnCenter.X - vpCenter.X) < 300 then
+							table.insert(candidateButtons, desc)
+						end
 					end
 				end
 			end
 		end
 
+		-- Il popup di blocco ha esattamente 2 bottoni affiancati SULLA STESSA RIGA Y ("Annulla" a sinistra, "Blocca" a destra)
 		if #candidateButtons >= 2 then
 			table.sort(candidateButtons, function(a, b)
 				return a.AbsolutePosition.X > b.AbsolutePosition.X
 			end)
-			confirmBtn = candidateButtons[1] -- Bottone di DESTRA ("Blocca")
-			break
+			local rightBtn = candidateButtons[1]
+			local leftBtn = candidateButtons[2]
+			-- Verifica che i due bottoni siano allineati orizzontalmente (stessa altezza Y): così siamo sicuri al 100% che è il popup di Block!
+			if math.abs(rightBtn.AbsolutePosition.Y - leftBtn.AbsolutePosition.Y) <= 15 then
+				confirmBtn = rightBtn
+				break
+			end
 		end
 
-		RunService.RenderStepped:Wait() -- Controlla a 60+ FPS invece di aspettare 0.05s
+		RunService.RenderStepped:Wait()
 	end
 
-	if not confirmBtn then return end
+	-- ⚡ 3. Se ha trovato il vero bottone "Blocca", lo seleziona direttamente e preme Invio (SENZA usare BackSlash che sballa la selezione!)
+	if confirmBtn then
+		task.wait(0.05) -- Piccolo respiro per far attivare il listener del click a Roblox
+		for _ = 1, 6 do
+			if not confirmBtn.Parent or not confirmBtn.Visible then
+				break -- Popup chiuso, giocatore bloccato!
+			end
 
-	-- 2. NON aspettiamo 0.2s! Seleziona e premi Invio ISTANTANEAMENTE in loop finché sparisce
-	for i = 1, 5 do
-		if not confirmBtn.Parent or not confirmBtn.Visible then
-			break -- Chiuso! Il giocatore è stato bloccato!
-		end
-
-		-- 🔹 STEP A: Selezione diretta tramite GuiService + Invio immediato
-		pcall(function()
-			GuiService.GuiNavigationEnabled = true
-			GuiService.AutoSelectGuiEnabled = true
-			GuiService.SelectedCoreObject = confirmBtn
-			GuiService.SelectedObject = confirmBtn
-		end)
-		RunService.RenderStepped:Wait()
-		PressKey(Enum.KeyCode.Return)
-
-		-- 🔹 STEP B: Se al 2° tentativo è ancora aperto, usa \ + Destra + Invio
-		if i >= 2 and confirmBtn.Parent and confirmBtn.Visible then
 			pcall(function()
-				PressKey(Enum.KeyCode.BackSlash)
-				task.wait(0.02)
-				PressKey(Enum.KeyCode.Right)
-				task.wait(0.02)
-				PressKey(Enum.KeyCode.Return)
+				GuiService.GuiNavigationEnabled = true
+				GuiService.SelectedCoreObject = confirmBtn
 			end)
+			RunService.RenderStepped:Wait()
+			PressKey(Enum.KeyCode.Return)
+			task.wait(0.05)
 		end
 
-		task.wait(0.03)
+		-- Pulisce il cursore di selezione UI
+		pcall(function()
+			GuiService.SelectedCoreObject = nil
+			GuiService.SelectedObject = nil
+			GuiService.GuiNavigationEnabled = false
+		end)
+	end
+
+	-- 🖥️ 4. Riattiva la tua GUI
+	if ScreenGui and ScreenGui.Parent then
+		ScreenGui.Enabled = wasGuiEnabled
 	end
 end
 -- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK UI
