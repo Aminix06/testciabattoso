@@ -40,6 +40,7 @@ local chaRemote = Events:WaitForChild("cha")
 local rebRemote = Events:WaitForChild("reb")
 local qActionRemote = Events:WaitForChild("Qaction")
 local lockyRemote = Events:FindFirstChild("locky")
+local blockRemote = Events:WaitForChild("block")
 
 -- 🛡️ WHITELIST GIOCATORI AMMESSI NEL SERVER (NON VENGONO BLOCCATI)
 local WhitelistedUserIds = {
@@ -1634,6 +1635,31 @@ task.spawn(function()
 			end
 		end
 		task.wait(0.04)
+	end
+end)
+
+-- 🛡️ AUTO-BLOCK (PARATA CONTINUA)
+task.spawn(function()
+	while IsCurrentSession() do
+		if getgenv().AutoFarmActive and not isTransforming then
+			pcall(function()
+				task.spawn(function() blockRemote:InvokeServer(true) end)
+			end)
+		end
+		task.wait(0.15)
+	end
+end)
+
+task.spawn(function()
+	while IsCurrentSession() and task.wait() do
+		if getgenv().AutoFarmActive then
+			pcall(function()
+				local status = GetLiveStatus()
+				if status and status:FindFirstChild("Blocking") then
+					status.Blocking.Value = true
+				end
+			end)
+		end
 	end
 end)
 
