@@ -1409,38 +1409,105 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK GIOCATORE + CREAZIONE NUOVO SERVER
+-- 🚫 FUNZIONE AUTO-BLOCK GIOCATORE (FIX DEFINITIVO PER NUOVA UI ROBLOX)
 local function BlockPlayerAutomatically(targetPlayer)
 	if not targetPlayer or targetPlayer == localPlayer then return end
 
 	pcall(function()
 		StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
 	end)
-	task.wait(0.25)
 
-	-- Cerca il bottone di conferma del popup di blocco in CoreGui e ci clicca sopra
-	pcall(function()
-		local robloxGui = CoreGui:FindFirstChild("RobloxGui")
-		local promptDialog = robloxGui and robloxGui:FindFirstChild("PromptDialog", true)
-		if promptDialog then
-			for _, desc in ipairs(promptDialog:GetDescendants()) do
-				if desc:IsA("TextButton") or desc:IsA("ImageButton") then
-					local txt = string.lower(desc.Name .. " " .. (desc:IsA("TextButton") and desc.Text or ""))
-					local isCancel = string.find(txt, "cancel") or string.find(txt, "annulla") or string.find(txt, "2")
-					if not isCancel and desc.Visible and desc.AbsoluteSize.X > 10 then
-						local inset = GuiService:GetGuiInset()
-						local centerX = desc.AbsolutePosition.X + (desc.AbsoluteSize.X / 2)
-						local centerY = desc.AbsolutePosition.Y + (desc.AbsoluteSize.Y / 2) + inset.Y
-						VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 1)
-						task.wait(0.05)
-						VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 1)
-						break
+	-- Aspetta che il popup compaia sullo schermo (fino a 1.5s)
+	local confirmBtn = nil
+	local startWait = os.clock()
+	local viewportCenter = camera.ViewportSize / 2
+
+	while (os.clock() - startWait) < 1.5 do
+		local candidateButtons = {}
+
+		for _, desc in ipairs(CoreGui:GetDescendants()) do
+			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
+				-- Esclude la nostra GUI di farm
+				if not desc:IsDescendantOf(ScreenGui) then
+					local pos = desc.AbsolutePosition
+					local size = desc.AbsoluteSize
+					-- Controlla che sia un bottone valido vicino al centro dello schermo (dove appare il popup)
+					if size.X >= 50 and size.Y >= 24 and size.Y <= 100 then
+						local btnCenter = pos + (size / 2)
+						if math.abs(btnCenter.Y - viewportCenter.Y) < 260 and math.abs(btnCenter.X - viewportCenter.X) < 350 then
+							table.insert(candidateButtons, desc)
+						end
 					end
 				end
 			end
 		end
-	end)
-	task.wait(0.35)
+
+		-- Nel popup di blocco di Roblox ci sono 2 bottoni (Sinistra = Annulla, Destra = Blocca)
+		if #candidateButtons >= 2 then
+			table.sort(candidateButtons, function(a, b)
+				return a.AbsolutePosition.X > b.AbsolutePosition.X
+			end)
+			confirmBtn = candidateButtons[1] -- Prende il bottone più a DESTRA ("Blocca")
+			break
+		elseif #candidateButtons == 1 then
+			local b = candidateButtons[1]
+			local txt = string.lower(b.Name .. " " .. (b:IsA("TextButton") and b.Text or ""))
+			if string.find(txt, "block") or string.find(txt, "blocca") or string.find(txt, "1") or string.find(txt, "confirm") then
+				confirmBtn = b
+				break
+			end
+		end
+		task.wait(0.05)
+	end
+
+	task.wait(0.15)
+
+	if confirmBtn then
+		-- 1) Prova con firesignal / getconnections (istantaneo su quasi tutti gli executor)
+		pcall(function()
+			if firesignal then
+				firesignal(confirmBtn.Activated)
+				firesignal(confirmBtn.MouseButton1Click)
+				firesignal(confirmBtn.MouseButton1Down)
+				firesignal(confirmBtn.MouseButton1Up)
+			elseif getconnections then
+				for _, conn in ipairs(getconnections(confirmBtn.Activated)) do conn:Fire() end
+				for _, conn in ipairs(getconnections(confirmBtn.MouseButton1Click)) do conn:Fire() end
+			end
+		end)
+
+		-- 2) Prova selezionando il bottone con GuiService + tasto Invio (Return)
+		pcall(function()
+			GuiService.SelectedCoreObject = confirmBtn
+			task.wait(0.04)
+			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+			task.wait(0.04)
+			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+		end)
+
+		-- 3) Clicca fisicamente sulle coordinate del bottone (sia con che senza GuiInset)
+		pcall(function()
+			local inset = GuiService:GetGuiInset()
+			local cx = confirmBtn.AbsolutePosition.X + (confirmBtn.AbsoluteSize.X / 2)
+			local cy1 = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2) + inset.Y
+			local cy2 = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2)
+
+			VirtualInputManager:SendMouseMoveEvent(cx, cy1, game)
+			task.wait(0.03)
+			VirtualInputManager:SendMouseButtonEvent(cx, cy1, 0, true, game, 1)
+			task.wait(0.05)
+			VirtualInputManager:SendMouseButtonEvent(cx, cy1, 0, false, game, 1)
+
+			task.wait(0.03)
+			VirtualInputManager:SendMouseMoveEvent(cx, cy2, game)
+			task.wait(0.03)
+			VirtualInputManager:SendMouseButtonEvent(cx, cy2, 0, true, game, 1)
+			task.wait(0.05)
+			VirtualInputManager:SendMouseButtonEvent(cx, cy2, 0, false, game, 1)
+		end)
+	end
+
+	task.wait(0.45)
 end
 
 -- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK
