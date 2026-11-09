@@ -24,7 +24,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local TeleportService = game:GetService("TeleportService")
 local camera = workspace.CurrentCamera
 
 local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
@@ -36,6 +35,11 @@ local chaRemote = Events:WaitForChild("cha")
 local rebRemote = Events:WaitForChild("reb")
 local qActionRemote = Events:WaitForChild("Qaction")
 local lockyRemote = Events:FindFirstChild("locky")
+
+-- 🛡️ WHITELIST GIOCATORI AMMESSI NEL SERVER
+local WhitelistedUserIds = {
+	[3798470226] = true
+}
 
 -- 🔢 FORMATTAZIONE STATISTICHE E REBIRTH
 local function FormatReb(n)
@@ -76,7 +80,6 @@ end
 local ConfigFileName = "CiabCelestialOldDBUConfig.json"
 local MAX_TWEEN_SPEED = 100000
 local NO_FORM_MAX_DEF = 2500
-local MAX_PLAYERS_IN_SERVER = 10
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
@@ -1402,7 +1405,7 @@ task.spawn(function()
 	end
 end)
 
--- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO (CREA NUOVO SERVER EARTH)
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON WHITELIST
 task.spawn(function()
 	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 	if queue_on_teleport then
@@ -1416,39 +1419,62 @@ end)
 task.spawn(function()
 	repeat task.wait() until game:IsLoaded()
 
-	local TPEvent = Events:FindFirstChild("TP")
+	local TPEvent = Events:WaitForChild("TP", 10)
 	local isEscaping = false
 
-	local function FugaSullaTerra()
+	-- Controlla se c'è un giocatore NON autorizzato nel server
+	local function HasUnauthorizedPlayer()
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= localPlayer and not WhitelistedUserIds[plr.UserId] then
+				return true, plr.Name
+			end
+		end
+		return false, nil
+	end
+
+	local function FugaSullaTerra(intruderName)
 		if isEscaping then return end
 		isEscaping = true
-		warn("⚠️ Giocatore rilevato nel server! Creazione di un nuovo server verso Earth...")
-		SetStatus("⚠️ Intruso rilevato! Cambio server...", 0)
+		getgenv().AutoFarmActive = false
+		isCurrentlyAttacking = false
+		currentLockedBoss = nil
 		StopActiveTween()
+
+		warn("⚠️ Rilevato giocatore non in whitelist (" .. tostring(intruderName) .. ")! Creazione nuovo server Earth...")
+		SetStatus("⚠️ Intruso (" .. tostring(intruderName) .. ")! Creo nuovo server...", 0)
+
 		pcall(function()
 			if localPlayer.Character and localPlayer.Character:FindFirstChild("HumanoidRootPart") then
 				localPlayer.Character.HumanoidRootPart.Anchored = true
 			end
 		end)
-		if TPEvent then
-			pcall(function() TPEvent:InvokeServer("Earth") end)
-		end
-		task.delay(3.5, function()
-			pcall(function() TeleportService:Teleport(game.PlaceId, localPlayer) end)
-		end)
-		task.delay(8, function()
-			localPlayer:Kick("⚠️ Il teletrasporto ha impiegato troppo tempo. Disconnessione di sicurezza.")
+
+		-- Invoca continuamente TP("Earth") per forzare il gioco a creare una nuova istanza vuota di Earth
+		task.spawn(function()
+			for _ = 1, 8 do
+				if TPEvent then
+					pcall(function() TPEvent:InvokeServer("Earth") end)
+				end
+				task.wait(0.8)
+			end
+			localPlayer:Kick("⚠️ Il teletrasporto verso un nuovo server ha fallito. Disconnessione di sicurezza.")
 		end)
 	end
 
-	if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
-	table.insert(connections, Players.PlayerAdded:Connect(function()
-		task.wait(0.2)
-		if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
+	local hasStranger, strangerName = HasUnauthorizedPlayer()
+	if hasStranger then FugaSullaTerra(strangerName) end
+
+	table.insert(connections, Players.PlayerAdded:Connect(function(newPlr)
+		task.wait(0.1)
+		if newPlr ~= localPlayer and not WhitelistedUserIds[newPlr.UserId] then
+			FugaSullaTerra(newPlr.Name)
+		end
 	end))
+
 	task.spawn(function()
-		while IsCurrentSession() and task.wait(1) do
-			if #Players:GetPlayers() > MAX_PLAYERS_IN_SERVER then FugaSullaTerra() end
+		while IsCurrentSession() and task.wait(0.8) do
+			local stranger, sName = HasUnauthorizedPlayer()
+			if stranger then FugaSullaTerra(sName) end
 		end
 	end)
 end)
