@@ -1453,7 +1453,7 @@ local function FindExactBlockButton()
 			if not ScreenGui or not desc:IsDescendantOf(ScreenGui) then
 				local rawText = string.lower(string.gsub(desc.Text or "", "^%s*(.-)%s*$", "%1"))
 
-				-- Cerca ESATTAMENTE la parola "blocca" o "block" (escludendo "blocca e segnala" / "block and report")
+				-- Cerca ESATTAMENTE la parola "blocca" o "Block" (escludendo "blocca e segnala" / "block and report")
 				if (rawText == "blocca" or rawText == "block") then
 					-- Risale al bottone cliccabile genitore (TextButton o ImageButton)
 					local btn = (desc:IsA("TextButton") and desc) or desc:FindFirstAncestorWhichIsA("TextButton") or desc:FindFirstAncestorWhichIsA("ImageButton")
