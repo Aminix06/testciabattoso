@@ -82,7 +82,7 @@ end
 
 -- 💾 SISTEMA DI MEMORIA PERMANENTE (.JSON)
 local ConfigFileName = "CiabCelestialOldDBUConfig.json"
-local MAX_TWEEN_SPEED = 100000
+local MAX_TWEEN_SPEED = 1000000
 local NO_FORM_MAX_DEF = 55000
 
 getgenv().AutoFarmActive = true
