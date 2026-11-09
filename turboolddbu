@@ -278,8 +278,8 @@ local BossList = {
 	{Name = "Super Vegeta",      Boss = "Super Vegeta",     MinDef = 750e3},
 	{Name = "Top X Fighter",     Boss = "X Fighter Master", MinDef = 450e3},
 	{Name = "Napa",              Boss = "Napa",             MinDef = 200e3},
-	{Name = "Kid Gohan",         Boss = "Kid Gohan",        MinDef = 150e3},
 	{Name = "Raditz",            Boss = "Raditz",           MinDef = 100e3},
+	{Name = "Kid Gohan",         Boss = "Kid Gohan",        MinDef = 60e3},
 	{Name = "Krillin",           Boss = "Klirin",           MinDef = 25e3},
 	{Name = "X Fighter Trainer", Boss = "X Fighter",        MinDef = 0}
 }
