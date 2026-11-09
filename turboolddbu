@@ -34,6 +34,7 @@ local Events = ReplicatedStorage:WaitForChild("Package"):WaitForChild("Events")
 local equipRemote = Events:WaitForChild("equipskill")
 local transformRemote = Events:WaitForChild("ta")
 local skillRemote = Events:WaitForChild("mel")
+local voleysRemote = Events:WaitForChild("voleys")
 local punchRemote = Events:WaitForChild("p")
 local chaRemote = Events:WaitForChild("cha")
 local rebRemote = Events:WaitForChild("reb")
@@ -147,6 +148,7 @@ local SkillRequirements = {
 	{Name = "Mach Kick",		MinStat = 90000, MinReb = 0},
 	{Name = "High Power Rush",	MinStat = 65000, MinReb = 0},
 	{Name = "Meteor Crash",		MinStat = 28000, MinReb = 0},
+	{Name = "Energy Volley",   MinStat = 4000,  MinReb = 0, IsVolley = true},
 	{Name = "Wolf Fang Fist",	MinStat = 2000,  MinReb = 0}
 }
 
@@ -1926,7 +1928,8 @@ local function DoFullAttack(bossModel, bossEntry)
 	CheckAndEquipSkills(false, true)
 
 	local bossHum = bossModel and bossModel:FindFirstChildOfClass("Humanoid")
-	if mySession ~= combatSessionId or not bossHum or bossHum.Health <= 0 then return end
+	local bossHRP = bossModel and bossModel:FindFirstChild("HumanoidRootPart")
+	if mySession ~= combatSessionId or not bossHum or bossHum.Health <= 0 or not bossHRP then return end
 	if not CanAttackNow(mySession, nil) then return end
 
 	pcall(function()
@@ -1935,9 +1938,22 @@ local function DoFullAttack(bossModel, bossEntry)
 			local sName = skill.Name
 			if equippedSkills[sName] then
 				coroutine.wrap(function()
-					if CanAttackNow(mySession, sName) and bossHum and bossHum.Health > 0 then
+					if CanAttackNow(mySession, sName) and bossHum and bossHum.Health > 0 and bossHRP.Parent then
 						pcall(function()
-							skillRemote:InvokeServer(sName, "Blacknwhite21")
+							if skill.IsVolley then
+								-- 💥 Spara Energy Volley mirando esattamente al boss (bossHRP.CFrame)
+								voleysRemote:InvokeServer(
+									sName,
+									{
+										FaceMouse = true,
+										MouseHit = bossHRP.CFrame
+									},
+									"Blacknwhite21"
+								)
+							else
+								-- 👊 Usa le normali skill melee
+								skillRemote:InvokeServer(sName, "Blacknwhite21")
+							end
 						end)
 					end
 				end)()
