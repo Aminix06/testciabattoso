@@ -83,7 +83,7 @@ end
 -- 💾 SISTEMA DI MEMORIA PERMANENTE (.JSON)
 local ConfigFileName = "CiabCelestialOldDBUConfig.json"
 local MAX_TWEEN_SPEED = 100000
-local NO_FORM_MAX_DEF = 25000
+local NO_FORM_MAX_DEF = 2500
 
 getgenv().AutoFarmActive = true
 getgenv().AutoRebActive = true
@@ -144,10 +144,9 @@ local cachedCharParts = {}
 
 -- 🗡️ REQUISITI DELLE 3 SKILL MELEE
 local SkillRequirements = {
-	{Name = "Mach Kick",      	MinStat = 90000, MinReb = 0},
-	{Name = "High Power Rush",	MinStat = 65000, MinReb = 0},
-	{Name = "Meteor Crash",   	MinStat = 28000, MinReb = 0},
-	{Name = "Wolf Fang Fist", 	MinStat = 2000,  MinReb = 0}
+	{Name = "Mach Kick",      MinStat = 90000, MinReb = 0},
+	{Name = "Meteor Crash",   MinStat = 28000, MinReb = 0},
+	{Name = "Wolf Fang Fist", MinStat = 2000,  MinReb = 0}
 }
 
 local equippedSkills = {}
@@ -278,8 +277,8 @@ local BossList = {
 	{Name = "Super Vegeta",      Boss = "Super Vegeta",     MinDef = 750e3},
 	{Name = "Top X Fighter",     Boss = "X Fighter Master", MinDef = 450e3},
 	{Name = "Napa",              Boss = "Napa",             MinDef = 200e3},
+	{Name = "Kid Gohan",         Boss = "Kid Gohan",        MinDef = 150e3},
 	{Name = "Raditz",            Boss = "Raditz",           MinDef = 100e3},
-	{Name = "Kid Gohan",         Boss = "Kid Gohan",        MinDef = 60e3},
 	{Name = "Krillin",           Boss = "Klirin",           MinDef = 25e3},
 	{Name = "X Fighter Trainer", Boss = "X Fighter",        MinDef = 0}
 }
@@ -900,7 +899,7 @@ SaveBadge.Size = UDim2.new(0, 125, 0, 12)
 SaveBadge.Position = UDim2.new(0, 12, 0, 22)
 SaveBadge.BackgroundTransparency = 1
 SaveBadge.Font = Enum.Font.GothamBold
-SaveBadge.Text = "🛡️ Auto-Block & Melee"
+SaveBadge.Text = "🛡️ Auto-Block UI & Melee"
 SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
 SaveBadge.TextSize = 9
 SaveBadge.TextXAlignment = Enum.TextXAlignment.Left
@@ -915,7 +914,7 @@ onConfigSavedCallback = function()
 		SaveBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
 		task.wait(1.2)
 		if saveBadgeToken == myToken and SaveBadge and SaveBadge.Parent then
-			SaveBadge.Text = "🛡️ Auto-Block & Melee"
+			SaveBadge.Text = "🛡️ Auto-Block UI & Melee"
 			SaveBadge.TextColor3 = Color3.fromRGB(0, 235, 195)
 		end
 	end
@@ -1410,32 +1409,37 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK GIOCATORE (FIX DEFINITIVO PER NUOVA UI ROBLOX)
-local function BlockPlayerAutomatically(targetPlayer)
+-- 🚫 FUNZIONE AUTO-BLOCK TRAMITE NAVIGAZIONE UI (TESTATA E FUNZIONANTE)
+local function PressKey(keyCode, holdTime)
+	VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
+	task.wait(holdTime or 0.05)
+	VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
+end
+
+local function BlockPlayerWithUI(targetPlayer)
 	if not targetPlayer or targetPlayer == localPlayer then return end
 
+	-- 1. Apre il popup di blocco
 	pcall(function()
 		StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
 	end)
 
-	-- Aspetta che il popup compaia sullo schermo (fino a 1.5s)
+	-- 2. Aspetta che il popup compaia e trova il bottone "Blocca" (quello a destra)
 	local confirmBtn = nil
 	local startWait = os.clock()
 	local viewportCenter = camera.ViewportSize / 2
 
-	while (os.clock() - startWait) < 1.5 do
+	while (os.clock() - startWait) < 2.0 do
 		local candidateButtons = {}
 
 		for _, desc in ipairs(CoreGui:GetDescendants()) do
-			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible then
-				-- Esclude la nostra GUI di farm
+			if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.Visible and desc.Selectable then
 				if not desc:IsDescendantOf(ScreenGui) then
 					local pos = desc.AbsolutePosition
 					local size = desc.AbsoluteSize
-					-- Controlla che sia un bottone valido vicino al centro dello schermo (dove appare il popup)
-					if size.X >= 50 and size.Y >= 24 and size.Y <= 100 then
+					if size.X >= 45 and size.Y >= 20 and size.Y <= 120 then
 						local btnCenter = pos + (size / 2)
-						if math.abs(btnCenter.Y - viewportCenter.Y) < 260 and math.abs(btnCenter.X - viewportCenter.X) < 350 then
+						if math.abs(btnCenter.Y - viewportCenter.Y) < 250 and math.abs(btnCenter.X - viewportCenter.X) < 350 then
 							table.insert(candidateButtons, desc)
 						end
 					end
@@ -1443,75 +1447,51 @@ local function BlockPlayerAutomatically(targetPlayer)
 			end
 		end
 
-		-- Nel popup di blocco di Roblox ci sono 2 bottoni (Sinistra = Annulla, Destra = Blocca)
 		if #candidateButtons >= 2 then
 			table.sort(candidateButtons, function(a, b)
 				return a.AbsolutePosition.X > b.AbsolutePosition.X
 			end)
-			confirmBtn = candidateButtons[1] -- Prende il bottone più a DESTRA ("Blocca")
+			confirmBtn = candidateButtons[1] -- Bottone di DESTRA ("Blocca")
 			break
-		elseif #candidateButtons == 1 then
-			local b = candidateButtons[1]
-			local txt = string.lower(b.Name .. " " .. (b:IsA("TextButton") and b.Text or ""))
-			if string.find(txt, "block") or string.find(txt, "blocca") or string.find(txt, "1") or string.find(txt, "confirm") then
-				confirmBtn = b
-				break
-			end
 		end
 		task.wait(0.05)
 	end
 
-	task.wait(0.15)
+	task.wait(0.2)
 
+	-- 🔹 STEP A: Selezione diretta tramite GuiService.SelectedCoreObject + Invio
 	if confirmBtn then
-		-- 1) Prova con firesignal / getconnections (istantaneo su quasi tutti gli executor)
 		pcall(function()
-			if firesignal then
-				firesignal(confirmBtn.Activated)
-				firesignal(confirmBtn.MouseButton1Click)
-				firesignal(confirmBtn.MouseButton1Down)
-				firesignal(confirmBtn.MouseButton1Up)
-			elseif getconnections then
-				for _, conn in ipairs(getconnections(confirmBtn.Activated)) do conn:Fire() end
-				for _, conn in ipairs(getconnections(confirmBtn.MouseButton1Click)) do conn:Fire() end
-			end
-		end)
-
-		-- 2) Prova selezionando il bottone con GuiService + tasto Invio (Return)
-		pcall(function()
+			GuiService.GuiNavigationEnabled = true
+			GuiService.AutoSelectGuiEnabled = true
 			GuiService.SelectedCoreObject = confirmBtn
-			task.wait(0.04)
-			VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-			task.wait(0.04)
-			VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
 		end)
-
-		-- 3) Clicca fisicamente sulle coordinate del bottone (sia con che senza GuiInset)
 		pcall(function()
-			local inset = GuiService:GetGuiInset()
-			local cx = confirmBtn.AbsolutePosition.X + (confirmBtn.AbsoluteSize.X / 2)
-			local cy1 = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2) + inset.Y
-			local cy2 = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2)
-
-			VirtualInputManager:SendMouseMoveEvent(cx, cy1, game)
-			task.wait(0.03)
-			VirtualInputManager:SendMouseButtonEvent(cx, cy1, 0, true, game, 1)
-			task.wait(0.05)
-			VirtualInputManager:SendMouseButtonEvent(cx, cy1, 0, false, game, 1)
-
-			task.wait(0.03)
-			VirtualInputManager:SendMouseMoveEvent(cx, cy2, game)
-			task.wait(0.03)
-			VirtualInputManager:SendMouseButtonEvent(cx, cy2, 0, true, game, 1)
-			task.wait(0.05)
-			VirtualInputManager:SendMouseButtonEvent(cx, cy2, 0, false, game, 1)
+			GuiService.SelectedObject = confirmBtn
 		end)
+		task.wait(0.1)
+		PressKey(Enum.KeyCode.Return, 0.06)
+		task.wait(0.1)
 	end
 
-	task.wait(0.45)
+	if confirmBtn and (not confirmBtn.Parent or not confirmBtn.Visible) then
+		task.wait(0.4)
+		return
+	end
+
+	-- 🔹 STEP B: Navigazione UI con tasti freccia (\ + Freccia Destra + Invio)
+	pcall(function()
+		PressKey(Enum.KeyCode.BackSlash, 0.05)
+		task.wait(0.1)
+		PressKey(Enum.KeyCode.Right, 0.05)
+		task.wait(0.1)
+		PressKey(Enum.KeyCode.Return, 0.06)
+	end)
+
+	task.wait(0.4)
 end
 
--- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK
+-- QUEUE ON TELEPORT, START GAME & SISTEMA ANTI-INTRUSO CON AUTO-BLOCK UI
 task.spawn(function()
 	local queue_on_teleport = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport)
 	if queue_on_teleport then
@@ -1546,7 +1526,7 @@ task.spawn(function()
 		StopActiveTween()
 
 		local intruderName = intruderPlayer.Name
-		warn("🚫 Rilevato estraneo (" .. tostring(intruderName) .. ")! Blocco utente e creazione nuovo server...")
+		warn("🚫 Rilevato estraneo (" .. tostring(intruderName) .. ")! Blocco utente via UI e creazione nuovo server...")
 		SetStatus("🚫 Blocco " .. tostring(intruderName) .. " & cambio server...", 0)
 
 		pcall(function()
@@ -1555,10 +1535,10 @@ task.spawn(function()
 			end
 		end)
 
-		-- 1. Blocca automaticamente l'estraneo così Roblox è costretto a creare un server nuovo senza di lui
-		BlockPlayerAutomatically(intruderPlayer)
+		-- 1. Esegue il blocco tramite il metodo UI
+		BlockPlayerWithUI(intruderPlayer)
 
-		-- 2. Teletrasporta subito verso un nuovo server
+		-- 2. Teletrasporta subito verso un nuovo server vuoto
 		task.spawn(function()
 			for i = 1, 8 do
 				pcall(function()
