@@ -1422,7 +1422,6 @@ task.spawn(function()
 	local TPEvent = Events:WaitForChild("TP", 10)
 	local isEscaping = false
 
-	-- Controlla se c'è un giocatore NON autorizzato nel server
 	local function HasUnauthorizedPlayer()
 		for _, plr in ipairs(Players:GetPlayers()) do
 			if plr ~= localPlayer and not WhitelistedUserIds[plr.UserId] then
@@ -1449,7 +1448,6 @@ task.spawn(function()
 			end
 		end)
 
-		-- Invoca continuamente TP("Earth") per forzare il gioco a creare una nuova istanza vuota di Earth
 		task.spawn(function()
 			for _ = 1, 8 do
 				if TPEvent then
@@ -1504,7 +1502,7 @@ task.spawn(function()
 	end
 end)
 
--- ⚡ ANTIAFK & AUTO-CHARGE INTELLIGENTE (MAX KI = 1000)
+-- ⚡ ANTIAFK & SPAM CONTINUO RICARICA KI (SENZA LIMITE DI 1000)
 table.insert(connections, localPlayer.Idled:Connect(function()
 	local vu = game:GetService("VirtualUser")
 	vu:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
@@ -1527,24 +1525,16 @@ end))
 
 task.spawn(function()
 	while IsCurrentSession() do
-		if getgenv().AutoFarmActive and not isCurrentlyAttacking and not isTransforming and not isEquippingSkills and not pendingForceReEquip then
+		if getgenv().AutoFarmActive and not isTransforming and not isEquippingSkills then
 			local char = localPlayer.Character
 			local hum = char and char:FindFirstChildOfClass("Humanoid")
-			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-			local wsHum = wsChar and wsChar:FindFirstChildOfClass("Humanoid")
-			if char and hum and hum.Health > 0 and wsChar and wsHum and wsHum.Health > 0 then
-				local kiObj = wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-				local currentKi = kiObj and tonumber(kiObj.Value) or 1000
-				local maxKi = 1000
-
-				if currentKi < maxKi then
-					coroutine.wrap(function()
-						pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-					end)()
-					coroutine.wrap(function()
-						pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
-					end)()
-				end
+			if char and hum and hum.Health > 0 then
+				coroutine.wrap(function()
+					pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
+				end)()
+				coroutine.wrap(function()
+					pcall(function() chaRemote:InvokeServer("Blacknwhite21") end)
+				end)()
 			end
 		end
 		task.wait(0.04)
@@ -1843,18 +1833,10 @@ local function TweenAndFight(bossEntry, hasQuestNpc)
 			isCurrentlyAttacking = false
 			SetStatus("🎯 Mi incollo a " .. bossEntry.Name .. "...", hpRatio)
 		else
-			local wsChar = workspace:FindFirstChild("Living") and workspace.Living:FindFirstChild(localPlayer.Name)
-			local kiObj = wsChar and wsChar:FindFirstChild("Stats") and wsChar.Stats:FindFirstChild("Ki")
-			if kiObj and (tonumber(kiObj.Value) or 100) < 15 then
-				isCurrentlyAttacking = false
-				SetStatus("⚡ Ricarica rapida Ki...", hpRatio)
-				task.wait(0.3)
-			else
-				isCurrentlyAttacking = true
-				local hpPct = math.floor(hpRatio * 100)
-				SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
-				DoFullAttack(currentBoss, bossEntry)
-			end
+			isCurrentlyAttacking = true
+			local hpPct = math.floor(hpRatio * 100)
+			SetStatus(string.format("⚔️ %s [%d%%]", bossEntry.Name, hpPct), hpRatio)
+			DoFullAttack(currentBoss, bossEntry)
 		end
 
 		task.wait(0.05)
