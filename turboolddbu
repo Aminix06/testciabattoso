@@ -1415,28 +1415,29 @@ task.spawn(function()
 	end
 end)
 
--- 🚫 FUNZIONE AUTO-BLOCK CHE CERCA ESATTAMENTE IL TESTO "BLOCCA" / "BLOCK"
+-- 🚫 FUNZIONE AUTO-BLOCK UNIVERSALE (FUNZIONA IN TUTTE LE LINGUE, IGNORA IL MENU ESC E ASPETTA IL BLOCCO PRIMA DEL REJOIN)
 local function PressKey(keyCode)
 	VirtualInputManager:SendKeyEvent(true, keyCode, false, game)
 	task.wait(0.02)
 	VirtualInputManager:SendKeyEvent(false, keyCode, false, game)
 end
 
--- Controlla che il bottone e TUTTI i suoi genitori siano davvero visibili (scarta il menu Esc/Lingua nascosto!)
-local function IsTrulyVisibleOnScreen(guiObj)
+-- Controlla che l'oggetto sia davvero visibile a schermo e NON faccia parte del menu Esc/Lingua
+local function IsVisibleModalElement(guiObj)
 	local curr = guiObj
 	while curr and curr ~= CoreGui do
+		-- Esclude al 100% il menu Esc / Impostazioni / Lingua / Chat / TopBar
+		local n = curr.Name
+		if n == "SettingsHub" or n == "SettingsShield" or n == "InGameMenu" or n == "TopBarApp" or n == "ExperienceChat" or n == "PlayerList" then
+			return false
+		end
 		if curr:IsA("GuiObject") and not curr.Visible then
 			return false
 		end
 		if curr:IsA("ScreenGui") and not curr.Enabled then
 			return false
 		end
-		if curr:IsA("CanvasGroup") and curr.GroupTransparency >= 0.98 then
-			return false
-		end
-		-- Scarta il menu Impostazioni/Esc di Roblox (dove c'è la Lingua!)
-		if curr.Name == "SettingsHub" or curr.Name == "SettingsShield" or curr.Name == "PageViewClipper" then
+		if curr:IsA("CanvasGroup") and curr.GroupTransparency >= 0.95 then
 			return false
 		end
 		curr = curr.Parent
@@ -1444,32 +1445,56 @@ local function IsTrulyVisibleOnScreen(guiObj)
 	return true
 end
 
-local function FindExactBlockButton()
-	local bestBtn = nil
-	local bestY = math.huge
+-- Trova i 3 bottoni del popup di blocco (qualsiasi lingua sia impostata!)
+local function FindBlockModalTopButton()
+	local vpCenter = camera.ViewportSize / 2
+	local candidates = {}
 
 	for _, desc in ipairs(CoreGui:GetDescendants()) do
-		if desc:IsA("TextLabel") or desc:IsA("TextButton") then
-			if not ScreenGui or not desc:IsDescendantOf(ScreenGui) then
-				local rawText = string.lower(string.gsub(desc.Text or "", "^%s*(.-)%s*$", "%1"))
-
-				-- Cerca ESATTAMENTE la parola "blocca" o "Block" (escludendo "blocca e segnala" / "block and report")
-				if (rawText == "blocca" or rawText == "block") then
-					-- Risale al bottone cliccabile genitore (TextButton o ImageButton)
-					local btn = (desc:IsA("TextButton") and desc) or desc:FindFirstAncestorWhichIsA("TextButton") or desc:FindFirstAncestorWhichIsA("ImageButton")
-					if btn and IsTrulyVisibleOnScreen(btn) and btn.AbsoluteSize.X >= 50 and btn.AbsoluteSize.Y >= 20 then
-						-- Se ce n'è più di uno, prende quello più in alto (Y minore)
-						if btn.AbsolutePosition.Y < bestY then
-							bestY = btn.AbsolutePosition.Y
-							bestBtn = btn
-						end
-					end
+		if (desc:IsA("TextButton") or desc:IsA("ImageButton")) and desc.AbsoluteSize.X >= 70 and desc.AbsoluteSize.Y >= 24 and desc.AbsoluteSize.Y <= 90 then
+			if (not ScreenGui or not desc:IsDescendantOf(ScreenGui)) and IsVisibleModalElement(desc) then
+				local btnCenter = desc.AbsolutePosition + (desc.AbsoluteSize / 2)
+				if math.abs(btnCenter.X - vpCenter.X) < 260 and math.abs(btnCenter.Y - vpCenter.Y) < 280 then
+					table.insert(candidates, desc)
 				end
 			end
 		end
 	end
 
-	return bestBtn
+	-- Raggruppa i bottoni che hanno la stessa X e la stessa larghezza (i 3 bottoni del popup Block!)
+	for _, b1 in ipairs(candidates) do
+		local stack = {b1}
+		for _, b2 in ipairs(candidates) do
+			if b1 ~= b2 then
+				local sameX = math.abs(b1.AbsolutePosition.X - b2.AbsolutePosition.X) <= 15
+				local sameWidth = math.abs(b1.AbsoluteSize.X - b2.AbsoluteSize.X) <= 15
+				local diffY = math.abs(b1.AbsolutePosition.Y - b2.AbsolutePosition.Y) >= 22
+				if sameX and sameWidth and diffY then
+					-- Evita doppioni sulla stessa riga Y
+					local alreadyAtY = false
+					for _, s in ipairs(stack) do
+						if math.abs(s.AbsolutePosition.Y - b2.AbsolutePosition.Y) < 15 then
+							alreadyAtY = true
+							break
+						end
+					end
+					if not alreadyAtY then
+						table.insert(stack, b2)
+					end
+				end
+			end
+		end
+
+		-- Il popup di blocco ha 2 o 3 bottoni identici impilati uno sopra l'altro
+		if #stack >= 2 then
+			table.sort(stack, function(a, b)
+				return a.AbsolutePosition.Y < b.AbsolutePosition.Y
+			end)
+			return stack[1] -- 🔼 Restituisce il 1° bottone in alto ("Blocca")
+		end
+	end
+
+	return nil
 end
 
 local function BlockPlayerWithUI(targetPlayer)
@@ -1482,43 +1507,55 @@ local function BlockPlayerWithUI(targetPlayer)
 		ScreenGui.Enabled = false
 	end
 
-	-- 🔍 2. Apre il popup di blocco UNA SOLA VOLTA
-	pcall(function()
-		StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
-	end)
-
 	local confirmBtn = nil
 	local startWait = os.clock()
+	local promptOpenedSuccessfully = false
 
-	while (os.clock() - startWait) < 3.5 do
-		confirmBtn = FindExactBlockButton()
+	-- 🔍 2. Aspetta fino a 6 secondi che CoreScripts sia pronto e apra davvero il popup!
+	while (os.clock() - startWait) < 6.0 do
+		-- Finché SetCore dà errore (perché sei appena entrato nel server), riprova ogni 0.2s.
+		-- Appena SetCore riesce (ok == true), NON lo chiama più così il popup non si chiude!
+		if not promptOpenedSuccessfully then
+			local ok = pcall(function()
+				StarterGui:SetCore("PromptBlockPlayer", targetPlayer)
+			end)
+			if ok then
+				promptOpenedSuccessfully = true
+			else
+				task.wait(0.2)
+			end
+		end
+
+		confirmBtn = FindBlockModalTopButton()
 		if confirmBtn then
 			break
 		end
+
 		RunService.RenderStepped:Wait()
 	end
 
-	-- ⚡ 3. Clicca SOLO sul vero bottone "Blocca"
+	-- ⚡ 3. Quando il popup è visibile a schermo, aspetta 0.15s che finisca l'animazione e poi clicca il 1° tasto in alto
 	if confirmBtn then
-		task.wait(0.08) -- Aspetta fine animazione apertura popup
-		for _ = 1, 5 do
-			if not confirmBtn.Parent or not IsTrulyVisibleOnScreen(confirmBtn) then
-				break -- Il popup si è chiuso, giocatore bloccato!
+		task.wait(0.15)
+
+		for attempt = 1, 8 do
+			if not confirmBtn.Parent or not IsVisibleModalElement(confirmBtn) then
+				break -- Il popup è sparito: giocatore bloccato con successo!
 			end
 
-			-- Clicca esattamente al centro del bottone "Blocca"
+			-- Click preciso al centro del 1° bottone in alto ("Blocca")
 			pcall(function()
 				local inset = GuiService:GetGuiInset()
 				local cx = confirmBtn.AbsolutePosition.X + (confirmBtn.AbsoluteSize.X / 2)
 				local cy = confirmBtn.AbsolutePosition.Y + (confirmBtn.AbsoluteSize.Y / 2) + inset.Y
 				VirtualInputManager:SendMouseMoveEvent(cx, cy, game)
-				task.wait(0.015)
-				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
 				task.wait(0.02)
+				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 1)
+				task.wait(0.03)
 				VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 1)
 			end)
 
-			-- In più, se il bottone è selezionabile, preme anche Invio
+			-- Se supporta anche GuiNavigation, preme Invio sul bottone
 			pcall(function()
 				if confirmBtn.Selectable then
 					GuiService.GuiNavigationEnabled = true
@@ -1527,7 +1564,7 @@ local function BlockPlayerWithUI(targetPlayer)
 				end
 			end)
 
-			task.wait(0.08)
+			task.wait(0.12)
 		end
 
 		pcall(function()
@@ -1535,6 +1572,9 @@ local function BlockPlayerWithUI(targetPlayer)
 			GuiService.SelectedObject = nil
 			GuiService.GuiNavigationEnabled = false
 		end)
+
+		-- Aspetta 0.3s dopo il click per dare tempo al server di Roblox di salvare il Block prima di fare Teleport!
+		task.wait(0.3)
 	end
 
 	-- 🖥️ 4. Riattiva la tua GUI
